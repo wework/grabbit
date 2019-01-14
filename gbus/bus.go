@@ -65,6 +65,9 @@ type Saga interface {
 		the messages that it handles
 	*/
 	RegisterAllHandlers(register HandlerRegister)
+
+	//IsComplete retruns if the saga is complete and can be discarded
+	IsComplete() bool
 }
 
 //Timeout is the interface a saga needs to implement to get timeout servicess

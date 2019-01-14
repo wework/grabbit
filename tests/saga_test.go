@@ -176,6 +176,10 @@ func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage
 	log.Println("event2 recieved")
 }
 
+func (s *SagaA) IsComplete() bool {
+	return false
+}
+
 type SagaB struct {
 }
 
@@ -200,4 +204,8 @@ func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessag
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
 	log.Println("event1 on SagaB recieved")
+}
+
+func (s *SagaB) IsComplete() bool {
+	return false
 }

@@ -112,9 +112,12 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 		if startNew {
 			newInstance := imsm.newSagaInstance(def)
 			newInstance.invoke(invocation, message)
-			if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def, newInstance); e != nil {
-				panic(e)
+			if !newInstance.isComplete() {
+				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def, newInstance); e != nil {
+					panic(e)
+				}
 			}
+
 		} else if message.SagaCorrelationID != "" {
 			instance, e := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 			if e != nil {
@@ -125,6 +128,17 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 				return
 			}
 			instance.invoke(invocation, message)
+			if instance.isComplete() {
+				e := imsm.sagaStore.DeleteSaga(invocation.Tx(), instance)
+				if e != nil {
+					panic(e)
+				}
+			} else {
+				e := imsm.sagaStore.UpdateSaga(invocation.Tx(), instance)
+				if e != nil {
+					panic(e)
+				}
+			}
 		} else if message.Semantics == "cmd" {
 			log.Printf("Warning:Command or Reply message with no saga reference recieved. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
 			return
@@ -136,7 +150,6 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 					panic(e)
 				}
 			}
-			//TODO:Implement saga timeouts
 		}
 	}
 }

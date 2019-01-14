@@ -44,7 +44,10 @@ func (si *SagaInstance) getSagaMethodNameToInvoke(message *gbus.BusMessage) stri
 	methodName := si.msgToMethodMap[fqn]
 	return methodName
 }
-
+func (si *SagaInstance) isComplete() bool {
+	saga := si.underlyingInstance.(gbus.Saga)
+	return saga.IsComplete()
+}
 func newSagaInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *SagaInstance {
 	newSagaPtr := reflect.New(sagaType).Elem().Interface()
 	newInstance := &SagaInstance{

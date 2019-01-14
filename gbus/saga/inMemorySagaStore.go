@@ -34,6 +34,28 @@ func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *SagaInstance) e
 
 	return nil
 }
+func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *SagaInstance) error {
+
+	for key, value := range store.instances {
+		var sagaIndexFound bool
+		var sagaIndexToDelete int
+		for i := 0; i < len(value); i++ {
+			candidate := value[i]
+			if candidate.ID == instance.ID {
+				sagaIndexToDelete = i
+				sagaIndexFound = true
+				break
+			}
+		}
+		if sagaIndexFound {
+			value[sagaIndexToDelete] = value[len(value)-1]
+			value = value[:len(value)-1]
+			store.instances[key] = value
+
+		}
+	}
+	return nil
+}
 
 func NewInMemoryStore() SagaStore {
 	return &InMemorySagaStore{
