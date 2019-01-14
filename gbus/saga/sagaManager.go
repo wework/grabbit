@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -100,7 +101,6 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 	defs := imsm.msgToDefMap[msgName]
 
 	for _, def := range defs {
-
 		/*
 			1) If SagaDef does not have handlers for the message type then log a warning (as this should not happen) and return
 			2) Else if the message is a startup message then create new instance of a saga, invoke startup handler and mark as started
@@ -128,16 +128,9 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 				return
 			}
 			instance.invoke(invocation, message)
-			if instance.isComplete() {
-				e := imsm.sagaStore.DeleteSaga(invocation.Tx(), instance)
-				if e != nil {
-					panic(e)
-				}
-			} else {
-				e := imsm.sagaStore.UpdateSaga(invocation.Tx(), instance)
-				if e != nil {
-					panic(e)
-				}
+			e = imsm.completeOrUpdateSaga(invocation.Tx(), instance)
+			if e != nil {
+				panic(e)
 			}
 		} else if message.Semantics == "cmd" {
 			log.Printf("Warning:Command or Reply message with no saga reference recieved. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
@@ -145,12 +138,22 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 		} else {
 			for _, instance := range imsm.instances[def] {
 				instance.invoke(invocation, message)
-				e := imsm.sagaStore.UpdateSaga(invocation.Tx(), instance)
+				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 				if e != nil {
 					panic(e)
 				}
 			}
 		}
+	}
+}
+
+func (imsm *SagaManager) completeOrUpdateSaga(tx *sql.Tx, instance *SagaInstance) error {
+	if instance.isComplete() {
+		return imsm.sagaStore.DeleteSaga(tx, instance)
+
+	} else {
+		return imsm.sagaStore.UpdateSaga(tx, instance)
+
 	}
 }
 
