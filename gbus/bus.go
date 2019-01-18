@@ -99,7 +99,7 @@ func (b *DefaultBus) Start() error {
 		} else {
 			e = b.bindQueue(topic, exchange)
 			if e != nil {
-				log.Printf("failed to bind to the follwoing\n topic:%v\n exchange:%v\n%v", topic, exchange, e)
+				log.Printf("failed to bind to the following\n topic:%v\n exchange:%v\n%v", topic, exchange, e)
 			}
 		}
 	}

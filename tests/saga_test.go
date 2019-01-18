@@ -9,7 +9,7 @@ import (
 )
 
 /*
-	TestSagaStartUps test that the saga mechanisim creats different saga instances
+	TestSagaStartUps test that the saga mechanism creats different saga instances
 	The test sends three commands and counts the number of reply messages
 	and makes sure all reply messages have unique SagaCorrelationID values
 */

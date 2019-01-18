@@ -53,7 +53,7 @@ func TestReply(t *testing.T) {
 		}
 
 		if message.CorrelationID != cmdBusMsg.ID {
-			t.Errorf("message handler inoced with message containing a wrong correlation id, expected %v as correlation id but recived %v", cmdBusMsg.ID, message.CorrelationID)
+			t.Errorf("message handler inoced with message containing a wrong correlation id, expected %v as correlation id but received %v", cmdBusMsg.ID, message.CorrelationID)
 		}
 
 		proceed <- true

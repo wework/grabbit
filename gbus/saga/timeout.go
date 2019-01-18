@@ -7,7 +7,7 @@ import (
 )
 
 //TimeoutManager manages timeouts for sagas
-//TODO:Make it persistant
+//TODO:Make it persistent
 type TimeoutManager struct {
 	bus gbus.Bus
 }

@@ -61,7 +61,7 @@ type MessageHandler func(invocation Invocation, message *BusMessage)
 
 //Saga is the base interface for all Sagas.
 type Saga interface {
-	//StartedBy returns the messages that when recived should create a new saga instance
+	//StartedBy returns the messages that when received should create a new saga instance
 	StartedBy() []interface{}
 	/*
 		RegisterAllHandlers passes in the HandlerRegister so that the saga can register
