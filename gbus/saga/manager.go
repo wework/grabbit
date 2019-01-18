@@ -164,7 +164,7 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 				panic(e)
 			}
 		} else if message.Semantics == "cmd" {
-			log.Printf("Warning:Command or Reply message with no saga reference recieved. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
+			log.Printf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
 			return
 		} else {
 			for _, instance := range imsm.instances[def] {

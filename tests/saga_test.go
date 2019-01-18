@@ -184,13 +184,13 @@ func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 }
 
 func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) {
-	log.Println("command1 recieved")
+	log.Println("command1 received")
 	reply := gbus.NewBusMessage(Reply1{})
 	invocation.Reply(reply)
 }
 
 func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) {
-	log.Println("command2 recieved")
+	log.Println("command2 received")
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
 }
@@ -198,11 +198,11 @@ func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMess
 func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) {
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
-	log.Println("event1 recieved")
+	log.Println("event1 received")
 }
 
 func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage) {
-	log.Println("event2 recieved")
+	log.Println("event2 received")
 }
 
 type SagaB struct {
@@ -224,7 +224,7 @@ func (s *SagaB) New() interface{} {
 }
 
 func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) {
-	log.Println("command1 recieved")
+	log.Println("command1 received")
 	reply := gbus.NewBusMessage(Reply1{})
 	invocation.Reply(reply)
 }
@@ -232,7 +232,7 @@ func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) {
 func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) {
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
-	log.Println("event1 on SagaB recieved")
+	log.Println("event1 on SagaB received")
 }
 
 func (s *SagaB) IsComplete() bool {

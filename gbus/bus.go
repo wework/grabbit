@@ -262,7 +262,7 @@ func (b *DefaultBus) consumeMessages() {
 		handlers := b.MsgHandlers[msgName]
 		b.HandlersLock.Unlock()
 		if len(handlers) == 0 {
-			log.Printf("Message recieved but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", msgName, msgType)
+			log.Printf("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", msgName, msgType)
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
