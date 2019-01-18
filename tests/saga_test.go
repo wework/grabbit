@@ -168,6 +168,14 @@ func (*SagaA) StartedBy() []interface{} {
 	return append(starters, Command1{})
 }
 
+func (s *SagaA) IsComplete() bool {
+	return false
+}
+
+func (s *SagaA) New() interface{} {
+	return &SagaA{}
+}
+
 func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command1{}, s.HandleCommand1)
 	register.HandleMessage(Command2{}, s.HandleCommand2)
@@ -197,10 +205,6 @@ func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage
 	log.Println("event2 recieved")
 }
 
-func (s *SagaA) IsComplete() bool {
-	return false
-}
-
 type SagaB struct {
 }
 
@@ -213,6 +217,10 @@ func (s *SagaB) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command1{}, s.Startup)
 	register.HandleEvent("test_exchange", "some.topic.1", Event1{}, s.HandleEvent1)
 	register.HandleEvent("test_exchange", "some.topic.2", Event2{}, s.HandleEvent1)
+}
+
+func (s *SagaB) New() interface{} {
+	return &SagaB{}
 }
 
 func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) {
@@ -260,6 +268,9 @@ func (s *TimingOutSaga) IsComplete() bool {
 	return false
 }
 
+func (s *TimingOutSaga) New() interface{} {
+	return &TimingOutSaga{}
+}
 func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 	return time.Second * 1
 }

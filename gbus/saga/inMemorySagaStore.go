@@ -5,10 +5,12 @@ import (
 	"errors"
 )
 
+//InMemorySagaStore stores the saga instances in-memory, not intended for production use
 type InMemorySagaStore struct {
 	instances map[*SagaDef][]*SagaInstance
 }
 
+//GetSagaByID implements SagaStore.GetSagaByID
 func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*SagaInstance, error) {
 	for _, instances := range store.instances {
 		for _, instance := range instances {
@@ -19,6 +21,8 @@ func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*SagaIns
 	}
 	return nil, errors.New("no saga found for provided id")
 }
+
+//SaveNewSaga implements SagaStore.SaveNewSaga
 func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstance *SagaInstance) error {
 	instances := store.instances[def]
 	if instances == nil {
@@ -31,10 +35,14 @@ func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstanc
 	return nil
 
 }
+
+//UpdateSaga implements SagaStore.UpdateSaga
 func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *SagaInstance) error {
 
 	return nil
 }
+
+//DeleteSaga implements SagaStore.DeleteSaga
 func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *SagaInstance) error {
 
 	for key, value := range store.instances {
@@ -58,6 +66,7 @@ func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *SagaInstance) e
 	return nil
 }
 
+//NewInMemoryStore is a factory method for the InMemorySagaStore
 func NewInMemoryStore() SagaStore {
 	return &InMemorySagaStore{
 		instances: make(map[*SagaDef][]*SagaInstance)}

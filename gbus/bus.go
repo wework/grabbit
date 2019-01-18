@@ -68,6 +68,9 @@ type Saga interface {
 
 	//IsComplete retruns if the saga is complete and can be discarded
 	IsComplete() bool
+
+	//New is a factory method used by the bus to crerate new instances of a saga
+	New() interface{}
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess

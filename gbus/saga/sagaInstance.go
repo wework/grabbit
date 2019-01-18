@@ -33,9 +33,7 @@ func (si *SagaInstance) invoke(invocation gbus.Invocation, message *gbus.BusMess
 		message,
 		si.ID}
 	reflectedVal := reflect.ValueOf(si.underlyingInstance)
-	if si.underlyingInstance == nil {
-		log.Printf("MOoooo!!!@@@#$#$#$")
-	}
+
 	params := make([]reflect.Value, 0)
 	params = append(params, reflect.ValueOf(sginv), valueOfMessage)
 	method := reflectedVal.MethodByName(methodName)
@@ -70,10 +68,12 @@ func newSagaInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *S
 		newSagaPtr = reflect.New(sagaType).Elem()
 	}
 
+	saga := newSagaPtr.(gbus.Saga)
+
 	//newSagaPtr := reflect.New(sagaType).Elem()
 	newInstance := &SagaInstance{
 		ID:                 xid.New().String(),
-		underlyingInstance: newSagaPtr,
+		underlyingInstance: saga.New(),
 		msgToMethodMap:     msgToMethodMap}
 	return newInstance
 }
