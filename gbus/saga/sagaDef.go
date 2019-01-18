@@ -45,7 +45,8 @@ func (sd *SagaDef) addMsgToHandlerMapping(message interface{}, handler gbus.Mess
 }
 
 func (sd *SagaDef) newInstance() *SagaInstance {
-	return newSagaInstance(sd.sagaType, sd.handlersFunMap)
+	return newSagaInstance(sd.sagaType,
+		sd.handlersFunMap)
 }
 
 func (sd *SagaDef) shouldStartNewSaga(message *gbus.BusMessage) bool {
@@ -56,4 +57,12 @@ func (sd *SagaDef) shouldStartNewSaga(message *gbus.BusMessage) bool {
 		}
 	}
 	return false
+}
+
+// func (sd *SagaDef) canTimeout() bool {
+// 	sd.sagaType.Implements(u reflect.Type)
+// }
+
+func (sd *SagaDef) String() string {
+	return gbus.GetTypeFQN(sd.sagaType)
 }

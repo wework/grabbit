@@ -70,10 +70,15 @@ type Saga interface {
 	IsComplete() bool
 }
 
-//Timeout is the interface a saga needs to implement to get timeout servicess
-type Timeout interface {
-	RequestTimeout() time.Duration
+//RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
+type RequestSagaTimeout interface {
+	TimeoutDuration() time.Duration
 	Timeout(invocation Invocation, message *BusMessage)
+}
+
+//SagaTimeoutMessage is the timeout message for Saga's
+type SagaTimeoutMessage struct {
+	SagaID string
 }
 
 //SagaRegister registers sagas to the bus

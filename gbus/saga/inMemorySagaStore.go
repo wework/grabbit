@@ -27,6 +27,7 @@ func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstanc
 	}
 	instances = append(instances, newInstance)
 	store.instances[def] = instances
+
 	return nil
 
 }

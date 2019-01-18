@@ -2,10 +2,17 @@ package gbus
 
 import "reflect"
 
+func GetTypeFQN(t reflect.Type) string {
+
+	if kind := t.Kind(); kind == reflect.Ptr {
+		return t.Elem().PkgPath() + "." + t.Elem().Name()
+	}
+	return t.PkgPath() + "." + t.Name()
+}
+
 func GetFqn(obj interface{}) string {
 	t := reflect.TypeOf(obj)
-	fqn := t.PkgPath() + "." + t.Name()
-	return fqn
+	return GetTypeFQN(t)
 }
 
 func GetFqns(objs []interface{}) []string {

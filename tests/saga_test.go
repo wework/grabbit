@@ -3,6 +3,7 @@ package tests
 import (
 	"log"
 	"testing"
+	"time"
 
 	"github.com/rhinof/grabbit/gbus"
 )
@@ -104,13 +105,13 @@ func TestSaga(t *testing.T) {
 
 	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
 		firstSagaCorrelationID = message.SagaCorrelationID
-		log.Printf("correlation saga id: %v", message.SagaCorrelationID)
+
 		invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 	}
 
 	evtReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
 		secondSagaCorrelationID = message.SagaCorrelationID
-		log.Printf("correlation saga id: %v", message.SagaCorrelationID)
+
 		completed <- true
 	}
 
@@ -135,6 +136,26 @@ func TestSaga(t *testing.T) {
 	if firstSagaCorrelationID != secondSagaCorrelationID {
 		t.Errorf("Messages did not route to the same saga instance")
 	}
+}
+
+func TestSagaTimeout(t *testing.T) {
+	proceed := make(chan bool)
+	svc1 := createNamedBusForTest(testSvc1)
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+		proceed <- true
+	}
+	svc1.HandleEvent("test_exchange", "some.topic.1", Event1{}, eventHandler)
+	svc1.Start()
+	defer svc1.Shutdown()
+
+	svc2 := createNamedBusForTest(testSvc2)
+	svc2.RegisterSaga(&TimingOutSaga{})
+	svc2.Start()
+	defer svc2.Shutdown()
+	cmd2 := gbus.NewBusMessage(Command2{})
+	svc1.Send(testSvc2, cmd2)
+
+	<-proceed
 }
 
 /*Test Sagas*/
@@ -208,4 +229,42 @@ func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessag
 
 func (s *SagaB) IsComplete() bool {
 	return false
+}
+
+func (s *SagaB) RequestTimeout() time.Duration {
+	return time.Second * 1
+}
+
+func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
+	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
+}
+
+type TimingOutSaga struct {
+	timedOut bool
+}
+
+func (*TimingOutSaga) StartedBy() []interface{} {
+	starters := make([]interface{}, 0)
+	return append(starters, Command2{})
+}
+
+func (s *TimingOutSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
+	register.HandleMessage(Command2{}, s.SagaStartup)
+}
+
+func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.BusMessage) {
+
+}
+
+func (s *TimingOutSaga) IsComplete() bool {
+	return false
+}
+
+func (s *TimingOutSaga) TimeoutDuration() time.Duration {
+	return time.Second * 1
+}
+
+func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
+	//	s.timedOut = true
+	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 }

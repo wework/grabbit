@@ -33,7 +33,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		msgHandlers:          make(map[string][]gbus.MessageHandler)}
 
 	sagaStore := saga.NewInMemoryStore()
-	gb.sagaManager = saga.NewSagaManager(gb, sagaStore)
+	gb.sagaManager = saga.NewSagaManager(gb, sagaStore, svcName)
 
 	if gb.isTxnl {
 		pgtx, err := tx.NewPgProvider(builder.txConnStr)

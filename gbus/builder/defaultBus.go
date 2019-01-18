@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -215,7 +216,8 @@ func (b *DefaultBus) invokeHandlers(handlers []gbus.MessageHandler,
 		defer func() {
 			if p := recover(); p != nil {
 
-				pncMsg := fmt.Sprintf("%v", p)
+				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
+				log.Printf("recovered from panic while invoking handler.\n%v", pncMsg)
 				err = errors.New(pncMsg)
 			}
 		}()
@@ -326,7 +328,7 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 
 	defer func() {
 		if err := recover(); err != nil {
-			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v", err)
+			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%v", err, debug.Stack())
 			er = errors.New(errMsg)
 		}
 	}()
