@@ -265,7 +265,7 @@ func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.Bu
 }
 
 func (s *TimingOutSaga) IsComplete() bool {
-	return false
+	return s.timedOut
 }
 
 func (s *TimingOutSaga) New() interface{} {
@@ -276,6 +276,6 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 }
 
 func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
-	//	s.timedOut = true
+	s.timedOut = true
 	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 }

@@ -180,6 +180,7 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 
 func (imsm *SagaManager) completeOrUpdateSaga(tx *sql.Tx, instance *SagaInstance) error {
 	if instance.isComplete() {
+		log.Printf("sage %v has completed and will be deleted", instance.ID)
 		return imsm.sagaStore.DeleteSaga(tx, instance)
 
 	} else {
