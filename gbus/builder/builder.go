@@ -2,7 +2,7 @@ package builder
 
 import (
 	"go/types"
-	"sync" // "github.com/rhinof/grabbit/gbus"
+	"sync"
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
@@ -21,26 +21,26 @@ type defaultBuilder struct {
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
-	gb := &DefaultBus{
-		amqpConnStr:          builder.connStr,
-		svcName:              svcName,
-		purgeOnStartup:       builder.purgeOnStartup,
-		connErrors:           make(chan *amqp.Error),
-		registeredSchemas:    make(map[string]bool),
-		delayedSubscriptions: [][]string{},
-		handlersLock:         &sync.Mutex{},
-		isTxnl:               builder.txnl,
-		msgHandlers:          make(map[string][]gbus.MessageHandler)}
+	gb := &gbus.DefaultBus{
+		AmqpConnStr:          builder.connStr,
+		SvcName:              svcName,
+		PurgeOnStartup:       builder.purgeOnStartup,
+		ConnErrors:           make(chan *amqp.Error),
+		RegisteredSchemas:    make(map[string]bool),
+		DelayedSubscriptions: [][]string{},
+		HandlersLock:         &sync.Mutex{},
+		IsTxnl:               builder.txnl,
+		MsgHandlers:          make(map[string][]gbus.MessageHandler)}
 
 	sagaStore := saga.NewInMemoryStore()
-	gb.sagaManager = saga.NewSagaManager(gb, sagaStore, svcName)
+	gb.SagaManager = saga.NewSagaManager(gb, sagaStore, svcName)
 
-	if gb.isTxnl {
+	if gb.IsTxnl {
 		pgtx, err := tx.NewPgProvider(builder.txConnStr)
 		if err != nil {
 			panic(err)
 		}
-		gb.txProvider = pgtx
+		gb.TxProvider = pgtx
 	}
 
 	return gb
