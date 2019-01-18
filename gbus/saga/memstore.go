@@ -7,11 +7,11 @@ import (
 
 //InMemorySagaStore stores the saga instances in-memory, not intended for production use
 type InMemorySagaStore struct {
-	instances map[*SagaDef][]*SagaInstance
+	instances map[*Def][]*Instance
 }
 
 //GetSagaByID implements SagaStore.GetSagaByID
-func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*SagaInstance, error) {
+func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*Instance, error) {
 	for _, instances := range store.instances {
 		for _, instance := range instances {
 			if instance.ID == sagaID {
@@ -23,10 +23,10 @@ func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*SagaIns
 }
 
 //SaveNewSaga implements SagaStore.SaveNewSaga
-func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstance *SagaInstance) error {
+func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *Def, newInstance *Instance) error {
 	instances := store.instances[def]
 	if instances == nil {
-		instances = make([]*SagaInstance, 0)
+		instances = make([]*Instance, 0)
 
 	}
 	instances = append(instances, newInstance)
@@ -37,13 +37,13 @@ func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstanc
 }
 
 //UpdateSaga implements SagaStore.UpdateSaga
-func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *SagaInstance) error {
+func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *Instance) error {
 
 	return nil
 }
 
 //DeleteSaga implements SagaStore.DeleteSaga
-func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *SagaInstance) error {
+func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *Instance) error {
 
 	for key, value := range store.instances {
 		var sagaIndexFound bool
@@ -67,7 +67,7 @@ func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *SagaInstance) e
 }
 
 //NewInMemoryStore is a factory method for the InMemorySagaStore
-func NewInMemoryStore() SagaStore {
+func NewInMemoryStore() Store {
 	return &InMemorySagaStore{
-		instances: make(map[*SagaDef][]*SagaInstance)}
+		instances: make(map[*Def][]*Instance)}
 }

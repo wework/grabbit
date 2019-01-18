@@ -9,13 +9,14 @@ import (
 	"github.com/rs/xid"
 )
 
-type SagaInstance struct {
+//Instance represent a living instance of a saga of a particular definition
+type Instance struct {
 	ID                 string
 	underlyingInstance interface{}
 	msgToMethodMap     map[string]string
 }
 
-func (si *SagaInstance) invoke(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage) {
 
 	methodName := si.getSagaMethodNameToInvoke(message)
 
@@ -41,17 +42,17 @@ func (si *SagaInstance) invoke(invocation gbus.Invocation, message *gbus.BusMess
 	method.Call(params)
 	log.Printf(" saga instance %v invoked", si.ID)
 }
-func (si *SagaInstance) getSagaMethodNameToInvoke(message *gbus.BusMessage) string {
+func (si *Instance) getSagaMethodNameToInvoke(message *gbus.BusMessage) string {
 	fqn := gbus.GetFqn(message.Payload)
 	methodName := si.msgToMethodMap[fqn]
 	return methodName
 }
-func (si *SagaInstance) isComplete() bool {
+func (si *Instance) isComplete() bool {
 	saga := si.underlyingInstance.(gbus.Saga)
 	return saga.IsComplete()
 }
 
-func (si *SagaInstance) requestsTimeout() (bool, time.Duration) {
+func (si *Instance) requestsTimeout() (bool, time.Duration) {
 
 	timeoutDuration := -1 * time.Millisecond
 	timeoutData, canTimeout := si.underlyingInstance.(gbus.RequestSagaTimeout)
@@ -60,7 +61,7 @@ func (si *SagaInstance) requestsTimeout() (bool, time.Duration) {
 	}
 	return canTimeout, timeoutDuration
 }
-func newSagaInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *SagaInstance {
+func newInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Instance {
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()
@@ -71,13 +72,13 @@ func newSagaInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *S
 	saga := newSagaPtr.(gbus.Saga)
 
 	//newSagaPtr := reflect.New(sagaType).Elem()
-	newInstance := &SagaInstance{
+	newInstance := &Instance{
 		ID:                 xid.New().String(),
 		underlyingInstance: saga.New(),
 		msgToMethodMap:     msgToMethodMap}
 	return newInstance
 }
 
-func (si *SagaInstance) String() string {
+func (si *Instance) String() string {
 	return gbus.GetFqn(si.underlyingInstance)
 }

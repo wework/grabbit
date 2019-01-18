@@ -2,9 +2,10 @@ package saga
 
 import "database/sql"
 
-type SagaStore interface {
-	GetSagaByID(tx *sql.Tx, sagaID string) (*SagaInstance, error)
-	SaveNewSaga(tx *sql.Tx, def *SagaDef, newInstance *SagaInstance) error
-	UpdateSaga(tx *sql.Tx, instance *SagaInstance) error
-	DeleteSaga(tx *sql.Tx, instance *SagaInstance) error
+//Store abtracts the way sagas get persisted
+type Store interface {
+	GetSagaByID(tx *sql.Tx, sagaID string) (*Instance, error)
+	SaveNewSaga(tx *sql.Tx, def *Def, newInstance *Instance) error
+	UpdateSaga(tx *sql.Tx, instance *Instance) error
+	DeleteSaga(tx *sql.Tx, instance *Instance) error
 }

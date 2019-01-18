@@ -11,19 +11,19 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
-type SagaManager struct {
+type Glue struct {
 	svcName              string
 	bus                  gbus.Bus
-	sagaDefs             []*SagaDef
+	sagaDefs             []*Def
 	lock                 *sync.Mutex
-	instances            map[*SagaDef][]*SagaInstance
-	msgToDefMap          map[string][]*SagaDef
-	sagaStore            SagaStore
+	instances            map[*Def][]*Instance
+	msgToDefMap          map[string][]*Def
+	sagaStore            Store
 	timeoutManger        TimeoutManager
 	subscribedOnTimeouts bool
 }
 
-func (imsm *SagaManager) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
+func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
 	for _, def := range imsm.sagaDefs {
 		if def.sagaType == sagaType {
 			return true
@@ -32,7 +32,8 @@ func (imsm *SagaManager) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
 	return false
 }
 
-func (imsm *SagaManager) RegisterSaga(saga gbus.Saga) error {
+//RegisterSaga
+func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 
 	sagaType := reflect.TypeOf(saga)
 
@@ -40,7 +41,7 @@ func (imsm *SagaManager) RegisterSaga(saga gbus.Saga) error {
 		return fmt.Errorf("saga of type %v already registered", sagaType)
 	}
 
-	def := &SagaDef{
+	def := &Def{
 		bus:            imsm.bus,
 		sagaType:       sagaType,
 		startedBy:      gbus.GetFqns(saga.StartedBy()),
@@ -69,31 +70,31 @@ func (imsm *SagaManager) RegisterSaga(saga gbus.Saga) error {
 	return nil
 }
 
-func (imsm *SagaManager) addMsgNameToDef(msgName string, def *SagaDef) {
-	defs := imsm.getSagaDefsForMsgName(msgName)
+func (imsm *Glue) addMsgNameToDef(msgName string, def *Def) {
+	defs := imsm.getDefsForMsgName(msgName)
 	defs = append(defs, def)
 	imsm.msgToDefMap[msgName] = defs
 }
 
-func (imsm *SagaManager) getSagaDefsForMsgName(msgName string) []*SagaDef {
+func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 	defs := imsm.msgToDefMap[msgName]
 	if defs == nil {
-		defs = make([]*SagaDef, 0)
+		defs = make([]*Def, 0)
 	}
 	return defs
 }
 
-func (imsm *SagaManager) newSagaInstance(def *SagaDef) *SagaInstance {
+func (imsm *Glue) newInstance(def *Def) *Instance {
 	newInstance := def.newInstance()
 	imsm.saveNewSaga(def, newInstance)
 
 	return newInstance
 }
 
-func (imsm *SagaManager) saveNewSaga(def *SagaDef, newInstance *SagaInstance) error {
+func (imsm *Glue) saveNewSaga(def *Def, newInstance *Instance) error {
 	instances := imsm.instances[def]
 	if instances == nil {
-		instances = make([]*SagaInstance, 0)
+		instances = make([]*Instance, 0)
 
 	}
 	instances = append(instances, newInstance)
@@ -102,7 +103,7 @@ func (imsm *SagaManager) saveNewSaga(def *SagaDef, newInstance *SagaInstance) er
 
 }
 
-func (imsm *SagaManager) getSagaInstanceByID(sagaID string) (*SagaInstance, error) {
+func (imsm *Glue) getInstanceByID(sagaID string) (*Instance, error) {
 
 	for _, instances := range imsm.instances {
 		for _, instance := range instances {
@@ -114,7 +115,7 @@ func (imsm *SagaManager) getSagaInstanceByID(sagaID string) (*SagaInstance, erro
 	return nil, errors.New("no saga found for provided id")
 }
 
-func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) {
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 
@@ -123,7 +124,7 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 
 	for _, def := range defs {
 		/*
-			1) If SagaDef does not have handlers for the message type then log a warning (as this should not happen) and return
+			1) If Def does not have handlers for the message type then log a warning (as this should not happen) and return
 			2) Else if the message is a startup message then create new instance of a saga, invoke startup handler and mark as started
 				2.1) If new instance requests timeouts then reuqest a timeout
 			3) Else if message is destinated for a specific saga instance (reply messages) then find that saga by id and invoke it
@@ -132,7 +133,7 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 		*/
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
-			newInstance := imsm.newSagaInstance(def)
+			newInstance := imsm.newInstance(def)
 			log.Printf("created new saga.\nSaga Def:%v\nSagaID:%v", def.String(), newInstance.ID)
 			newInstance.invoke(invocation, message)
 
@@ -178,26 +179,24 @@ func (imsm *SagaManager) handler(invocation gbus.Invocation, message *gbus.BusMe
 	}
 }
 
-func (imsm *SagaManager) completeOrUpdateSaga(tx *sql.Tx, instance *SagaInstance) error {
+func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 	if instance.isComplete() {
 		log.Printf("sage %v has completed and will be deleted", instance.ID)
 		return imsm.sagaStore.DeleteSaga(tx, instance)
 
-	} else {
-		return imsm.sagaStore.UpdateSaga(tx, instance)
-
 	}
+	return imsm.sagaStore.UpdateSaga(tx, instance)
 }
 
-//NewSagaManager creates a new Sagamanager
-func NewSagaManager(bus gbus.Bus, sagaStore SagaStore, svcName string) *SagaManager {
-	return &SagaManager{
+//NewGlue creates a new Sagamanager
+func NewGlue(bus gbus.Bus, sagaStore Store, svcName string) *Glue {
+	return &Glue{
 		svcName:       svcName,
 		bus:           bus,
-		sagaDefs:      make([]*SagaDef, 0),
+		sagaDefs:      make([]*Def, 0),
 		lock:          &sync.Mutex{},
-		instances:     make(map[*SagaDef][]*SagaInstance),
-		msgToDefMap:   make(map[string][]*SagaDef),
+		instances:     make(map[*Def][]*Instance),
+		msgToDefMap:   make(map[string][]*Def),
 		timeoutManger: TimeoutManager{bus: bus},
 		sagaStore:     sagaStore}
 }

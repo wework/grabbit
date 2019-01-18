@@ -33,7 +33,7 @@ type DefaultBus struct {
 	DelayedSubscriptions [][]string
 	PurgeOnStartup       bool
 	started              bool
-	SagaManager          SagaRegister
+	Glue                 SagaRegister
 	TxProvider           tx.Provider
 	IsTxnl               bool
 }
@@ -183,10 +183,10 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event interface{}, hand
 
 //RegisterSaga impements GBus.RegisterSaga
 func (b *DefaultBus) RegisterSaga(saga Saga) error {
-	if b.SagaManager == nil {
+	if b.Glue == nil {
 		return errors.New("must configure bus to work with Sagas")
 	}
-	return b.SagaManager.RegisterSaga(saga)
+	return b.Glue.RegisterSaga(saga)
 
 }
 

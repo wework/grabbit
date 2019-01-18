@@ -9,34 +9,34 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
-type SagaDef struct {
+type Def struct {
 	bus            gbus.Bus
 	sagaType       reflect.Type
 	startedBy      []string
 	lock           *sync.Mutex
-	instances      []*SagaInstance
+	instances      []*Instance
 	handlersFunMap map[string]string
 	msgHandler     gbus.MessageHandler
 }
 
-func (sd *SagaDef) HandleMessage(message interface{}, handler gbus.MessageHandler) error {
+func (sd *Def) HandleMessage(message interface{}, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(message, handler)
 	return sd.bus.HandleMessage(message, sd.msgHandler)
 }
-func (sd *SagaDef) HandleEvent(exchange, topic string, event interface{}, handler gbus.MessageHandler) error {
+func (sd *Def) HandleEvent(exchange, topic string, event interface{}, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(event, handler)
 	return sd.bus.HandleEvent(exchange, topic, event, sd.msgHandler)
 }
 
-func (sd *SagaDef) getHandledMessages() []string {
+func (sd *Def) getHandledMessages() []string {
 	messages := make([]string, 0)
-	for msgName, _ := range sd.handlersFunMap {
+	for msgName := range sd.handlersFunMap {
 		messages = append(messages, msgName)
 	}
 	return messages
 }
 
-func (sd *SagaDef) addMsgToHandlerMapping(message interface{}, handler gbus.MessageHandler) {
+func (sd *Def) addMsgToHandlerMapping(message interface{}, handler gbus.MessageHandler) {
 	msgName := gbus.GetFqn(message)
 	funName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
 	splits := strings.Split(funName, ".")
@@ -44,12 +44,12 @@ func (sd *SagaDef) addMsgToHandlerMapping(message interface{}, handler gbus.Mess
 	sd.handlersFunMap[msgName] = fn
 }
 
-func (sd *SagaDef) newInstance() *SagaInstance {
-	return newSagaInstance(sd.sagaType,
+func (sd *Def) newInstance() *Instance {
+	return newInstance(sd.sagaType,
 		sd.handlersFunMap)
 }
 
-func (sd *SagaDef) shouldStartNewSaga(message *gbus.BusMessage) bool {
+func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {
 	fqn := gbus.GetFqn(message.Payload)
 	for _, starts := range sd.startedBy {
 		if fqn == starts {
@@ -59,10 +59,10 @@ func (sd *SagaDef) shouldStartNewSaga(message *gbus.BusMessage) bool {
 	return false
 }
 
-// func (sd *SagaDef) canTimeout() bool {
+// func (sd *Def) canTimeout() bool {
 // 	sd.sagaType.Implements(u reflect.Type)
 // }
 
-func (sd *SagaDef) String() string {
+func (sd *Def) String() string {
 	return gbus.GetTypeFQN(sd.sagaType)
 }

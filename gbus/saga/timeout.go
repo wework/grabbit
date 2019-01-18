@@ -12,9 +12,7 @@ type TimeoutManager struct {
 	bus gbus.Bus
 }
 
-/*
-	RequestTimeout requests a timeout from the timeout manager
-*/
+//RequestTimeout requests a timeout from the timeout manager
 func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.Duration) {
 
 	go func(svcName, sagaID string, tm *TimeoutManager) {
