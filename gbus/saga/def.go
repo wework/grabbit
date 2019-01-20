@@ -9,6 +9,7 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
+//Def dwefines a saga type
 type Def struct {
 	bus            gbus.Bus
 	sagaType       reflect.Type
@@ -19,10 +20,13 @@ type Def struct {
 	msgHandler     gbus.MessageHandler
 }
 
+//HandleMessage implements HandlerRegister interface
 func (sd *Def) HandleMessage(message interface{}, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(message, handler)
 	return sd.bus.HandleMessage(message, sd.msgHandler)
 }
+
+//HandleEvent implements HandlerRegister interface
 func (sd *Def) HandleEvent(exchange, topic string, event interface{}, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(event, handler)
 	return sd.bus.HandleEvent(exchange, topic, event, sd.msgHandler)

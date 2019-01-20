@@ -11,6 +11,7 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
+//Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
 	svcName              string
 	bus                  gbus.Bus
@@ -32,7 +33,7 @@ func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
 	return false
 }
 
-//RegisterSaga
+//RegisterSaga registers the saga instance with the Bus
 func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 
 	sagaType := reflect.TypeOf(saga)
