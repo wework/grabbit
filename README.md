@@ -2,7 +2,7 @@
 
 A lightweight message bus ontop of RabbitMQ supporting:
 
-1) Request/Reply
+1) Async Request/Reply
 2) Pub/Sub
 3) Saga pattern
 4) Retry and backoffs
