@@ -1,9 +1,7 @@
 package gbus
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"log"
@@ -36,6 +34,7 @@ type DefaultBus struct {
 	Glue                 SagaRegister
 	TxProvider           tx.Provider
 	IsTxnl               bool
+	Serializer           MessageEncoding
 }
 
 var (
@@ -75,8 +74,8 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 	if b.PurgeOnStartup {
-		msgsPurged, e := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
-		if e != nil {
+		msgsPurged, purgeError := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
+		if purgeError != nil {
 			log.Printf("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, e)
 			return e
 		}
@@ -140,7 +139,7 @@ func (b *DefaultBus) Send(toService string, message BusMessage) error {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "cmd"
-	return b.sendImpl("cmd", toService, "", "", message)
+	return b.sendImpl("cmd", toService, "", "", &message)
 }
 
 //Publish implements GBus.Publish(topic, message)
@@ -149,7 +148,7 @@ func (b *DefaultBus) Publish(exchange, topic string, event BusMessage) error {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	event.Semantics = "evt"
-	return b.sendImpl("evt", "", exchange, topic, event)
+	return b.sendImpl("evt", "", exchange, topic, &event)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -199,9 +198,8 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 		conn, e := amqp.Dial(b.AmqpConnStr)
 		if e == nil {
 			return conn, e
-		} else {
-			lastErr = e
 		}
+		lastErr = e
 	}
 	return nil, lastErr
 }
@@ -266,10 +264,11 @@ func (b *DefaultBus) consumeMessages() {
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
-		reader := bytes.NewReader(delivery.Body)
-		dec := gob.NewDecoder(reader)
-		var tm BusMessage
-		if decErr := dec.Decode(&tm); decErr != nil {
+		tm, decErr := b.Serializer.Decode(delivery.Body)
+		// reader := bytes.NewReader(delivery.Body)
+		// dec := gob.NewDecoder(reader)
+		// var tm BusMessage
+		if decErr != nil {
 			log.Printf("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
 			delivery.Reject(false /*requeue*/)
 			continue
@@ -282,7 +281,7 @@ func (b *DefaultBus) consumeMessages() {
 			tx, txErr = b.TxProvider.New()
 			log.Printf("failed to create transaction.\n%v", txErr)
 		}
-		invkErr := b.invokeHandlers(handlers, &tm, &delivery, tx)
+		invkErr := b.invokeHandlers(handlers, tm, &delivery, tx)
 		if invkErr == nil {
 			//TODO:retry akc if error
 			ackErr := delivery.Ack(false /*multiple*/)
@@ -318,13 +317,9 @@ func (b *DefaultBus) handleConnErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, message BusMessage) (er error) {
+func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, message *BusMessage) (er error) {
 
-	//TODO:Considure batching many logical messages into one TransportMessage
-	b.HandlersLock.Lock()
-	fqn := b.registerMessageSchema(message.Payload)
-	b.HandlersLock.Unlock()
-
+	fqn := GetFqn(message.Payload)
 	defer func() {
 		if err := recover(); err != nil {
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%v", err, debug.Stack())
@@ -332,12 +327,7 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 		}
 	}()
 
-	tm := message
-
-	var buf bytes.Buffer
-	//TODO: Switch from gob to Avro (https://github.com/linkedin/goavro)
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(tm)
+	buffer, err := b.Serializer.Encode(message)
 	if err != nil {
 		log.Printf("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
 		return err
@@ -348,7 +338,7 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 	headers["x-msg-type"] = semantics
 	//TODO: Add message TTL
 	msg := amqp.Publishing{
-		Body:         buf.Bytes(),
+		Body:         buffer,
 		DeliveryMode: DELIVERY_MODE_PERSISTENT,
 		ReplyTo:      b.SvcName,
 		MessageId:    xid.New().String(),
@@ -375,20 +365,13 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 	return err
 }
 
-func (b *DefaultBus) registerMessageSchema(message interface{}) string {
-	fqn := GetFqn(message)
-	if !b.RegisteredSchemas[fqn] {
-		log.Printf("registering schema to gob\n%v", fqn)
-		gob.Register(message)
-		b.RegisteredSchemas[fqn] = true
-	}
-	return fqn
-}
 func (b *DefaultBus) registerHandlerImpl(msg interface{}, handler MessageHandler) error {
 
 	b.HandlersLock.Lock()
 	defer b.HandlersLock.Unlock()
-	fqn := b.registerMessageSchema(msg)
+
+	b.Serializer.Register(msg)
+	fqn := GetFqn(msg)
 
 	handlers := b.MsgHandlers[fqn]
 	if handlers == nil {

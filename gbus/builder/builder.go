@@ -6,6 +6,7 @@ import (
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
+	"github.com/rhinof/grabbit/gbus/serialization"
 	"github.com/rhinof/grabbit/gbus/tx"
 	"github.com/streadway/amqp"
 )
@@ -26,11 +27,11 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
 		ConnErrors:           make(chan *amqp.Error),
-		RegisteredSchemas:    make(map[string]bool),
 		DelayedSubscriptions: [][]string{},
 		HandlersLock:         &sync.Mutex{},
 		IsTxnl:               builder.txnl,
-		MsgHandlers:          make(map[string][]gbus.MessageHandler)}
+		MsgHandlers:          make(map[string][]gbus.MessageHandler),
+		Serializer:           serialization.NewGobSerializer()}
 
 	sagaStore := saga.NewInMemoryStore()
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)

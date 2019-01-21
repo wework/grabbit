@@ -109,3 +109,10 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 }
+
+//MessageEncoding is the base interface for all message serializers
+type MessageEncoding interface {
+	Encode(message *BusMessage) ([]byte, error)
+	Decode(buffer []byte) (*BusMessage, error)
+	Register(obj interface{})
+}
