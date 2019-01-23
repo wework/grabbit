@@ -88,3 +88,37 @@ func TestPubSub(t *testing.T) {
 	<-proceed
 
 }
+
+func TestHandlerRetry(t *testing.T) {
+
+	cmd := gbus.NewBusMessage(Command1{})
+	reply := gbus.NewBusMessage(Reply1{})
+
+	bus := createBusForTest()
+
+	proceed := make(chan bool)
+	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+		invocation.Reply(reply)
+	}
+
+	attempts := 0
+	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+		if attempts == 0 {
+			attempts++
+			panic("expecting retry on panics")
+		} else {
+			proceed <- true
+		}
+
+	}
+
+	bus.HandleMessage(cmd.Payload, cmdHandler)
+	bus.HandleMessage(reply.Payload, replyHandler)
+
+	bus.Start()
+	defer bus.Shutdown()
+
+	bus.Send(testSvc1, cmd)
+	<-proceed
+
+}

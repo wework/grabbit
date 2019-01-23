@@ -209,13 +209,13 @@ func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
 	delivery *amqp.Delivery,
 	tx *sql.Tx) (err error) {
 
-	action := func(attempts uint) error {
+	action := func(attempts uint) (actionErr error) {
 		defer func() {
 			if p := recover(); p != nil {
 
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 				log.Printf("recovered from panic while invoking handler.\n%v", pncMsg)
-				err = errors.New(pncMsg)
+				actionErr = errors.New(pncMsg)
 			}
 		}()
 		for _, handler := range handlers {
