@@ -2,7 +2,6 @@ package saga
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -13,11 +12,11 @@ import (
 
 //Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
-	svcName              string
-	bus                  gbus.Bus
-	sagaDefs             []*Def
-	lock                 *sync.Mutex
-	instances            map[*Def][]*Instance
+	svcName  string
+	bus      gbus.Bus
+	sagaDefs []*Def
+	lock     *sync.Mutex
+
 	msgToDefMap          map[string][]*Def
 	sagaStore            Store
 	timeoutManger        TimeoutManager
@@ -85,37 +84,6 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 	return defs
 }
 
-func (imsm *Glue) newInstance(def *Def) *Instance {
-	newInstance := def.newInstance()
-	imsm.saveNewSaga(def, newInstance)
-
-	return newInstance
-}
-
-func (imsm *Glue) saveNewSaga(def *Def, newInstance *Instance) error {
-	instances := imsm.instances[def]
-	if instances == nil {
-		instances = make([]*Instance, 0)
-
-	}
-	instances = append(instances, newInstance)
-	imsm.instances[def] = instances
-	return nil
-
-}
-
-func (imsm *Glue) getInstanceByID(sagaID string) (*Instance, error) {
-
-	for _, instances := range imsm.instances {
-		for _, instance := range instances {
-			if instance.ID == sagaID {
-				return instance, nil
-			}
-		}
-	}
-	return nil, errors.New("no saga found for provided id")
-}
-
 func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) {
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
@@ -134,7 +102,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		*/
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
-			newInstance := imsm.newInstance(def)
+			newInstance := def.newInstance()
 			log.Printf("created new saga.\nSaga Def:%v\nSagaID:%v", def.String(), newInstance.ID)
 			newInstance.invoke(invocation, message)
 
@@ -169,7 +137,15 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			log.Printf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
 			return
 		} else {
-			for _, instance := range imsm.instances[def] {
+
+			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
+
+			if e != nil {
+				log.Printf("failed to fecth saga instances for saga type %s\nerror:%v", def.sagaType, e)
+				return
+			}
+
+			for _, instance := range instances {
 				instance.invoke(invocation, message)
 				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 				if e != nil {
@@ -192,11 +168,11 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 //NewGlue creates a new Sagamanager
 func NewGlue(bus gbus.Bus, sagaStore Store, svcName string) *Glue {
 	return &Glue{
-		svcName:       svcName,
-		bus:           bus,
-		sagaDefs:      make([]*Def, 0),
-		lock:          &sync.Mutex{},
-		instances:     make(map[*Def][]*Instance),
+		svcName:  svcName,
+		bus:      bus,
+		sagaDefs: make([]*Def, 0),
+		lock:     &sync.Mutex{},
+
 		msgToDefMap:   make(map[string][]*Def),
 		timeoutManger: TimeoutManager{bus: bus},
 		sagaStore:     sagaStore}

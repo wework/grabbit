@@ -3,6 +3,7 @@ package saga
 import (
 	"database/sql"
 	"errors"
+	"reflect"
 )
 
 //InMemorySagaStore stores the saga instances in-memory, not intended for production use
@@ -64,6 +65,19 @@ func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *Instance) error
 		}
 	}
 	return nil
+}
+
+//GetSagasByType implements SagaStore.GetSagasByType
+func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*Instance, error) {
+	instances := make([]*Instance, 0)
+
+	for key, val := range store.instances {
+		if key.sagaType == t {
+			instances = append(instances, val...)
+		}
+	}
+
+	return instances, nil
 }
 
 //NewInMemoryStore is a factory method for the InMemorySagaStore
