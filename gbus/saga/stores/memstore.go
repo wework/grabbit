@@ -1,18 +1,21 @@
-package saga
+package stores
 
 import (
 	"database/sql"
 	"errors"
 	"reflect"
+
+	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/grabbit/gbus/saga"
 )
 
 //InMemorySagaStore stores the saga instances in-memory, not intended for production use
 type InMemorySagaStore struct {
-	instances map[*Def][]*Instance
+	instances map[reflect.Type][]*saga.Instance
 }
 
 //GetSagaByID implements SagaStore.GetSagaByID
-func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*Instance, error) {
+func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, error) {
 	for _, instances := range store.instances {
 		for _, instance := range instances {
 			if instance.ID == sagaID {
@@ -23,28 +26,33 @@ func (store *InMemorySagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*Instanc
 	return nil, errors.New("no saga found for provided id")
 }
 
+//RegisterSagaType implements SagaStore.RegisterSagaType
+func (store *InMemorySagaStore) RegisterSagaType(saga gbus.Saga) {
+
+}
+
 //SaveNewSaga implements SagaStore.SaveNewSaga
-func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, def *Def, newInstance *Instance) error {
-	instances := store.instances[def]
+func (store *InMemorySagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) error {
+	instances := store.instances[sagaType]
 	if instances == nil {
-		instances = make([]*Instance, 0)
+		instances = make([]*saga.Instance, 0)
 
 	}
 	instances = append(instances, newInstance)
-	store.instances[def] = instances
+	store.instances[sagaType] = instances
 
 	return nil
 
 }
 
 //UpdateSaga implements SagaStore.UpdateSaga
-func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *Instance) error {
+func (store *InMemorySagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 
 	return nil
 }
 
 //DeleteSaga implements SagaStore.DeleteSaga
-func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *Instance) error {
+func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 
 	for key, value := range store.instances {
 		var sagaIndexFound bool
@@ -68,11 +76,11 @@ func (store *InMemorySagaStore) DeleteSaga(tx *sql.Tx, instance *Instance) error
 }
 
 //GetSagasByType implements SagaStore.GetSagasByType
-func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*Instance, error) {
-	instances := make([]*Instance, 0)
+func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*saga.Instance, error) {
+	instances := make([]*saga.Instance, 0)
 
 	for key, val := range store.instances {
-		if key.sagaType == t {
+		if key == t {
 			instances = append(instances, val...)
 		}
 	}
@@ -81,7 +89,7 @@ func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*I
 }
 
 //NewInMemoryStore is a factory method for the InMemorySagaStore
-func NewInMemoryStore() Store {
+func NewInMemoryStore() saga.Store {
 	return &InMemorySagaStore{
-		instances: make(map[*Def][]*Instance)}
+		instances: make(map[reflect.Type][]*saga.Instance)}
 }

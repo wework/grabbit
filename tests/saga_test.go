@@ -98,7 +98,7 @@ func TestSagaToServiceConversation(t *testing.T) {
 
 }
 
-func TestSaga(t *testing.T) {
+func TestSagas(t *testing.T) {
 
 	completed := make(chan bool)
 	var firstSagaCorrelationID, secondSagaCorrelationID string
@@ -161,6 +161,8 @@ func TestSagaTimeout(t *testing.T) {
 /*Test Sagas*/
 
 type SagaA struct {
+	Field1 string
+	Field2 int
 }
 
 func (*SagaA) StartedBy() []interface{} {
@@ -172,7 +174,7 @@ func (s *SagaA) IsComplete() bool {
 	return false
 }
 
-func (s *SagaA) New() interface{} {
+func (s *SagaA) New() gbus.Saga {
 	return &SagaA{}
 }
 
@@ -184,7 +186,7 @@ func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 }
 
 func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) {
-	log.Println("command1 received")
+
 	reply := gbus.NewBusMessage(Reply1{})
 	invocation.Reply(reply)
 }
@@ -219,7 +221,7 @@ func (s *SagaB) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleEvent("test_exchange", "some.topic.2", Event2{}, s.HandleEvent1)
 }
 
-func (s *SagaB) New() interface{} {
+func (s *SagaB) New() gbus.Saga {
 	return &SagaB{}
 }
 
@@ -248,7 +250,7 @@ func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
 }
 
 type TimingOutSaga struct {
-	timedOut bool
+	TimedOut bool
 }
 
 func (*TimingOutSaga) StartedBy() []interface{} {
@@ -265,10 +267,10 @@ func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.Bu
 }
 
 func (s *TimingOutSaga) IsComplete() bool {
-	return s.timedOut
+	return s.TimedOut
 }
 
-func (s *TimingOutSaga) New() interface{} {
+func (s *TimingOutSaga) New() gbus.Saga {
 	return &TimingOutSaga{}
 }
 func (s *TimingOutSaga) TimeoutDuration() time.Duration {
@@ -276,6 +278,6 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 }
 
 func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
-	s.timedOut = true
+	s.TimedOut = true
 	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 }

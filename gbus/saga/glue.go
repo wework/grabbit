@@ -41,6 +41,8 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 		return fmt.Errorf("saga of type %v already registered", sagaType)
 	}
 
+	imsm.sagaStore.RegisterSagaType(saga)
+
 	def := &Def{
 		bus:            imsm.bus,
 		sagaType:       sagaType,
@@ -108,7 +110,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 			if !newInstance.isComplete() {
 				log.Printf("saving new saga with sagaID %v", newInstance.ID)
-				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def, newInstance); e != nil {
+				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
 					log.Printf("saving new saga failed\nSagaID:%v", newInstance.ID)
 					panic(e)
 				}
@@ -138,14 +140,16 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return
 		} else {
 
+			log.Printf("feteching for:\nSaga type:%v\nMessage:%v", def.sagaType, msgName)
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				log.Printf("failed to fecth saga instances for saga type %s\nerror:%v", def.sagaType, e)
 				return
 			}
-
+			log.Printf("fetched %v saga instances for message of type %v", len(instances), msgName)
 			for _, instance := range instances {
+
 				instance.invoke(invocation, message)
 				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 				if e != nil {

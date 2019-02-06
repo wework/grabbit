@@ -12,8 +12,9 @@ import (
 //Instance represent a living instance of a saga of a particular definition
 type Instance struct {
 	ID                 string
-	underlyingInstance interface{}
-	msgToMethodMap     map[string]string
+	ConcurrencyCtrl    int
+	UnderlyingInstance gbus.Saga
+	MsgToMethodMap     map[string]string
 }
 
 func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage) {
@@ -33,7 +34,7 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 		invocation,
 		message,
 		si.ID}
-	reflectedVal := reflect.ValueOf(si.underlyingInstance)
+	reflectedVal := reflect.ValueOf(si.UnderlyingInstance)
 
 	params := make([]reflect.Value, 0)
 	params = append(params, reflect.ValueOf(sginv), valueOfMessage)
@@ -44,24 +45,24 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 }
 func (si *Instance) getSagaMethodNameToInvoke(message *gbus.BusMessage) string {
 	fqn := gbus.GetFqn(message.Payload)
-	methodName := si.msgToMethodMap[fqn]
+	methodName := si.MsgToMethodMap[fqn]
 	return methodName
 }
 func (si *Instance) isComplete() bool {
-	saga := si.underlyingInstance.(gbus.Saga)
+	saga := si.UnderlyingInstance.(gbus.Saga)
 	return saga.IsComplete()
 }
 
 func (si *Instance) requestsTimeout() (bool, time.Duration) {
 
 	timeoutDuration := -1 * time.Millisecond
-	timeoutData, canTimeout := si.underlyingInstance.(gbus.RequestSagaTimeout)
+	timeoutData, canTimeout := si.UnderlyingInstance.(gbus.RequestSagaTimeout)
 	if canTimeout {
 		timeoutDuration = timeoutData.TimeoutDuration()
 	}
 	return canTimeout, timeoutDuration
 }
-func newInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Instance {
+func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Instance {
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()
@@ -74,11 +75,11 @@ func newInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Insta
 	//newSagaPtr := reflect.New(sagaType).Elem()
 	newInstance := &Instance{
 		ID:                 xid.New().String(),
-		underlyingInstance: saga.New(),
-		msgToMethodMap:     msgToMethodMap}
+		UnderlyingInstance: saga.New(),
+		MsgToMethodMap:     msgToMethodMap}
 	return newInstance
 }
 
 func (si *Instance) String() string {
-	return gbus.GetFqn(si.underlyingInstance)
+	return gbus.GetFqn(si.UnderlyingInstance)
 }

@@ -73,7 +73,7 @@ type Saga interface {
 	IsComplete() bool
 
 	//New is a factory method used by the bus to crerate new instances of a saga
-	New() interface{}
+	New() Saga
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
@@ -95,11 +95,13 @@ type SagaRegister interface {
 //Builder is the main interface that should be used to create an instance of a Bus
 type Builder interface {
 	PurgeOnStartUp() Builder
-	WithOutbox(connStr string) Builder
 	WithDeadlettering(deadletterExchange string) Builder
-	WithSagas(sagaStoreConnStr string) Builder
-	Txnl(txResourceConnStr string) Builder
-
+	/*
+		Txnl sets the bus to be transactional using a persisted saga store
+		provider: pg for PostgreSQL
+		connStr: connection string in the format of the passed in provider
+	*/
+	Txnl(provider, connStr string) Builder
 	Build(svcName string) Bus
 }
 

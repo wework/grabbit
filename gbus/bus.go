@@ -76,7 +76,7 @@ func (b *DefaultBus) Start() error {
 	if b.PurgeOnStartup {
 		msgsPurged, purgeError := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
 		if purgeError != nil {
-			log.Printf("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, e)
+			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, e)
 			return e
 		}
 	}
@@ -94,11 +94,11 @@ func (b *DefaultBus) Start() error {
 			false,   /*noWait*/
 			nil /*args amqp.Table*/)
 		if e != nil {
-			log.Printf("failed to declare exchange %v\n%v", exchange, e)
+			b.log("failed to declare exchange %v\n%v", exchange, e)
 		} else {
 			e = b.bindQueue(topic, exchange)
 			if e != nil {
-				log.Printf("failed to bind to the following\n topic:%v\n exchange:%v\n%v", topic, exchange, e)
+				b.log("failed to bind to the following\n topic:%v\n exchange:%v\n%v", topic, exchange, e)
 			}
 		}
 	}
@@ -214,7 +214,7 @@ func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
 			if p := recover(); p != nil {
 
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
-				log.Printf("recovered from panic while invoking handler.\n%v", pncMsg)
+				b.log("recovered from panic while invoking handler.\n%v", pncMsg)
 				actionErr = errors.New(pncMsg)
 			}
 		}()
@@ -240,7 +240,7 @@ func (b *DefaultBus) consumeMessages() {
 	//TODO:Handle panics due to tx errors so the consumption of messages will continue
 	for {
 		delivery := <-b.msgs
-		//	log.Printf("consumed message with deliver tag %v\n", delivery.ConsumerTag)
+		//	b.log("consumed message with deliver tag %v\n", delivery.ConsumerTag)
 		/*
 			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
 			and delivery is a zero value so in order not to panic down the road we return if bus is shutdown
@@ -248,10 +248,12 @@ func (b *DefaultBus) consumeMessages() {
 		if !b.started {
 			return
 		}
+		b.log("GOT MSG")
 		msgName := delivery.Headers["x-msg-name"].(string)
 		msgType := delivery.Headers["x-msg-type"].(string)
 		if msgName == "" || msgType == "" {
 			//TODO: Log poision pill message
+			b.log("message received but no headers found...rejecting message")
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
@@ -260,7 +262,7 @@ func (b *DefaultBus) consumeMessages() {
 		handlers := b.MsgHandlers[msgName]
 		b.HandlersLock.Unlock()
 		if len(handlers) == 0 {
-			log.Printf("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", msgName, msgType)
+			b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", msgName, msgType)
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
@@ -269,7 +271,7 @@ func (b *DefaultBus) consumeMessages() {
 		// dec := gob.NewDecoder(reader)
 		// var tm BusMessage
 		if decErr != nil {
-			log.Printf("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
+			b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
@@ -279,15 +281,19 @@ func (b *DefaultBus) consumeMessages() {
 		if b.IsTxnl {
 			//TODO:Add retries, and reject message with requeue=true
 			tx, txErr = b.TxProvider.New()
-			log.Printf("failed to create transaction.\n%v", txErr)
+			if txErr != nil {
+				b.log("failed to create transaction.\n%v", txErr)
+			}
 		}
 		invkErr := b.invokeHandlers(handlers, tm, &delivery, tx)
 		if invkErr == nil {
 			//TODO:retry akc if error
 			ackErr := delivery.Ack(false /*multiple*/)
 			if b.IsTxnl && ackErr == nil {
+				b.log("bus commiting transaction")
 				tx.Commit()
 			} else if b.IsTxnl && ackErr != nil {
+				b.log("bus rollingback transaction")
 				tx.Rollback()
 			}
 		} else {
@@ -296,7 +302,7 @@ func (b *DefaultBus) consumeMessages() {
 				Message name: %v\n
 				Message type: %v\n
 				Error:\n%v`
-			log.Printf(logMsg, msgName, msgType, invkErr)
+			b.log(logMsg, msgName, msgType, invkErr)
 			if b.IsTxnl {
 				tx.Rollback()
 			}
@@ -306,6 +312,10 @@ func (b *DefaultBus) consumeMessages() {
 	}
 }
 
+func (b *DefaultBus) log(format string, v ...interface{}) {
+
+	log.Printf(b.SvcName+":"+format, v...)
+}
 func (b *DefaultBus) handleConnErrors() {
 
 	for !b.started {
@@ -329,7 +339,7 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 
 	buffer, err := b.Serializer.Encode(message)
 	if err != nil {
-		log.Printf("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
+		b.log("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
 		return err
 	}
 

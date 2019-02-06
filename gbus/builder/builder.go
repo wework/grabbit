@@ -1,11 +1,14 @@
 package builder
 
 import (
+	"fmt"
 	"go/types"
 	"sync"
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
+
+	"github.com/rhinof/grabbit/gbus/saga/stores"
 	"github.com/rhinof/grabbit/gbus/serialization"
 	"github.com/rhinof/grabbit/gbus/tx"
 	"github.com/streadway/amqp"
@@ -18,6 +21,7 @@ type defaultBuilder struct {
 	sagaStoreConnStr string
 	txnl             bool
 	txConnStr        string
+	txnlProvider     string
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -33,17 +37,27 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
 		Serializer:           serialization.NewGobSerializer()}
 
-	sagaStore := saga.NewInMemoryStore()
-	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
+	var sagaStore saga.Store
+	if builder.txnl {
+		gb.IsTxnl = true
+		switch builder.txnlProvider {
+		case "pg":
+			pgtx, err := tx.NewPgProvider(builder.txConnStr)
+			if err != nil {
+				panic(err)
+			}
+			gb.TxProvider = pgtx
+			sagaStore = stores.NewPgStore(gb.SvcName, pgtx)
 
-	if gb.IsTxnl {
-		pgtx, err := tx.NewPgProvider(builder.txConnStr)
-		if err != nil {
-			panic(err)
+		default:
+			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
+			panic(error)
 		}
-		gb.TxProvider = pgtx
+	} else {
+		sagaStore = stores.NewInMemoryStore()
 	}
 
+	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
 	return gb
 }
 
@@ -76,9 +90,10 @@ func (builder *defaultBuilder) WithSagas(sagaStoreConnStr string) gbus.Builder {
 	return builder
 }
 
-func (builder *defaultBuilder) Txnl(txnlResourceConnStr string) gbus.Builder {
+func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 	builder.txnl = true
-	builder.txConnStr = txnlResourceConnStr
+	builder.txConnStr = connStr
+	builder.txnlProvider = provider
 	return builder
 }
 

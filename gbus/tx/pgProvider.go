@@ -16,7 +16,7 @@ type PgProvider struct {
 func (pg *PgProvider) New() (*sql.Tx, error) {
 	ctx := context.Background()
 
-	return pg.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	return pg.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 
 }
 

@@ -49,7 +49,7 @@ func (sd *Def) addMsgToHandlerMapping(message interface{}, handler gbus.MessageH
 }
 
 func (sd *Def) newInstance() *Instance {
-	return newInstance(sd.sagaType,
+	return NewInstance(sd.sagaType,
 		sd.handlersFunMap)
 }
 

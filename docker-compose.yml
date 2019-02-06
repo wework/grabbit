@@ -20,6 +20,8 @@ services:
     environment:
       POSTGRES_PASSWORD: rhinof
       POSTGRES_USER: rhinof
+    ports:
+      - 5432:5432
 
   adminer:
     image: adminer

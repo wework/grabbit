@@ -26,7 +26,7 @@ func createNamedBusForTest(svcName string) gbus.Bus {
 		New().
 		Bus(connStr).
 		PurgeOnStartUp().
-		WithSagas("").
+		Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
 		Build(svcName)
 
 }
