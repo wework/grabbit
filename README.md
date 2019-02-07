@@ -33,12 +33,12 @@ gbus := builder.
 
 // Creating a transactional GBus instance
 
-
 gbus := builder.
-		New().
+    New().
 		Bus("connection string to RabbitMQ").
 		Txnl("pg", "connection string to PostgreSQL").
 		Build("name of your service")
+
 
 ## Testing
 
