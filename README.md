@@ -33,6 +33,7 @@ gbus := builder.
 
 // Creating a transactional GBus instance
 
+
 gbus := builder.
 		New().
 		Bus("connection string to RabbitMQ").
