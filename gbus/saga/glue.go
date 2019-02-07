@@ -131,7 +131,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				return
 			}
 			instance.invoke(invocation, message)
-			e = imsm.completeOrUpdateSaga(invocation.Tx(), instance)
+			e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 			if e != nil {
 				panic(e)
 			}
@@ -151,7 +151,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			for _, instance := range instances {
 
 				instance.invoke(invocation, message)
-				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance)
+				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 				if e != nil {
 					panic(e)
 				}
@@ -160,8 +160,11 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	}
 }
 
-func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
-	if instance.isComplete() {
+func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessage *gbus.BusMessage) error {
+
+	_, timedOut := lastMessage.Payload.(gbus.SagaTimeoutMessage)
+
+	if instance.isComplete() || timedOut {
 		log.Printf("sage %v has completed and will be deleted", instance.ID)
 		return imsm.sagaStore.DeleteSaga(tx, instance)
 
