@@ -22,23 +22,18 @@ Planned:
 
 ## Usage
 
-import (
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/builder"
-)
-// Creating a basic GBus instance (not for production)
-gbus := builder.
-  New().
-  Bus("connection string to RabbitMQ").
-  Build("name of your service")
+import (<br/>
+	"github.com/rhinof/grabbit/gbus" <br/> 
+	"github.com/rhinof/grabbit/gbus/builder" <br/>
+)<br/>
+  <br/>
 
-// Creating a transactional GBus instance
-
-gbus := builder.
-    New().
-		Bus("connection string to RabbitMQ").
-		Txnl("pg", "connection string to PostgreSQL").
-		Build("name of your service")
+// Creating a transactional GBus instance <br/>
+gb := builder.<br/>
+    New().<br/>
+		Bus("connection string to RabbitMQ").<br/>
+		Txnl("pg", "connection string to PostgreSQL").<br/>
+		Build("name of your service")<br/>
 
 
 ## Testing
