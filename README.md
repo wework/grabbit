@@ -1,6 +1,6 @@
 # grabbit
 
-A lightweight message bus ontop of RabbitMQ supporting:
+A lightweight message bus on top of RabbitMQ supporting:
 
 1) Async Request/Reply
 2) Pub/Sub
@@ -10,7 +10,14 @@ A lightweight message bus ontop of RabbitMQ supporting:
 Planned:
 
 1) Transactional Outbox
-2) Avro serialization
+2) Deduplication of inbound messages
+
+
+## Supported transactional resources
+1) PostgreSQL
+## Supported serializers
+1) gob
+2) Avro
 
 ## Testing
 
