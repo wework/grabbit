@@ -47,7 +47,7 @@ var (
 func (b *DefaultBus) Start() error {
 
 	//create connection
-	conn, e := b.connect(5)
+	conn, e := b.connect(int(MAX_RETRY_COUNT))
 	if e != nil {
 		return e
 	}
@@ -200,6 +200,7 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 			return conn, e
 		}
 		lastErr = e
+		attempts++
 	}
 	return nil, lastErr
 }
