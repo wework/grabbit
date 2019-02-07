@@ -22,6 +22,7 @@ type defaultBuilder struct {
 	txnl             bool
 	txConnStr        string
 	txnlProvider     string
+	serializer       gbus.MessageEncoding
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -35,7 +36,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		HandlersLock:         &sync.Mutex{},
 		IsTxnl:               builder.txnl,
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
-		Serializer:           serialization.NewGobSerializer()}
+		Serializer:           builder.serializer}
 
 	var sagaStore saga.Store
 	if builder.txnl {
@@ -97,6 +98,12 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 	return builder
 }
 
+func (builder *defaultBuilder) WithSerializer(serializer gbus.MessageEncoding) gbus.Builder {
+
+	builder.serializer = serializer
+	return builder
+}
+
 //New :)
 func New() Nu {
 	return Nu{}
@@ -108,5 +115,8 @@ type Nu struct {
 
 //Bus inits a new BusBuilder
 func (Nu) Bus(brokerConnStr string) gbus.Builder {
-	return &defaultBuilder{connStr: brokerConnStr}
+	return &defaultBuilder{
+		connStr:    brokerConnStr,
+		serializer: serialization.NewGobSerializer(),
+	}
 }
