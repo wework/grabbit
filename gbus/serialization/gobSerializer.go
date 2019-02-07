@@ -23,8 +23,9 @@ func NewGobSerializer() gbus.MessageEncoding {
 }
 
 //Encode implements MessageEncoding.Encode
-func (*GobSerializer) Encode(message *gbus.BusMessage) ([]byte, error) {
-	gob.Register(message.Payload)
+func (gs *GobSerializer) Encode(message *gbus.BusMessage) ([]byte, error) {
+
+	gs.Register(message.Payload)
 
 	var buf bytes.Buffer
 	//TODO: Switch from gob to Avro (https://github.com/linkedin/goavro)
