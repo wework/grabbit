@@ -49,10 +49,10 @@ handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
 		cmd, ok := message.Payload.(SomeCommand)
 		if ok {
 			fmt.Printf("handler invoked with  message %v", cmd)
-      return nil
+     	 		return nil
 		}
 
-    return fmt.Errorf("failed to handle message")
+    		return fmt.Errorf("failed to handle message")
 	}
 
 gb.HandleMessage(SomeCommand{}, handler)
@@ -66,10 +66,10 @@ eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
 		evt, ok := message.Payload.(SomeEvent)
 		if ok {
 			fmt.Printf("handler invoked with event %v", evt)
-      return nil
+      			return nil
 		}
 
-    return fmt.Errorf("failed to handle event")
+   		 return fmt.Errorf("failed to handle event")
 	}
 
 gb.HandleEvent("name of exchange", "name of topic", SomeEvent{}, eventHandler)
