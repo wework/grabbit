@@ -51,9 +51,8 @@ handler := func(invocation gbus.Invocation, message *gbus.BusMessage)
 			fmt.Printf("handler invoked with  message %v", cmd)
 		}
 	}
-
-cmd := SomeCommand{}
-gb.HandleMessage(cmd, handler)
+	
+gb.HandleMessage(SomeCommand{}, handler)
 ```
 Register an event handler
 
