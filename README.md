@@ -38,8 +38,7 @@ gb := builder.
 		Bus("connection string to RabbitMQ").
 		Txnl("pg", "connection string to PostgreSQL").
 		Build("name of your service")
-gb.Start()
-defer gb.Shutsown()
+
 ```
 Register a command handler
 
@@ -55,6 +54,11 @@ handler := func(invocation gbus.Invocation, message *gbus.BusMessage)
 
 cmd := SomeCommand{}
 gb.HandleMessage(cmd, handler)
+```
+Start the bus
+```Go
+gb.Start()
+defer gb.Shutsown()
 ```
 
 Send the command 
