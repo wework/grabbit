@@ -46,7 +46,7 @@ Register a command handler
 type SomeCommand struct {}
 
 handler := func(invocation gbus.Invocation, message *gbus.BusMessage)
-		cmd, ok := message.Payload.(Command1)
+		cmd, ok := message.Payload.(SomeCommand)
 		if ok {
 			fmt.Printf("handler invoked with  message %v", cmd)
 		}
@@ -55,18 +55,36 @@ handler := func(invocation gbus.Invocation, message *gbus.BusMessage)
 cmd := SomeCommand{}
 gb.HandleMessage(cmd, handler)
 ```
+Register an event handler
+
+```Go
+type SomeEvent struct{}
+
+eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+		evt, ok := message.Payload.(SomeEvent)
+		if ok {
+			fmt.Printf("handler invoked with event %v", evt)
+		}
+	}
+	
+gb.HandleEvent("name of exchange", "name of topic", SomeEvent{}, eventHandler)
+
+```
+
 Start the bus
 ```Go
 gb.Start()
 defer gb.Shutsown()
 ```
 
-Send the command 
+Send a command 
 ```Go
-msg := gbus.NewBusMessage(SomeCommand{})
-gb.Send("name of service you are sending the command to", msg)
+gb.Send("name of service you are sending the command to", gbus.NewBusMessage(SomeCommand{}))
 ```
-
+Publish an event
+```Go
+gb.Publish("name of exchange", "name of topic", gbus.NewBusMessage(SomeEvent))
+```
 
 ## Testing
 
