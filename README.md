@@ -39,7 +39,7 @@ gb := builder.
 		Txnl("pg", "connection string to PostgreSQL").
 		Build("name of your service")
 ```
-// register command handler<br/>
+Register a command handler
 
 ```Go
 type SomeCommand struct {}
@@ -55,7 +55,7 @@ cmd := SomeCommand{}
 gb.HandleMessage(cmd, handler)
 ```
 
-//send the command 
+Send the command 
 ```Go
 msg := gbus.NewBusMessage(SomeCommand{})
 gb.Send("name of service you are sending the command to", msg)
