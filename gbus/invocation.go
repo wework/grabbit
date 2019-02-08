@@ -11,7 +11,7 @@ type defaultInvocationContext struct {
 	tx          *sql.Tx
 }
 
-func (dfi *defaultInvocationContext) Reply(replyMessage BusMessage) {
+func (dfi *defaultInvocationContext) Reply(replyMessage *BusMessage) {
 	if dfi.inboundMsg != nil {
 		replyMessage.CorrelationID = dfi.inboundMsg.ID
 		replyMessage.SagaCorrelationID = dfi.inboundMsg.SagaID

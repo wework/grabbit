@@ -9,7 +9,7 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
-//Def dwefines a saga type
+//Def defines a saga type
 type Def struct {
 	bus            gbus.Bus
 	sagaType       reflect.Type
@@ -54,7 +54,7 @@ func (sd *Def) newInstance() *Instance {
 }
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {
-	fqn := gbus.GetFqn(message.Payload)
+	fqn := message.PayloadFQN
 	for _, starts := range sd.startedBy {
 		if fqn == starts {
 			return true

@@ -44,7 +44,7 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 	log.Printf(" saga instance %v invoked", si.ID)
 }
 func (si *Instance) getSagaMethodNameToInvoke(message *gbus.BusMessage) string {
-	fqn := gbus.GetFqn(message.Payload)
+	fqn := message.PayloadFQN
 	methodName := si.MsgToMethodMap[fqn]
 	return methodName
 }

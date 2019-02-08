@@ -1,6 +1,9 @@
 package gbus
 
-import "github.com/rs/xid"
+import (
+	"github.com/rs/xid"
+	"github.com/streadway/amqp"
+)
 
 //BusMessage the structure that gets sent to the underlying transport
 type BusMessage struct {
@@ -10,11 +13,46 @@ type BusMessage struct {
 	SagaCorrelationID string
 	Semantics         string /*cmd or evt*/
 	Payload           interface{}
+	PayloadFQN        string
 }
 
-//NewBusMessage factory mehtod for creating a BusMessage that wraps the given payload
-func NewBusMessage(payload interface{}) BusMessage {
-	return BusMessage{
-		ID:      xid.New().String(),
-		Payload: payload}
+//NewBusMessage factory method for creating a BusMessage that wraps the given payload
+func NewBusMessage(payload interface{}) *BusMessage {
+	bm := &BusMessage{
+		ID: xid.New().String(),
+	}
+	bm.SetPayload(payload)
+	return bm
+}
+
+func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
+	bm := &BusMessage{}
+	bm.SetFromAMQPHeaders(headers)
+	return bm
+}
+
+//GetAMQPHeaders convert to AMQP headers Table everything but a payload
+func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
+	headers = amqp.Table{}
+	headers["x-msg-id"] = bm.ID
+	headers["x-msg-saga-id"] = bm.SagaID
+	headers["x-msg-semantics"] = bm.Semantics
+	headers["x-msg-correlation-id"] = bm.CorrelationID
+	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
+	return
+}
+
+//SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
+func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
+	bm.ID = headers["x-msg-id"].(string)
+	bm.SagaID = headers["x-msg-saga-id"].(string)
+	bm.Semantics = headers["x-msg-semantics"].(string)
+	bm.CorrelationID = headers["x-msg-correlation-id"].(string)
+	bm.SagaCorrelationID = headers["x-msg-saga-correlation-id"].(string)
+}
+
+//SetPayload sets the payload and makes sure that FQN is saved
+func (bm *BusMessage) SetPayload(payload interface{}) {
+	bm.PayloadFQN = GetFqn(payload)
+	bm.Payload = payload
 }
