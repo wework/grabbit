@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/rhinof/grabbit/gbus"
@@ -11,13 +12,14 @@ func TestSendCommand(t *testing.T) {
 	proceed := make(chan bool)
 	b := createBusForTest()
 
-	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 		_, ok := message.Payload.(Command1)
 		if !ok {
 			t.Errorf("handler invoced with wrong message type\r\n%v", cmd)
 		}
 		proceed <- true
+		return nil
 	}
 
 	err := b.HandleMessage(cmd, handler)
@@ -41,12 +43,13 @@ func TestReply(t *testing.T) {
 	b := createBusForTest()
 
 	proceed := make(chan bool)
-	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		invocation.Reply(gbus.NewBusMessage(reply))
+		return nil
 
 	}
 
-	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		_, ok := message.Payload.(Reply1)
 		if !ok {
 			t.Errorf("message handler for reply message invoced with wrong message type\r\n%v", message)
@@ -57,6 +60,7 @@ func TestReply(t *testing.T) {
 		}
 
 		proceed <- true
+		return nil
 	}
 
 	b.HandleMessage(cmd, cmdHandler)
@@ -74,8 +78,9 @@ func TestPubSub(t *testing.T) {
 	b := createBusForTest()
 
 	proceed := make(chan bool)
-	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
+		return nil
 	}
 	b.HandleEvent("test_exchange", "test_topic", event, eventHandler)
 
@@ -97,19 +102,23 @@ func TestHandlerRetry(t *testing.T) {
 	bus := createBusForTest()
 
 	proceed := make(chan bool)
-	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		invocation.Reply(reply)
+		return nil
 	}
 
 	attempts := 0
-	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		if attempts == 0 {
+			attempts++
+			return fmt.Errorf("expecting retry on errors")
+		} else if attempts == 1 {
 			attempts++
 			panic("expecting retry on panics")
 		} else {
 			proceed <- true
 		}
-
+		return nil
 	}
 
 	bus.HandleMessage(cmd.Payload, cmdHandler)

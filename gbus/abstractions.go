@@ -57,7 +57,7 @@ type HandlerRegister interface {
 }
 
 //MessageHandler signature for all command handlers
-type MessageHandler func(invocation Invocation, message *BusMessage)
+type MessageHandler func(invocation Invocation, message *BusMessage) error
 
 //Saga is the base interface for all Sagas.
 type Saga interface {
@@ -79,7 +79,7 @@ type Saga interface {
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
 type RequestSagaTimeout interface {
 	TimeoutDuration() time.Duration
-	Timeout(invocation Invocation, message *BusMessage)
+	Timeout(invocation Invocation, message *BusMessage) error
 }
 
 //SagaTimeoutMessage is the timeout message for Saga's

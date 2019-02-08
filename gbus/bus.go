@@ -226,7 +226,10 @@ func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
 				inboundMsg:  message,
 				tx:          tx}
 
-			handler(ctx, message)
+			e := handler(ctx, message)
+			if e != nil {
+				return e
+			}
 		}
 		return nil
 	}

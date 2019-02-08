@@ -18,12 +18,13 @@ func TestSagaStartUps(t *testing.T) {
 	proceed := make(chan bool)
 	sagaIDs := make([]string, 0)
 
-	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		t.Logf("SAGA - %v", message.SagaID)
 		sagaIDs = append(sagaIDs, message.SagaID)
 		if len(sagaIDs) == 3 {
 			proceed <- true
 		}
+		return nil
 	}
 
 	svc1 := createNamedBusForTest(testSvc1)
@@ -73,13 +74,15 @@ func TestSagaToServiceConversation(t *testing.T) {
 	svc1 := createNamedBusForTest(testSvc1)
 	svc2 := createNamedBusForTest(testSvc2)
 
-	reply1Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	reply1Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 		invocation.Reply(gbus.NewBusMessage(Command2{}))
+		return nil
 	}
 
-	reply2Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	reply2Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
+		return nil
 	}
 
 	svc1.HandleMessage(Reply1{}, reply1Handler)
@@ -103,16 +106,18 @@ func TestSagas(t *testing.T) {
 	completed := make(chan bool)
 	var firstSagaCorrelationID, secondSagaCorrelationID string
 
-	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		firstSagaCorrelationID = message.SagaCorrelationID
 
 		invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
+		return nil
 	}
 
-	evtReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	evtReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		secondSagaCorrelationID = message.SagaCorrelationID
 
 		completed <- true
+		return nil
 	}
 
 	svc1 := createNamedBusForTest(testSvc1)
@@ -141,8 +146,9 @@ func TestSagas(t *testing.T) {
 func TestSagaTimeout(t *testing.T) {
 	proceed := make(chan bool)
 	svc1 := createNamedBusForTest(testSvc1)
-	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
+		return nil
 	}
 	svc1.HandleEvent("test_exchange", "some.topic.1", Event1{}, eventHandler)
 	svc1.Start()
@@ -185,26 +191,30 @@ func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleEvent("test_exchange", "some.topic.2", Event2{}, s.HandleEvent1)
 }
 
-func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 	reply := gbus.NewBusMessage(Reply1{})
 	invocation.Reply(reply)
+	return nil
 }
 
-func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command2 received")
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
+	return nil
 }
 
-func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
 	log.Println("event1 received")
+	return nil
 }
 
-func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("event2 received")
+	return nil
 }
 
 type SagaB struct {
@@ -225,16 +235,18 @@ func (s *SagaB) New() gbus.Saga {
 	return &SagaB{}
 }
 
-func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command1 received")
 	reply := gbus.NewBusMessage(Reply1{})
 	invocation.Reply(reply)
+	return nil
 }
 
-func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply2{})
 	invocation.Reply(reply)
 	log.Println("event1 on SagaB received")
+	return nil
 }
 
 func (s *SagaB) IsComplete() bool {
@@ -245,8 +257,9 @@ func (s *SagaB) RequestTimeout() time.Duration {
 	return time.Second * 1
 }
 
-func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
+	return nil
 }
 
 type TimingOutSaga struct {
@@ -262,8 +275,8 @@ func (s *TimingOutSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command2{}, s.SagaStartup)
 }
 
-func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.BusMessage) {
-
+func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	return nil
 }
 
 func (s *TimingOutSaga) IsComplete() bool {

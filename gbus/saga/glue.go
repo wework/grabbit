@@ -86,7 +86,7 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 	return defs
 }
 
-func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 
@@ -112,7 +112,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				log.Printf("saving new saga with sagaID %v", newInstance.ID)
 				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
 					log.Printf("saving new saga failed\nSagaID:%v", newInstance.ID)
-					panic(e)
+					return e
 				}
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout == true {
@@ -124,28 +124,27 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		} else if message.SagaCorrelationID != "" {
 			instance, e := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 			if e != nil {
-				panic(e)
+				return e
 			}
 			if instance == nil {
-				log.Printf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
-				return
+				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
+				return e
 			}
 			instance.invoke(invocation, message)
 			e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 			if e != nil {
-				panic(e)
+				return e
 			}
 		} else if message.Semantics == "cmd" {
-			log.Printf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
-			return
+			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
+			return e
 		} else {
 
 			log.Printf("feteching for:\nSaga type:%v\nMessage:%v", def.sagaType, msgName)
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
-				log.Printf("failed to fecth saga instances for saga type %s\nerror:%v", def.sagaType, e)
-				return
+				return e
 			}
 			log.Printf("fetched %v saga instances for message of type %v", len(instances), msgName)
 			for _, instance := range instances {
@@ -153,11 +152,13 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				instance.invoke(invocation, message)
 				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 				if e != nil {
-					panic(e)
+					return e
 				}
 			}
 		}
 	}
+
+	return nil
 }
 
 func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessage *gbus.BusMessage) error {
