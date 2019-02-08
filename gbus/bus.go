@@ -34,6 +34,7 @@ type DefaultBus struct {
 	Glue                 SagaRegister
 	TxProvider           tx.Provider
 	IsTxnl               bool
+	WorkerNum            uint
 	Serializer           MessageEncoding
 }
 
@@ -117,8 +118,10 @@ func (b *DefaultBus) Start() error {
 	}
 	b.msgs = msgs
 	b.started = true
-	//TODO:Implement worker go routines
-	go b.consumeMessages()
+
+	for workers := uint(0); workers < b.WorkerNum; workers++ {
+		go b.consumeMessages()
+	}
 
 	return nil
 }

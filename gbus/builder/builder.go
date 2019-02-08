@@ -22,6 +22,7 @@ type defaultBuilder struct {
 	txnl             bool
 	txConnStr        string
 	txnlProvider     string
+	workerNum        uint
 	serializer       gbus.MessageEncoding
 }
 
@@ -38,6 +39,11 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
 		Serializer:           builder.serializer}
 
+	if builder.workerNum < 1 {
+		gb.WorkerNum = 1
+	} else {
+		gb.WorkerNum = builder.workerNum
+	}
 	var sagaStore saga.Store
 	if builder.txnl {
 		gb.IsTxnl = true
@@ -75,6 +81,11 @@ func (builder *defaultBuilder) WithOutbox(connStr string) gbus.Builder {
 
 func (builder *defaultBuilder) WithDeadlettering(deadletterExchange string) gbus.Builder {
 	//TODO: Add outbox suppoert to builder
+	return builder
+}
+
+func (builder *defaultBuilder) WorkerNum(workers uint) gbus.Builder {
+	builder.workerNum = workers
 	return builder
 }
 

@@ -103,6 +103,11 @@ type Builder interface {
 	*/
 	Txnl(provider, connStr string) Builder
 	WithSerializer(serializer MessageEncoding) Builder
+	/*
+		 		WorkerNum sets the number of worker go routines consuming messages from the queue
+				The default value if this option is not set is 1
+	*/
+	WorkerNum(workers uint) Builder
 	Build(svcName string) Bus
 }
 
