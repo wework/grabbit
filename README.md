@@ -38,6 +38,8 @@ gb := builder.
 		Bus("connection string to RabbitMQ").
 		Txnl("pg", "connection string to PostgreSQL").
 		Build("name of your service")
+gb.Start()
+defer gb.Shutsown()
 ```
 Register a command handler
 
