@@ -102,6 +102,7 @@ type Builder interface {
 		connStr: connection string in the format of the passed in provider
 	*/
 	Txnl(provider, connStr string) Builder
+	WithSerializer(serializer MessageEncoding) Builder
 	Build(svcName string) Bus
 }
 
