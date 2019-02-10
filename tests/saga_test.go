@@ -290,7 +290,8 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 	return time.Second * 1
 }
 
-func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) {
+func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	s.TimedOut = true
 	invocation.Bus().Publish("test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
+	return nil
 }
