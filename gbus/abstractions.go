@@ -19,12 +19,12 @@ type Messaging interface {
 		Send a command or a command response to a specific service
 		one-to-one semantics
 	*/
-	Send(toService string, command BusMessage) error
+	Send(toService string, command *BusMessage) error
 
 	/*
 		Publish and event, one-to-many semantics
 	*/
-	Publish(exchange, topic string, event BusMessage) error
+	Publish(exchange, topic string, event *BusMessage) error
 }
 
 //BusSwitch starts and shutdowns the bus
@@ -113,14 +113,14 @@ type Builder interface {
 
 //Invocation context for a specific processed message
 type Invocation interface {
-	Reply(message BusMessage)
+	Reply(message *BusMessage)
 	Bus() Messaging
 	Tx() *sql.Tx
 }
 
 //MessageEncoding is the base interface for all message serializers
 type MessageEncoding interface {
-	Encode(message *BusMessage) ([]byte, error)
-	Decode(buffer []byte) (*BusMessage, error)
+	Encode(message interface{}) ([]byte, error)
+	Decode(buffer []byte) (interface{}, error)
 	Register(obj interface{})
 }

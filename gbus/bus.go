@@ -40,8 +40,7 @@ type DefaultBus struct {
 
 var (
 	//TODO: Replace constants with configuration
-	MAX_RETRY_COUNT          uint  = 3
-	DELIVERY_MODE_PERSISTENT uint8 = 2
+	MAX_RETRY_COUNT uint = 3
 )
 
 //Start implements GBus.Start()
@@ -137,21 +136,21 @@ func (b *DefaultBus) Shutdown() {
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
-func (b *DefaultBus) Send(toService string, message BusMessage) error {
+func (b *DefaultBus) Send(toService string, message *BusMessage) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "cmd"
-	return b.sendImpl("cmd", toService, "", "", &message)
+	return b.sendImpl(toService, "", "", message)
 }
 
 //Publish implements GBus.Publish(topic, message)
-func (b *DefaultBus) Publish(exchange, topic string, event BusMessage) error {
+func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	event.Semantics = "evt"
-	return b.sendImpl("evt", "", exchange, topic, &event)
+	message.Semantics = "evt"
+	return b.sendImpl("", exchange, topic, message)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -256,6 +255,8 @@ func (b *DefaultBus) consumeMessages() {
 			return
 		}
 		b.log("GOT MSG")
+		bm := NewFromAMQPHeaders(delivery.Headers)
+
 		msgName := delivery.Headers["x-msg-name"].(string)
 		msgType := delivery.Headers["x-msg-type"].(string)
 		if msgName == "" || msgType == "" {
@@ -264,6 +265,7 @@ func (b *DefaultBus) consumeMessages() {
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
+		bm.PayloadFQN = msgName
 		//TODO:Dedup message
 		b.HandlersLock.Lock()
 		handlers := b.MsgHandlers[msgName]
@@ -273,7 +275,8 @@ func (b *DefaultBus) consumeMessages() {
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
-		tm, decErr := b.Serializer.Decode(delivery.Body)
+		var decErr error
+		bm.Payload, decErr = b.Serializer.Decode(delivery.Body)
 		// reader := bytes.NewReader(delivery.Body)
 		// dec := gob.NewDecoder(reader)
 		// var tm BusMessage
@@ -292,7 +295,8 @@ func (b *DefaultBus) consumeMessages() {
 				b.log("failed to create transaction.\n%v", txErr)
 			}
 		}
-		invkErr := b.invokeHandlers(handlers, tm, &delivery, tx)
+
+		invkErr := b.invokeHandlers(handlers, bm, &delivery, tx)
 		if invkErr == nil {
 			//TODO:retry akc if error
 			ackErr := delivery.Ack(false /*multiple*/)
@@ -334,7 +338,7 @@ func (b *DefaultBus) handleConnErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, message *BusMessage) (er error) {
+func (b *DefaultBus) sendImpl(toService, exchange, topic string, message *BusMessage) (er error) {
 
 	fqn := GetFqn(message.Payload)
 	defer func() {
@@ -344,26 +348,27 @@ func (b *DefaultBus) sendImpl(semantics, toService, exchange, topic string, mess
 		}
 	}()
 
-	buffer, err := b.Serializer.Encode(message)
+	buffer, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
 		b.log("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
 		return err
 	}
 
-	headers := amqp.Table{}
+	headers := message.GetAMQPHeaders()
 	headers["x-msg-name"] = fqn
-	headers["x-msg-type"] = semantics
+	headers["x-msg-type"] = message.Semantics
 	//TODO: Add message TTL
 	msg := amqp.Publishing{
 		Body:         buffer,
-		DeliveryMode: DELIVERY_MODE_PERSISTENT,
+		DeliveryMode: amqp.Persistent,
 		ReplyTo:      b.SvcName,
 		MessageId:    xid.New().String(),
-		Headers:      headers}
+		Headers:      headers,
+	}
 
 	key := ""
 
-	if semantics == "cmd" {
+	if message.Semantics == "cmd" {
 		key = toService
 	} else {
 		key = topic

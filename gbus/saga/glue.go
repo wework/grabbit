@@ -64,7 +64,8 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	if requestsTimeout {
 		timeoutMessage := gbus.SagaTimeoutMessage{}
 		timeoutMsgName := gbus.GetFqn(timeoutMessage)
-		def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
+		_ = def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
+
 		// def.addMsgToHandlerMapping(timeoutMessage, timeoutEtfs.Timeout)
 		imsm.addMsgNameToDef(timeoutMsgName, def)
 
@@ -89,8 +90,7 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
-
-	msgName := gbus.GetFqn(message.Payload)
+	msgName := message.PayloadFQN
 	defs := imsm.msgToDefMap[msgName]
 
 	for _, def := range defs {
@@ -150,7 +150,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			for _, instance := range instances {
 
 				instance.invoke(invocation, message)
-				e := imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
+				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 				if e != nil {
 					return e
 				}
@@ -183,5 +183,6 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string) *Glue {
 
 		msgToDefMap:   make(map[string][]*Def),
 		timeoutManger: TimeoutManager{bus: bus},
-		sagaStore:     sagaStore}
+		sagaStore:     sagaStore,
+	}
 }

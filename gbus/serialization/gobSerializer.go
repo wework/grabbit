@@ -17,30 +17,36 @@ type GobSerializer struct {
 
 //NewGobSerializer create a new instance of  GobSerializer
 func NewGobSerializer() gbus.MessageEncoding {
-	return &GobSerializer{
+	g := &GobSerializer{
 		lock:              &sync.Mutex{},
-		registeredSchemas: make(map[string]bool)}
+		registeredSchemas: make(map[string]bool),
+	}
+	g.Register(&gobMessage{})
+	return g
 }
 
 //Encode implements MessageEncoding.Encode
-func (gs *GobSerializer) Encode(message *gbus.BusMessage) ([]byte, error) {
+func (gs *GobSerializer) Encode(message interface{}) ([]byte, error) {
+	gs.Register(message)
 
-	gs.Register(message.Payload)
+	gmsg := &gobMessage{
+		Payload: message,
+	}
 
 	var buf bytes.Buffer
 	//TODO: Switch from gob to Avro (https://github.com/linkedin/goavro)
 	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(message)
+	err := enc.Encode(gmsg)
 	return buf.Bytes(), err
 }
 
 //Decode implements MessageEncoding.Decode
-func (*GobSerializer) Decode(data []byte) (*gbus.BusMessage, error) {
+func (*GobSerializer) Decode(data []byte) (interface{}, error) {
 	reader := bytes.NewReader(data)
 	dec := gob.NewDecoder(reader)
-	var tm gbus.BusMessage
+	var tm gobMessage
 	decErr := dec.Decode(&tm)
-	return &tm, decErr
+	return tm.Payload, decErr
 }
 
 //Register implements MessageEncoding.Register
@@ -53,4 +59,8 @@ func (gs *GobSerializer) Register(obj interface{}) {
 		gob.Register(obj)
 		gs.registeredSchemas[fqn] = true
 	}
+}
+
+type gobMessage struct {
+	Payload interface{}
 }

@@ -25,9 +25,9 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage) {
 	message.SagaID = si.sagaID
 }
 
-func (si *sagaInvocation) Reply(message gbus.BusMessage) {
+func (si *sagaInvocation) Reply(message *gbus.BusMessage) {
 
-	si.setCorrelationIDs(&message)
+	si.setCorrelationIDs(message)
 	si.decoratedInvocation.Reply(message)
 }
 
@@ -39,12 +39,12 @@ func (si *sagaInvocation) Tx() *sql.Tx {
 	return si.decoratedInvocation.Tx()
 }
 
-func (si *sagaInvocation) Send(toService string, command gbus.BusMessage) error {
-	si.setCorrelationIDs(&command)
+func (si *sagaInvocation) Send(toService string, command *gbus.BusMessage) error {
+	si.setCorrelationIDs(command)
 	return si.decoratedBus.Send(toService, command)
 }
 
-func (si *sagaInvocation) Publish(exchange, topic string, event gbus.BusMessage) error {
-	si.setCorrelationIDs(&event)
+func (si *sagaInvocation) Publish(exchange, topic string, event *gbus.BusMessage) error {
+	si.setCorrelationIDs(event)
 	return si.decoratedBus.Publish(exchange, topic, event)
 }

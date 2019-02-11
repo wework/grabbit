@@ -16,7 +16,6 @@ services:
       NAME: "rabbitmq1"
   db:
     image: postgres
-    restart: always
     environment:
       POSTGRES_PASSWORD: rhinof
       POSTGRES_USER: rhinof
@@ -25,6 +24,5 @@ services:
 
   adminer:
     image: adminer
-    restart: always
     ports:
       - 8080:8080
