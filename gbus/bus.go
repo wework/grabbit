@@ -36,6 +36,7 @@ type DefaultBus struct {
 	IsTxnl               bool
 	WorkerNum            uint
 	Serializer           MessageEncoding
+	DLX                  string
 }
 
 var (
@@ -63,12 +64,16 @@ func (b *DefaultBus) Start() error {
 
 	//declare queue
 	//TODO: Add dead-lettering
+	args := amqp.Table{}
+	if b.DLX != "" {
+		args["x-dead-letter-exchange"] = b.DLX
+	}
 	q, e := b.amqpChannel.QueueDeclare(b.SvcName,
 		true,  /*durable*/
 		false, /*autoDelete*/
 		false, /*exclusive*/
 		false, /*noWait*/
-		nil /*args*/)
+		args /*args*/)
 
 	if e != nil {
 		return e

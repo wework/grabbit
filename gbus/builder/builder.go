@@ -24,6 +24,7 @@ type defaultBuilder struct {
 	txnlProvider     string
 	workerNum        uint
 	serializer       gbus.MessageEncoding
+	dlx              string
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -37,7 +38,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		HandlersLock:         &sync.Mutex{},
 		IsTxnl:               builder.txnl,
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
-		Serializer:           builder.serializer}
+		Serializer:           builder.serializer,
+		DLX:                  builder.dlx}
 
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
@@ -80,6 +82,8 @@ func (builder *defaultBuilder) WithOutbox(connStr string) gbus.Builder {
 }
 
 func (builder *defaultBuilder) WithDeadlettering(deadletterExchange string) gbus.Builder {
+
+	builder.dlx = deadletterExchange
 	//TODO: Add outbox suppoert to builder
 	return builder
 }
