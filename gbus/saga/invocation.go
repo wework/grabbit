@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -12,6 +13,7 @@ type sagaInvocation struct {
 	decoratedInvocation gbus.Invocation
 	inboundMsg          *gbus.BusMessage
 	sagaID              string
+	ctx                 context.Context
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage) {
@@ -26,10 +28,10 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage) {
 	message.SagaID = si.sagaID
 }
 
-func (si *sagaInvocation) Reply(message *gbus.BusMessage) {
+func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) {
 
 	si.setCorrelationIDs(message)
-	si.decoratedInvocation.Reply(message)
+	si.decoratedInvocation.Reply(ctx, message)
 }
 
 func (si *sagaInvocation) Bus() gbus.Messaging {
@@ -40,16 +42,20 @@ func (si *sagaInvocation) Tx() *sql.Tx {
 	return si.decoratedInvocation.Tx()
 }
 
-func (si *sagaInvocation) Send(toService string, command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
+func (si *sagaInvocation) Ctx() context.Context {
+	return si.ctx
+}
+
+func (si *sagaInvocation) Send(ctx context.Context, toService string, command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(command)
-	return si.decoratedBus.Send(toService, command, policies...)
+	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
-func (si *sagaInvocation) Publish(exchange, topic string, event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
+func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string, event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(event)
-	return si.decoratedBus.Publish(exchange, topic, event, policies...)
+	return si.decoratedBus.Publish(ctx, exchange, topic, event, policies...)
 }
 
-func (si *sagaInvocation) RPC(service string, request, reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
-	return si.decoratedBus.RPC(service, request, reply, timeout)
+func (si *sagaInvocation) RPC(ctx context.Context, service string, request, reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
+	return si.decoratedBus.RPC(ctx, service, request, reply, timeout)
 }

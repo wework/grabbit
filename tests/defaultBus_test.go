@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"context"
 	"fmt"
+	"github.com/opentracing/opentracing-go"
 	"log"
 	"testing"
 	"time"
@@ -36,7 +38,7 @@ func TestSendCommand(t *testing.T) {
 	}
 	defer b.Shutdown()
 
-	err = b.Send(testSvc1, gbus.NewBusMessage(cmd))
+	err = b.Send(noopTraceContext(), testSvc1, gbus.NewBusMessage(cmd))
 	if err != nil {
 		t.Errorf("could not send message")
 	}
@@ -53,7 +55,7 @@ func TestReply(t *testing.T) {
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-		invocation.Reply(gbus.NewBusMessage(reply))
+		invocation.Reply(noopTraceContext(), gbus.NewBusMessage(reply))
 		return nil
 
 	}
@@ -78,7 +80,7 @@ func TestReply(t *testing.T) {
 	b.Start()
 	defer b.Shutdown()
 
-	b.Send(testSvc1, cmdBusMsg)
+	b.Send(noopTraceContext(), testSvc1, cmdBusMsg)
 	<-proceed
 }
 
@@ -95,7 +97,7 @@ func TestPubSub(t *testing.T) {
 
 	b.Start()
 	defer b.Shutdown()
-	err := b.Publish("test_exchange", "test_topic", gbus.NewBusMessage(event))
+	err := b.Publish(noopTraceContext(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +116,7 @@ func TestHandlerRetry(t *testing.T) {
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-		invocation.Reply(reply)
+		invocation.Reply(noopTraceContext(), reply)
 		return nil
 	}
 
@@ -138,7 +140,7 @@ func TestHandlerRetry(t *testing.T) {
 	bus.Start()
 	defer bus.Shutdown()
 
-	bus.Send(testSvc1, cmd)
+	bus.Send(noopTraceContext(), testSvc1, cmd)
 	<-proceed
 
 }
@@ -151,7 +153,7 @@ func TestRPC(t *testing.T) {
 
 	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 		log.Println("on the moo !!!!")
-		invocation.Reply(reply)
+		invocation.Reply(noopTraceContext(), reply)
 		return nil
 	}
 
@@ -163,10 +165,17 @@ func TestRPC(t *testing.T) {
 	svc2.Start()
 	defer svc2.Shutdown()
 
-	reply, _ = svc2.RPC(testSvc1, cmd, reply, 5*time.Second)
+	reply, _ = svc2.RPC(noopTraceContext(), testSvc1, cmd, reply, 5*time.Second)
 
 	if reply == nil {
 		t.Fail()
 	}
 
+}
+
+func noopTraceContext() context.Context {
+	tracer := opentracing.NoopTracer{}
+	span := tracer.StartSpan("test")
+	ctx := opentracing.ContextWithSpan(context.Background(), span)
+	return ctx
 }

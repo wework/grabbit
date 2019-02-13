@@ -1,6 +1,7 @@
 package gbus
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -25,19 +26,19 @@ type Messaging interface {
 		Send a command or a command response to a specific service
 		one-to-one semantics
 	*/
-	Send(toService string, command *BusMessage, policies ...MessagePolicy) error
+	Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
 
 	/*
 		Publish and event, one-to-many semantics
 	*/
-	Publish(exchange, topic string, event *BusMessage, policies ...MessagePolicy) error
+	Publish(ctx context.Context, exchange, topic string, event *BusMessage, policies ...MessagePolicy) error
 
 	/*
 		RPC calls the service passing him the request BusMessage and blocks until a reply is
 		recived or timeout experied.
 
 	*/
-	RPC(service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error)
+	RPC(ctx context.Context, service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error)
 }
 
 //MessagePolicy defines a user policy for out going amqp messages User policies can control message ttl, durability etc..
@@ -141,9 +142,10 @@ type Builder interface {
 
 //Invocation context for a specific processed message
 type Invocation interface {
-	Reply(message *BusMessage)
+	Reply(ctx context.Context, message *BusMessage)
 	Bus() Messaging
 	Tx() *sql.Tx
+	Ctx() context.Context
 }
 
 //MessageEncoding is the base interface for all message serializers

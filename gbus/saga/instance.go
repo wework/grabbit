@@ -30,10 +30,12 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 
 	valueOfMessage := reflect.ValueOf(message)
 	sginv := &sagaInvocation{
-		invocation.Bus(),
-		invocation,
-		message,
-		si.ID}
+		decoratedBus:        invocation.Bus(),
+		decoratedInvocation: invocation,
+		inboundMsg:          message,
+		sagaID:              si.ID,
+		ctx:                 invocation.Ctx(),
+	}
 	reflectedVal := reflect.ValueOf(si.UnderlyingInstance)
 
 	params := make([]reflect.Value, 0)

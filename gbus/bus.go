@@ -1,9 +1,12 @@
 package gbus
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/opentracing-contrib/go-amqp/amqptracer"
+	"github.com/opentracing/opentracing-go"
 	"log"
 	"runtime/debug"
 	"sync"
@@ -205,16 +208,16 @@ func (b *DefaultBus) Shutdown() {
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
-func (b *DefaultBus) Send(toService string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "cmd"
-	return b.sendImpl(toService, b.SvcName, "", "", message, policies...)
+	return b.sendImpl(ctx, toService, b.SvcName, "", "", message, policies...)
 }
 
 //RPC implements  GBus.RPC
-func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error) {
+func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error) {
 
 	if !b.started {
 		return nil, errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
@@ -236,7 +239,7 @@ func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout tim
 	rpc := rpcPolicy{
 		rpcID: rpcID}
 
-	b.sendImpl(service, b.rpcQueue.Name, "", "", request, rpc)
+	b.sendImpl(ctx, service, b.rpcQueue.Name, "", "", request, rpc)
 
 	//wait for reply or timeout
 	select {
@@ -252,16 +255,15 @@ func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout tim
 		b.RPCLock.Unlock()
 		return nil, errors.New("rpc call timed out")
 	}
-
 }
 
 //Publish implements GBus.Publish(topic, message)
-func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "evt"
-	return b.sendImpl("", b.SvcName, exchange, topic, message, policies...)
+	return b.sendImpl(ctx, "", b.SvcName, exchange, topic, message, policies...)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -327,7 +329,7 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 	return nil, lastErr
 }
 
-func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
+func (b *DefaultBus) invokeHandlers(sctx context.Context, handlers []MessageHandler,
 	message *BusMessage,
 	delivery *amqp.Delivery,
 	tx *sql.Tx) (err error) {
@@ -346,7 +348,9 @@ func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
 				invocingSvc: delivery.ReplyTo,
 				bus:         b,
 				inboundMsg:  message,
-				tx:          tx}
+				tx:          tx,
+				ctx:         sctx,
+			}
 
 			e := handler(ctx, message)
 			if e != nil {
@@ -382,119 +386,126 @@ func (b *DefaultBus) consumeMessages() {
 			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
 			and delivery is a zero value so in order not to panic down the road we return if bus is shutdown
 		*/
-		if !b.started {
+		b.processMessage(delivery, isRPCreply)
+
+	}
+}
+
+func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
+	if !b.started {
+		return
+	}
+	b.log("GOT MSG")
+	spCtx, _ := amqptracer.Extract(delivery.Headers)
+	sp := opentracing.StartSpan(
+		"processMessage",
+		opentracing.FollowsFrom(spCtx),
+	)
+	defer sp.Finish()
+
+	// Update the context with the span for the subsequent reference.
+	bm := NewFromAMQPHeaders(delivery.Headers)
+
+	//msgName := delivery.Headers["x-msg-name"].(string)
+	msgType := delivery.Headers["x-msg-type"].(string)
+	if bm.PayloadFQN == "" || msgType == "" {
+		//TODO: Log poision pill message
+		b.log("message received but no headers found...rejecting message")
+		delivery.Reject(false /*requeue*/)
+		return
+	}
+
+	//TODO:Dedup message
+	handlers := make([]MessageHandler, 0)
+	if isRPCreply {
+		rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
+		if !rpcHeaderFound {
+			b.log("rpc message received but no rpc header found...rejecting message")
+			delivery.Reject(false /*requeue*/)
 			return
 		}
-		b.log("GOT MSG")
-		bm := NewFromAMQPHeaders(delivery.Headers)
+		b.RPCLock.Lock()
+		rpcHandler := b.RPCHandlers[rpcID]
+		b.RPCLock.Unlock()
 
-		// msgName := delivery.Headers["x-msg-name"].(string)
-		msgType := delivery.Headers["x-msg-type"].(string)
-		if bm.PayloadFQN == "" || msgType == "" {
-			//TODO: Log poision pill message
-			b.log("message received but no headers found...rejecting message")
+		if rpcHandler == nil {
+			b.log("rpc message received but no rpc header found...rejecting message")
 			delivery.Reject(false /*requeue*/)
-			continue
+			return
 		}
-		//TODO:Dedup message
 
-		handlers := make([]MessageHandler, 0)
-		if isRPCreply {
+		handlers = append(handlers, rpcHandler)
 
-			rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
-			if !rpcHeaderFound {
-				b.log("rpc message received but no rpc header found...rejecting message")
-				delivery.Reject(false /*requeue*/)
-				continue
+	} else {
+		b.HandlersLock.Lock()
+		handlers = b.MsgHandlers[bm.PayloadFQN]
+		b.HandlersLock.Unlock()
+	}
+	if len(handlers) == 0 {
+		b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, msgType)
+		delivery.Reject(false /*requeue*/)
+		return
+	}
+	var decErr error
+	bm.Payload, decErr = b.Serializer.Decode(delivery.Body)
+
+	if decErr != nil {
+		b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
+		delivery.Reject(false /*requeue*/)
+		return
+	}
+
+	var tx *sql.Tx
+	var txErr error
+	if b.IsTxnl {
+		//TODO:Add retries, and reject message with requeue=true
+		tx, txErr = b.TxProvider.New()
+		if txErr != nil {
+			b.log("failed to create transaction.\n%v", txErr)
+			return
+		}
+	}
+	var ackErr, commitErr, rollbackErr, rejectErr error
+	invkErr := b.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
+	if invkErr == nil {
+		ack := func() error { return delivery.Ack(false /*multiple*/) }
+		ackErr = b.safeWithRetries(ack)
+		if b.IsTxnl && ackErr == nil {
+			b.log("bus commiting transaction")
+			commitErr = b.safeWithRetries(tx.Commit)
+			if commitErr != nil {
+				b.log("failed to commit transaction\nerror:%v", commitErr)
 			}
-			b.RPCLock.Lock()
-			rpcHandler := b.RPCHandlers[rpcID]
-			b.RPCLock.Unlock()
-
-			if rpcHandler == nil {
-				b.log("rpc message received but no rpc header found...rejecting message")
-				delivery.Reject(false /*requeue*/)
-				continue
-			}
-
-			handlers = append(handlers, rpcHandler)
-
-		} else {
-			b.HandlersLock.Lock()
-			handlers = b.MsgHandlers[bm.PayloadFQN]
-			b.HandlersLock.Unlock()
-		}
-
-		if len(handlers) == 0 {
-			b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, msgType)
-			delivery.Reject(false /*requeue*/)
-			continue
-		}
-		var decErr error
-		bm.Payload, decErr = b.Serializer.Decode(delivery.Body)
-
-		if decErr != nil {
-			b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
-			delivery.Reject(false /*requeue*/)
-			continue
-		}
-
-		var tx *sql.Tx
-		var txErr error
-		if b.IsTxnl {
-			//TODO:Add retries, and reject message with requeue=true
-			tx, txErr = b.TxProvider.New()
-			if txErr != nil {
-				b.log("failed to create transaction.\n%v", txErr)
-				continue
+		} else if b.IsTxnl && ackErr != nil {
+			b.log("bus rollingback transaction")
+			//TODO:retry on error
+			rollbackErr = b.safeWithRetries(tx.Rollback)
+			if rollbackErr != nil {
+				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
 			}
 		}
-		var ackErr, commitErr, rollbackErr, rejectErr error
-		invkErr := b.invokeHandlers(handlers, bm, &delivery, tx)
-
-		if invkErr == nil {
-
-			ack := func() error { return delivery.Ack(false /*multiple*/) }
-			ackErr = b.safeWithRetries(ack)
-			if b.IsTxnl && ackErr == nil {
-				b.log("bus commiting transaction")
-
-				commitErr = b.safeWithRetries(tx.Commit)
-				if commitErr != nil {
-					b.log("failed to commit transaction\nerror:%v", commitErr)
-				}
-
-			} else if b.IsTxnl && ackErr != nil {
-				b.log("bus rollingback transaction")
-				//TODO:retry on error
-				rollbackErr = b.safeWithRetries(tx.Rollback)
-				if rollbackErr != nil {
-					b.log("failed to rollback transaction\nerror:%v", rollbackErr)
-				}
-			}
-		} else {
-			logMsg := `Failed to consume message due to failure of one or more handlers.\n
+	} else {
+		logMsg := `Failed to consume message due to failure of one or more handlers.\n
 				Message rejected as poison.
 				Message name: %v\n
 				Message type: %v\n
 				Error:\n%v`
-			b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
-			if b.IsTxnl {
-				rollbackErr = b.safeWithRetries(tx.Rollback)
+		b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
+		if b.IsTxnl {
+			rollbackErr = b.safeWithRetries(tx.Rollback)
 
-				if rollbackErr != nil {
-					b.log("failed to rollback transaction\nerror:%v", rollbackErr)
-				}
+			if rollbackErr != nil {
+				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
 			}
-			// //add the error to the delivery so if it will be availble in the deadletter
-			// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
-			// b.Publish(b.DLX, "", message)
-			reject := func() error { return delivery.Reject(false /*requeue*/) }
-			rejectErr = b.safeWithRetries(reject)
-			if rejectErr != nil {
+		}
+		// //add the error to the delivery so if it will be availble in the deadletter
+		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
+		// b.Publish(b.DLX, "", message)
+		reject := func() error { return delivery.Reject(false /*requeue*/) }
+		rejectErr = b.safeWithRetries(reject)
+		if rejectErr != nil {
 
-				b.log("failed to reject message.\nerror:%v", rejectErr)
-			}
+			b.log("failed to reject message.\nerror:%v", rejectErr)
 		}
 	}
 }
@@ -529,7 +540,7 @@ func (b *DefaultBus) handleConnErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
+func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -553,6 +564,12 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 		CorrelationId:   message.CorrelationID,
 		ContentEncoding: b.Serializer.EncoderID(),
 		Headers:         headers,
+	}
+	sp := opentracing.SpanFromContext(ctx)
+	defer sp.Finish()
+	// Inject the span context into the AMQP header.
+	if err := amqptracer.Inject(sp, msg.Headers); err != nil {
+		return err
 	}
 
 	for _, defaultPolicy := range b.DefaultPolicies {
