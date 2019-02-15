@@ -91,6 +91,25 @@ Publish an event
 gb.Publish("name of exchange", "name of topic", gbus.NewBusMessage(SomeEvent))
 ```
 
+RPC style call
+```Go
+type SomeRPCRequest struct{}
+type SomeRPCReply struct{}
+
+request := gbus.NewBusMessage(SomeRPCRequest{})
+reply := gbus.NewBusMessage(SomeRPCReply{})
+timeOut := 2 * time.Second
+
+reply, e := gb.RPC("name of service you are sending the request to", cmd, reply, timeOut)
+
+if e != nil{
+	fmt.Printf("rpc call failed with error %v", e)
+} else{
+	fmt.Printf("rpc call returned with reply %v", reply)
+}
+
+```
+
 ## Testing
 
 1) make sure to first: `docker-compose up -d`

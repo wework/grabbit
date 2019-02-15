@@ -2,6 +2,7 @@ package saga
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/rhinof/grabbit/gbus"
 )
@@ -47,4 +48,8 @@ func (si *sagaInvocation) Send(toService string, command *gbus.BusMessage) error
 func (si *sagaInvocation) Publish(exchange, topic string, event *gbus.BusMessage) error {
 	si.setCorrelationIDs(event)
 	return si.decoratedBus.Publish(exchange, topic, event)
+}
+
+func (si *sagaInvocation) RPC(service string, request, reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
+	return si.decoratedBus.RPC(service, request, reply, timeout)
 }

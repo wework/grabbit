@@ -15,6 +15,7 @@ func (dfi *defaultInvocationContext) Reply(replyMessage *BusMessage) {
 	if dfi.inboundMsg != nil {
 		replyMessage.CorrelationID = dfi.inboundMsg.ID
 		replyMessage.SagaCorrelationID = dfi.inboundMsg.SagaID
+		replyMessage.RPCID = dfi.inboundMsg.RPCID
 	}
 	dfi.bus.Send(dfi.invocingSvc, replyMessage)
 }

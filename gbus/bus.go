@@ -12,21 +12,27 @@ import (
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
+
 	"github.com/rhinof/grabbit/gbus/tx"
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
 
+//DefaultBus implements the Bus interface
 type DefaultBus struct {
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
 	amqpChannel          *amqp.Channel
-	amqpQueue            amqp.Queue
+	serviceQueue         amqp.Queue
+	rpcQueue             amqp.Queue
 	SvcName              string
 	ConnErrors           chan *amqp.Error
 	MsgHandlers          map[string][]MessageHandler
+	RPCHandlers          map[string]MessageHandler
 	msgs                 <-chan amqp.Delivery
+	rpcMsgs              <-chan amqp.Delivery
 	HandlersLock         *sync.Mutex
+	RPCLock              *sync.Mutex
 	RegisteredSchemas    map[string]bool
 	DelayedSubscriptions [][]string
 	PurgeOnStartup       bool
@@ -42,28 +48,43 @@ type DefaultBus struct {
 var (
 	//TODO: Replace constants with configuration
 	MAX_RETRY_COUNT uint = 3
+	rpcHeaderName        = "x-grabbit-rpc-id"
 )
 
-//Start implements GBus.Start()
-func (b *DefaultBus) Start() error {
+func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
+	/*
+		the RPC queue is a queue per service instance (as opposed to the service queue which
+		is shared between service instances to allow for round-robin load balancing) in order to
+		support synchronous RPC style calls.amqpit is not durable and is auto-deleted once the service
+		instance process terminates
+	*/
+	uid := xid.New().String()
+	qName := b.SvcName + "_rpc_" + uid
+	q, e := b.amqpChannel.QueueDeclare(qName,
+		false, /*durable*/
+		true,  /*autoDelete*/
+		false, /*exclusive*/
+		false, /*noWait*/
+		nil /*args*/)
+	b.rpcQueue = q
+	return q, e
+}
 
-	//create connection
-	conn, e := b.connect(int(MAX_RETRY_COUNT))
+func (b *DefaultBus) createMessagesChannel(q amqp.Queue, consumerTag string) (<-chan amqp.Delivery, error) {
+	msgs, e := b.amqpChannel.Consume(q.Name, /*queue*/
+		consumerTag, /*consumer*/
+		false,       /*autoAck*/
+		false,       /*exclusive*/
+		false,       /*noLocal*/
+		false,       /*noWait*/
+		nil /*args* amqp.Table*/)
 	if e != nil {
-		return e
+		return nil, e
 	}
-	conn.NotifyClose(b.ConnErrors)
-	b.amqpConn = conn
+	return msgs, nil
+}
 
-	//create channel
-	channel, e := conn.Channel()
-	if e != nil {
-		return e
-	}
-	b.amqpChannel = channel
-
-	//declare queue
-	//TODO: Add dead-lettering
+func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	args := amqp.Table{}
 	if b.DLX != "" {
 		args["x-dead-letter-exchange"] = b.DLX
@@ -74,24 +95,15 @@ func (b *DefaultBus) Start() error {
 		false, /*exclusive*/
 		false, /*noWait*/
 		args /*args*/)
+	b.serviceQueue = q
+	return q, e
+}
 
-	if e != nil {
-		return e
-	}
-	if b.PurgeOnStartup {
-		msgsPurged, purgeError := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
-		if purgeError != nil {
-			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, e)
-			return e
-		}
-	}
-	b.amqpQueue = q
-
-	//bind queue
+func (b *DefaultBus) bindServiceQueue() {
 	for _, subscription := range b.DelayedSubscriptions {
 		topic := subscription[0]
 		exchange := subscription[1]
-		e = b.amqpChannel.ExchangeDeclare(exchange, /*name*/
+		e := b.amqpChannel.ExchangeDeclare(exchange, /*name*/
 			"topic", /*kind*/
 			true,    /*durable*/
 			false,   /*autoDelete*/
@@ -107,22 +119,72 @@ func (b *DefaultBus) Start() error {
 			}
 		}
 	}
+}
 
-	//consume queue
-	msgs, e := b.amqpChannel.Consume(b.amqpQueue.Name, /*queue*/
-		b.SvcName, /*consumer*/
-		false,     /*autoAck*/
-		false,     /*exclusive*/
-		false,     /*noLocal*/
-		false,     /*noWait*/
-		nil /*args* amqp.Table*/)
-
+func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) error {
+	channel, e := conn.Channel()
 	if e != nil {
 		return e
 	}
-	b.msgs = msgs
-	b.started = true
+	b.amqpChannel = channel
+	return nil
+}
 
+func (b *DefaultBus) purgeQueueIfNeeded(q amqp.Queue) error {
+	if b.PurgeOnStartup {
+		msgsPurged, purgeError := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
+		if purgeError != nil {
+			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, purgeError)
+			return purgeError
+		}
+	}
+	return nil
+}
+
+//Start implements GBus.Start()
+func (b *DefaultBus) Start() error {
+	//create connection
+	conn, e := b.connect(int(MAX_RETRY_COUNT))
+	if e != nil {
+		return e
+	}
+	conn.NotifyClose(b.ConnErrors)
+	b.amqpConn = conn
+	//create channel
+	e = b.createAMQPChannel(conn)
+	if e != nil {
+		return e
+	}
+	//declare queue
+	var q amqp.Queue
+	if q, e = b.createServiceQueue(); e != nil {
+		return e
+	}
+	e = b.purgeQueueIfNeeded(q)
+	if e != nil {
+		return e
+	}
+	//bind queue
+	b.bindServiceQueue()
+	//consume queue
+	b.msgs, e = b.createMessagesChannel(q, b.SvcName)
+	if e != nil {
+		return e
+	}
+
+	//declare rpc queue
+	var rpcQ amqp.Queue
+	if rpcQ, e = b.createRPCQueue(); e != nil {
+		return e
+	}
+
+	b.rpcMsgs, e = b.createMessagesChannel(rpcQ, b.SvcName+"_rpc")
+	if e != nil {
+		return e
+	}
+
+	b.started = true
+	//start consuming messags from service queue
 	for workers := uint(0); workers < b.WorkerNum; workers++ {
 		go b.consumeMessages()
 	}
@@ -146,7 +208,49 @@ func (b *DefaultBus) Send(toService string, message *BusMessage) error {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "cmd"
-	return b.sendImpl(toService, "", "", message)
+	return b.sendImpl(toService, b.SvcName, "", "", message)
+}
+
+//RPC implements  GBus.RPC
+func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error) {
+
+	if !b.started {
+		return nil, errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+	}
+
+	b.RPCLock.Lock()
+	rpcID := xid.New().String()
+	request.RPCID = rpcID
+	replyChan := make(chan *BusMessage)
+	handler := func(invocation Invocation, message *BusMessage) error {
+		replyChan <- message
+		return nil
+	}
+
+	b.RPCHandlers[rpcID] = handler
+	//we do not defer this as we do not want b.RPCHandlers to be locked until a reply returns
+	b.RPCLock.Unlock()
+	request.Semantics = "cmd"
+	kv := keyVal{
+		key: rpcHeaderName,
+		val: rpcID}
+	b.sendImpl(service, b.rpcQueue.Name, "", "", request, kv)
+
+	//wait for reply or timeout
+	select {
+	case reply := <-replyChan:
+
+		b.RPCLock.Lock()
+		delete(b.RPCHandlers, rpcID)
+		b.RPCLock.Unlock()
+		return reply, nil
+	case <-time.After(timeout):
+		b.RPCLock.Lock()
+		delete(b.RPCHandlers, rpcID)
+		b.RPCLock.Unlock()
+		return nil, errors.New("rpc call timed out")
+	}
+
 }
 
 //Publish implements GBus.Publish(topic, message)
@@ -155,7 +259,7 @@ func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage) error 
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "evt"
-	return b.sendImpl("", exchange, topic, message)
+	return b.sendImpl("", b.SvcName, exchange, topic, message)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -166,6 +270,15 @@ func (b *DefaultBus) HandleMessage(message interface{}, handler MessageHandler) 
 
 //HandleEvent implements GBus.HandleEvent
 func (b *DefaultBus) HandleEvent(exchange, topic string, event interface{}, handler MessageHandler) error {
+
+	/*
+	 TODO: Need to remove the event instance from the signature. currently, it is used to map
+	 an incoming message to a given handler according to the message type.
+	 This is not needed when handling events as we can resolve handlers that need to be invoked
+	 by the subscription topic that the message was published to (we can get that out of the amqp headers)
+	 In addition, creating a mapping between messages and handlers according to message type prevents us
+	 from easily creating polymorphic events handlers or "catch all" handlers that are needed for dead-lettering scenarios
+	*/
 
 	/*
 		Since it is most likely that the registration for handling an event will be called
@@ -249,8 +362,19 @@ func (b *DefaultBus) invokeHandlers(handlers []MessageHandler,
 
 func (b *DefaultBus) consumeMessages() {
 	//TODO:Handle panics due to tx errors so the consumption of messages will continue
+
 	for {
-		delivery := <-b.msgs
+		var isRPCreply bool
+		var delivery, serviceDelivery, rpcDelivery amqp.Delivery
+		select {
+		case serviceDelivery = <-b.msgs:
+			delivery = serviceDelivery
+			isRPCreply = false
+		case rpcDelivery = <-b.rpcMsgs:
+			delivery = rpcDelivery
+			isRPCreply = true
+		}
+
 		//	b.log("consumed message with deliver tag %v\n", delivery.ConsumerTag)
 		/*
 			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
@@ -262,29 +386,52 @@ func (b *DefaultBus) consumeMessages() {
 		b.log("GOT MSG")
 		bm := NewFromAMQPHeaders(delivery.Headers)
 
-		msgName := delivery.Headers["x-msg-name"].(string)
+		// msgName := delivery.Headers["x-msg-name"].(string)
 		msgType := delivery.Headers["x-msg-type"].(string)
-		if msgName == "" || msgType == "" {
+		if bm.PayloadFQN == "" || msgType == "" {
 			//TODO: Log poision pill message
 			b.log("message received but no headers found...rejecting message")
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
-		bm.PayloadFQN = msgName
 		//TODO:Dedup message
-		b.HandlersLock.Lock()
-		handlers := b.MsgHandlers[msgName]
-		b.HandlersLock.Unlock()
+
+		handlers := make([]MessageHandler, 0)
+		if isRPCreply {
+
+			rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
+			if !rpcHeaderFound {
+				b.log("rpc message received but no rpc header found...rejecting message")
+				delivery.Reject(false /*requeue*/)
+				continue
+			}
+			b.RPCLock.Lock()
+			rpcHandler := b.RPCHandlers[rpcID]
+			b.RPCLock.Unlock()
+
+			if rpcHandler == nil {
+				b.log("rpc message received but no rpc header found...rejecting message")
+				delivery.Reject(false /*requeue*/)
+				continue
+			}
+
+			handlers = append(handlers, rpcHandler)
+			log.Printf("KKKKOOONGGG: %v", len(handlers))
+
+		} else {
+			b.HandlersLock.Lock()
+			handlers = b.MsgHandlers[bm.PayloadFQN]
+			b.HandlersLock.Unlock()
+		}
+
 		if len(handlers) == 0 {
-			b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", msgName, msgType)
+			b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, msgType)
 			delivery.Reject(false /*requeue*/)
 			continue
 		}
 		var decErr error
 		bm.Payload, decErr = b.Serializer.Decode(delivery.Body)
-		// reader := bytes.NewReader(delivery.Body)
-		// dec := gob.NewDecoder(reader)
-		// var tm BusMessage
+
 		if decErr != nil {
 			b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
 			delivery.Reject(false /*requeue*/)
@@ -318,7 +465,7 @@ func (b *DefaultBus) consumeMessages() {
 				Message name: %v\n
 				Message type: %v\n
 				Error:\n%v`
-			b.log(logMsg, msgName, msgType, invkErr)
+			b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
 			if b.IsTxnl {
 				tx.Rollback()
 			}
@@ -343,7 +490,7 @@ func (b *DefaultBus) handleConnErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(toService, exchange, topic string, message *BusMessage) (er error) {
+func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, message *BusMessage, customHeaders ...keyVal) (er error) {
 
 	fqn := GetFqn(message.Payload)
 	defer func() {
@@ -362,11 +509,16 @@ func (b *DefaultBus) sendImpl(toService, exchange, topic string, message *BusMes
 	headers := message.GetAMQPHeaders()
 	headers["x-msg-name"] = fqn
 	headers["x-msg-type"] = message.Semantics
+
+	for _, keyVal := range customHeaders {
+		headers[keyVal.key] = keyVal.val
+	}
+	log.Printf("%v", headers)
 	//TODO: Add message TTL
 	msg := amqp.Publishing{
 		Body:         buffer,
 		DeliveryMode: amqp.Persistent,
-		ReplyTo:      b.SvcName,
+		ReplyTo:      replyTo,
 		MessageId:    xid.New().String(),
 		Headers:      headers,
 	}
@@ -410,5 +562,10 @@ func (b *DefaultBus) registerHandlerImpl(msg interface{}, handler MessageHandler
 }
 
 func (b *DefaultBus) bindQueue(topic, exchange string) error {
-	return b.amqpChannel.QueueBind(b.amqpQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
+	return b.amqpChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
+}
+
+type keyVal struct {
+	key string
+	val string
 }

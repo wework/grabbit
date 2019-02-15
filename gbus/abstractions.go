@@ -25,6 +25,13 @@ type Messaging interface {
 		Publish and event, one-to-many semantics
 	*/
 	Publish(exchange, topic string, event *BusMessage) error
+
+	/*
+		RPC calls the service passing him the request BusMessage and blocks until a reply is
+		recived or timeout experied.
+
+	*/
+	RPC(service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error)
 }
 
 //BusSwitch starts and shutdowns the bus

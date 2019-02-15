@@ -2,7 +2,9 @@ package tests
 
 import (
 	"fmt"
+	"log"
 	"testing"
+	"time"
 
 	"github.com/rhinof/grabbit/gbus"
 )
@@ -136,5 +138,32 @@ func TestHandlerRetry(t *testing.T) {
 
 	bus.Send(testSvc1, cmd)
 	<-proceed
+
+}
+
+func TestRPC(t *testing.T) {
+
+	cmd := gbus.NewBusMessage(Command1{})
+	reply := gbus.NewBusMessage(Reply1{})
+
+	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+		log.Println("on the moo !!!!")
+		invocation.Reply(reply)
+		return nil
+	}
+
+	svc1 := createNamedBusForTest(testSvc1)
+	svc1.HandleMessage(cmd.Payload, handler)
+	svc1.Start()
+	defer svc1.Shutdown()
+	svc2 := createNamedBusForTest(testSvc2)
+	svc2.Start()
+	defer svc2.Shutdown()
+
+	reply, _ = svc2.RPC(testSvc1, cmd, reply, 5*time.Second)
+
+	if reply == nil {
+		t.Fail()
+	}
 
 }

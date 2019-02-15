@@ -14,6 +14,7 @@ type BusMessage struct {
 	Semantics         string /*cmd or evt*/
 	Payload           interface{}
 	PayloadFQN        string
+	RPCID             string
 }
 
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
@@ -39,6 +40,7 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers["x-msg-semantics"] = bm.Semantics
 	headers["x-msg-correlation-id"] = bm.CorrelationID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
+	headers["x-grabbit-rpc-id"] = bm.RPCID
 	return
 }
 
@@ -49,6 +51,8 @@ func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 	bm.Semantics = headers["x-msg-semantics"].(string)
 	bm.CorrelationID = headers["x-msg-correlation-id"].(string)
 	bm.SagaCorrelationID = headers["x-msg-saga-correlation-id"].(string)
+	bm.RPCID = headers["x-grabbit-rpc-id"].(string)
+	bm.PayloadFQN = headers["x-msg-name"].(string)
 }
 
 //SetPayload sets the payload and makes sure that FQN is saved

@@ -36,8 +36,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		ConnErrors:           make(chan *amqp.Error),
 		DelayedSubscriptions: [][]string{},
 		HandlersLock:         &sync.Mutex{},
+		RPCLock:              &sync.Mutex{},
 		IsTxnl:               builder.txnl,
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
+		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx}
 
