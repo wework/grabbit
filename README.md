@@ -4,10 +4,10 @@
 A lightweight message bus on top of RabbitMQ supporting:
 
 1) Supported messaging semantics
-	1.1 One Way
-	1.2 Duplex
-	1.3 PubSub
-	1.4 Request/Reply
+  * One Way
+  * Duplex
+  * PubSub
+  * Request/Reply
 2) Pub/Sub
 3) RPC style Request/Reply
 4) Saga pattern
@@ -29,8 +29,8 @@ Planned:
 
 ```Go
 import (
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/builder"
+  "github.com/rhinof/grabbit/gbus"
+  "github.com/rhinof/grabbit/gbus/builder"
 )
 
 ```
@@ -39,10 +39,10 @@ import (
 Creating a transactional GBus instance
 ```Go
 gb := builder.
-    		New().
-		Bus("connection string to RabbitMQ").
-		Txnl("pg", "connection string to PostgreSQL").
-		Build("name of your service")
+        New().
+    Bus("connection string to RabbitMQ").
+    Txnl("pg", "connection string to PostgreSQL").
+    Build("name of your service")
 
 ```
 Register a command handler
@@ -51,14 +51,14 @@ Register a command handler
 type SomeCommand struct {}
 
 handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
-		cmd, ok := message.Payload.(SomeCommand)
-		if ok {
-			fmt.Printf("handler invoked with  message %v", cmd)
-     	 		return nil
-		}
+    cmd, ok := message.Payload.(SomeCommand)
+    if ok {
+      fmt.Printf("handler invoked with  message %v", cmd)
+            return nil
+    }
 
-    		return fmt.Errorf("failed to handle message")
-	}
+        return fmt.Errorf("failed to handle message")
+  }
 
 gb.HandleMessage(SomeCommand{}, handler)
 ```
@@ -68,14 +68,14 @@ Register an event handler
 type SomeEvent struct{}
 
 eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
-		evt, ok := message.Payload.(SomeEvent)
-		if ok {
-			fmt.Printf("handler invoked with event %v", evt)
-      			return nil
-		}
+    evt, ok := message.Payload.(SomeEvent)
+    if ok {
+      fmt.Printf("handler invoked with event %v", evt)
+            return nil
+    }
 
-   		 return fmt.Errorf("failed to handle event")
-	}
+        return fmt.Errorf("failed to handle event")
+  }
 
 gb.HandleEvent("name of exchange", "name of topic", SomeEvent{}, eventHandler)
 
@@ -108,9 +108,9 @@ timeOut := 2 * time.Second
 reply, e := gb.RPC("name of service you are sending the request to", cmd, reply, timeOut)
 
 if e != nil{
-	fmt.Printf("rpc call failed with error %v", e)
+  fmt.Printf("rpc call failed with error %v", e)
 } else{
-	fmt.Printf("rpc call returned with reply %v", reply)
+  fmt.Printf("rpc call returned with reply %v", reply)
 }
 
 ```
