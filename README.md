@@ -3,10 +3,15 @@
 
 A lightweight message bus on top of RabbitMQ supporting:
 
-1) Async Request/Reply
+1) Supported messaging semantics
+	1.1 One Way
+	1.2 Duplex
+	1.3 PubSub
+	1.4 Request/Reply
 2) Pub/Sub
-3) Saga pattern
-4) Retry and backoffs
+3) RPC style Request/Reply
+4) Saga pattern
+5) Retry and backoffs
 
 Planned:
 
