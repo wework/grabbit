@@ -21,12 +21,12 @@ func NewGobSerializer() gbus.MessageEncoding {
 		lock:              &sync.Mutex{},
 		registeredSchemas: make(map[string]bool),
 	}
-	g.Register(&gobMessage{})
+	// g.Register(&gobMessage{})
 	return g
 }
 
 //Encode implements MessageEncoding.Encode
-func (gs *GobSerializer) Encode(message interface{}) ([]byte, error) {
+func (gs *GobSerializer) Encode(message gbus.Message) ([]byte, error) {
 	gs.Register(message)
 
 	gmsg := &gobMessage{
@@ -41,7 +41,7 @@ func (gs *GobSerializer) Encode(message interface{}) ([]byte, error) {
 }
 
 //Decode implements MessageEncoding.Decode
-func (*GobSerializer) Decode(data []byte) (interface{}, error) {
+func (*GobSerializer) Decode(data []byte) (gbus.Message, error) {
 	reader := bytes.NewReader(data)
 	dec := gob.NewDecoder(reader)
 	var tm gobMessage
@@ -50,7 +50,7 @@ func (*GobSerializer) Decode(data []byte) (interface{}, error) {
 }
 
 //Register implements MessageEncoding.Register
-func (gs *GobSerializer) Register(obj interface{}) {
+func (gs *GobSerializer) Register(obj gbus.Message) {
 	gs.lock.Lock()
 	defer gs.lock.Unlock()
 	fqn := gbus.GetFqn(obj)
@@ -62,5 +62,5 @@ func (gs *GobSerializer) Register(obj interface{}) {
 }
 
 type gobMessage struct {
-	Payload interface{}
+	Payload gbus.Message
 }

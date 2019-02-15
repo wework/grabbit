@@ -12,13 +12,13 @@ type BusMessage struct {
 	SagaID            string
 	SagaCorrelationID string
 	Semantics         string /*cmd or evt*/
-	Payload           interface{}
+	Payload           Message
 	PayloadFQN        string
 	RPCID             string
 }
 
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
-func NewBusMessage(payload interface{}) *BusMessage {
+func NewBusMessage(payload Message) *BusMessage {
 	bm := &BusMessage{
 		ID: xid.New().String(),
 	}
@@ -56,7 +56,7 @@ func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 }
 
 //SetPayload sets the payload and makes sure that FQN is saved
-func (bm *BusMessage) SetPayload(payload interface{}) {
-	bm.PayloadFQN = GetFqn(payload)
+func (bm *BusMessage) SetPayload(payload Message) {
+	bm.PayloadFQN = payload.FQN()
 	bm.Payload = payload
 }

@@ -13,6 +13,10 @@ type Bus interface {
 	SagaRegister
 }
 
+type Message interface {
+	FQN() string
+}
+
 //Messaging interface to send and publish messages to the bus
 type Messaging interface {
 	/*
@@ -55,12 +59,12 @@ type HandlerRegister interface {
 		Use this methof to register handlers for commands and reply messages
 		Use the HandleEvent method to subscribe on events and registr a handler
 	*/
-	HandleMessage(message interface{}, handler MessageHandler) error
+	HandleMessage(message Message, handler MessageHandler) error
 	/*
 		HandleEvent registers a handler for a specific message type published
 		to an exchange with a specific topic
 	*/
-	HandleEvent(exchange, topic string, event interface{}, handler MessageHandler) error
+	HandleEvent(exchange, topic string, event Message, handler MessageHandler) error
 }
 
 //MessageHandler signature for all command handlers
@@ -69,7 +73,7 @@ type MessageHandler func(invocation Invocation, message *BusMessage) error
 //Saga is the base interface for all Sagas.
 type Saga interface {
 	//StartedBy returns the messages that when received should create a new saga instance
-	StartedBy() []interface{}
+	StartedBy() []Message
 	/*
 		RegisterAllHandlers passes in the HandlerRegister so that the saga can register
 		the messages that it handles
@@ -92,6 +96,11 @@ type RequestSagaTimeout interface {
 //SagaTimeoutMessage is the timeout message for Saga's
 type SagaTimeoutMessage struct {
 	SagaID string
+}
+
+//FQN implements gbus.Message
+func (SagaTimeoutMessage) FQN() string {
+	return "grabbit.timeout"
 }
 
 //SagaRegister registers sagas to the bus
@@ -127,7 +136,7 @@ type Invocation interface {
 
 //MessageEncoding is the base interface for all message serializers
 type MessageEncoding interface {
-	Encode(message interface{}) ([]byte, error)
-	Decode(buffer []byte) (interface{}, error)
-	Register(obj interface{})
+	Encode(message Message) ([]byte, error)
+	Decode(buffer []byte) (Message, error)
+	Register(obj Message)
 }

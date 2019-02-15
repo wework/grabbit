@@ -61,9 +61,9 @@ func NewAvroSerializer(schemaRegistryUrls ...string) *AvroSerializer {
 }
 
 //Decode encodes an object into a byte array
-func (as *AvroSerializer) Encode(obj interface{}) (msg []byte, err error) {
+func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 
-	fqn := gbus.GetFqn(obj)
+	fqn := obj.FQN()
 	rel, ok := as.registeredSchemas[fqn]
 	if !ok {
 		err = fmt.Errorf("not a registered obbject :(")
@@ -109,7 +109,7 @@ func (as *AvroSerializer) Encode(obj interface{}) (msg []byte, err error) {
 }
 
 //Decode decodes a byte array into an object
-func (as *AvroSerializer) Decode(buffer []byte) (obj interface{}, err error) {
+func (as *AvroSerializer) Decode(buffer []byte) (obj gbus.Message, err error) {
 	schemaId := binary.BigEndian.Uint32(buffer[1:5])
 	rel, ok := as.registeredObjects[int(schemaId)]
 	if !ok {
@@ -120,7 +120,8 @@ func (as *AvroSerializer) Decode(buffer []byte) (obj interface{}, err error) {
 	var buf bytes.Buffer
 	buf.Write(buffer[5:])
 
-	return rel.Deserializer(&buf)
+	o, e := rel.Deserializer(&buf)
+	return o.(gbus.Message), e
 	//// Convert binary Avro data back to native Go form
 	//avroObj, _, err := rel.Codec.NativeFromBinary(buffer[5:])
 	//if err != nil {
@@ -140,7 +141,7 @@ func (as *AvroSerializer) Decode(buffer []byte) (obj interface{}, err error) {
 }
 
 //Register not really used here :(
-func (as *AvroSerializer) Register(obj interface{}) {
+func (as *AvroSerializer) Register(obj gbus.Message) {
 	// TODO: we should think what is the best way to do this
 }
 
