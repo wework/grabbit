@@ -4,10 +4,10 @@
 A lightweight message bus on top of RabbitMQ supporting:
 
 1) Supported messaging semantics
-  * One Way
-  * Duplex
-  * PubSub
-  * Request/Reply
+    * One Way
+    * Duplex
+    * PubSub
+    * Request/Reply
 2) Pub/Sub
 3) RPC style Request/Reply
 4) Saga pattern
