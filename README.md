@@ -1,4 +1,6 @@
 
+[![CircleCI](https://circleci.com/gh/rhinof/grabbit/tree/master.svg?style=shield)](https://circleci.com/gh/rhinof/grabbit/tree/master)
+
 # grabbit
 
 A lightweight message bus on top of RabbitMQ supporting:
