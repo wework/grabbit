@@ -28,6 +28,7 @@ func createNamedBusForTest(svcName string) gbus.Bus {
 		Bus(connStr).
 		PurgeOnStartUp().
 		WithPolicies(&policy.Durable{}).
+		WithDeadlettering("grabbit-dead").
 		Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
 		Build(svcName)
 

@@ -91,8 +91,8 @@ func (store *PgStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 
 		if error != nil {
 			return error
-		} else if rowsAffected, error := result.RowsAffected(); error != nil || rowsAffected == 0 {
-			return fmt.Errorf("saga with saga_id:%v had stale data when updating", instance.ID)
+		} else if rowsAffected, ee := result.RowsAffected(); ee != nil || rowsAffected == 0 {
+			return fmt.Errorf("saga with saga_id:%v had stale data when updating. :%v", instance.ID, ee)
 		}
 	}
 	return nil

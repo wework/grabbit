@@ -86,16 +86,30 @@ func (b *DefaultBus) createMessagesChannel(q amqp.Queue, consumerTag string) (<-
 }
 
 func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
+	qName := b.SvcName
+	var q amqp.Queue
+
+	if b.PurgeOnStartup {
+		msgsPurged, purgeError := b.amqpChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
+		if purgeError != nil {
+			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", b.SvcName, msgsPurged, purgeError)
+			return q, purgeError
+		}
+	}
+
 	args := amqp.Table{}
 	if b.DLX != "" {
 		args["x-dead-letter-exchange"] = b.DLX
 	}
-	q, e := b.amqpChannel.QueueDeclare(b.SvcName,
+	q, e := b.amqpChannel.QueueDeclare(qName,
 		true,  /*durable*/
 		false, /*autoDelete*/
 		false, /*exclusive*/
 		false, /*noWait*/
 		args /*args*/)
+	if e != nil {
+		b.log("failed to declare queue.\nerror:%v", e)
+	}
 	b.serviceQueue = q
 	return q, e
 }
@@ -131,17 +145,6 @@ func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) error {
 	return nil
 }
 
-func (b *DefaultBus) purgeQueueIfNeeded(q amqp.Queue) error {
-	if b.PurgeOnStartup {
-		msgsPurged, purgeError := b.amqpChannel.QueuePurge(q.Name, false /*noWait*/)
-		if purgeError != nil {
-			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", q.Name, msgsPurged, purgeError)
-			return purgeError
-		}
-	}
-	return nil
-}
-
 //Start implements GBus.Start()
 func (b *DefaultBus) Start() error {
 	//create connection
@@ -156,15 +159,13 @@ func (b *DefaultBus) Start() error {
 	if e != nil {
 		return e
 	}
+
 	//declare queue
 	var q amqp.Queue
 	if q, e = b.createServiceQueue(); e != nil {
 		return e
 	}
-	e = b.purgeQueueIfNeeded(q)
-	if e != nil {
-		return e
-	}
+
 	//bind queue
 	b.bindServiceQueue()
 	//consume queue
@@ -209,7 +210,7 @@ func (b *DefaultBus) Send(toService string, message *BusMessage, policies ...Mes
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "cmd"
-	return b.sendImpl(toService, b.SvcName, "", "", message)
+	return b.sendImpl(toService, b.SvcName, "", "", message, policies...)
 }
 
 //RPC implements  GBus.RPC
@@ -260,7 +261,7 @@ func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage, polici
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "evt"
-	return b.sendImpl("", b.SvcName, exchange, topic, message)
+	return b.sendImpl("", b.SvcName, exchange, topic, message, policies...)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -450,6 +451,7 @@ func (b *DefaultBus) consumeMessages() {
 		}
 		var ackErr, commitErr, rollbackErr, rejectErr error
 		invkErr := b.invokeHandlers(handlers, bm, &delivery, tx)
+
 		if invkErr == nil {
 
 			ack := func() error { return delivery.Ack(false /*multiple*/) }
@@ -459,7 +461,7 @@ func (b *DefaultBus) consumeMessages() {
 
 				commitErr = b.safeWithRetries(tx.Commit)
 				if commitErr != nil {
-					log.Printf("failed to commit transaction\nerror:%v", commitErr)
+					b.log("failed to commit transaction\nerror:%v", commitErr)
 				}
 
 			} else if b.IsTxnl && ackErr != nil {
@@ -467,7 +469,7 @@ func (b *DefaultBus) consumeMessages() {
 				//TODO:retry on error
 				rollbackErr = b.safeWithRetries(tx.Rollback)
 				if rollbackErr != nil {
-					log.Printf("failed to rollback transaction\nerror:%v", rollbackErr)
+					b.log("failed to rollback transaction\nerror:%v", rollbackErr)
 				}
 			}
 		} else {
@@ -481,17 +483,19 @@ func (b *DefaultBus) consumeMessages() {
 				rollbackErr = b.safeWithRetries(tx.Rollback)
 
 				if rollbackErr != nil {
-					log.Printf("failed to rollback transaction\nerror:%v", rollbackErr)
+					b.log("failed to rollback transaction\nerror:%v", rollbackErr)
 				}
 			}
-
+			// //add the error to the delivery so if it will be availble in the deadletter
+			// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
+			// b.Publish(b.DLX, "", message)
 			reject := func() error { return delivery.Reject(false /*requeue*/) }
 			rejectErr = b.safeWithRetries(reject)
 			if rejectErr != nil {
-				log.Printf("failed to reject message.\nerror:%v", rejectErr)
+
+				b.log("failed to reject message.\nerror:%v", rejectErr)
 			}
 		}
-
 	}
 }
 
