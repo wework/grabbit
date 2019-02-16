@@ -21,13 +21,13 @@ type Def struct {
 }
 
 //HandleMessage implements HandlerRegister interface
-func (sd *Def) HandleMessage(message interface{}, handler gbus.MessageHandler) error {
+func (sd *Def) HandleMessage(message gbus.Message, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(message, handler)
 	return sd.bus.HandleMessage(message, sd.msgHandler)
 }
 
 //HandleEvent implements HandlerRegister interface
-func (sd *Def) HandleEvent(exchange, topic string, event interface{}, handler gbus.MessageHandler) error {
+func (sd *Def) HandleEvent(exchange, topic string, event gbus.Message, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(event, handler)
 	return sd.bus.HandleEvent(exchange, topic, event, sd.msgHandler)
 }
@@ -40,8 +40,8 @@ func (sd *Def) getHandledMessages() []string {
 	return messages
 }
 
-func (sd *Def) addMsgToHandlerMapping(message interface{}, handler gbus.MessageHandler) {
-	msgName := gbus.GetFqn(message)
+func (sd *Def) addMsgToHandlerMapping(message gbus.Message, handler gbus.MessageHandler) {
+	msgName := message.FQN()
 	funName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
 	splits := strings.Split(funName, ".")
 	fn := strings.Replace(splits[len(splits)-1], "-fm", "", -1)
@@ -55,6 +55,7 @@ func (sd *Def) newInstance() *Instance {
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {
 	fqn := message.PayloadFQN
+
 	for _, starts := range sd.startedBy {
 		if fqn == starts {
 			return true

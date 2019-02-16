@@ -214,8 +214,8 @@ type SagaA struct {
 	Field2 int
 }
 
-func (*SagaA) StartedBy() []interface{} {
-	starters := make([]interface{}, 0)
+func (*SagaA) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
 	return append(starters, Command1{})
 }
 
@@ -276,8 +276,8 @@ func (s *SagaA) HandleEvent2(inocation gbus.Invocation, _ *gbus.BusMessage) erro
 type SagaB struct {
 }
 
-func (*SagaB) StartedBy() []interface{} {
-	starters := make([]interface{}, 0)
+func (*SagaB) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
 	return append(starters, Command2{})
 }
 
@@ -328,8 +328,8 @@ type TimingOutSaga struct {
 	TimedOut bool
 }
 
-func (*TimingOutSaga) StartedBy() []interface{} {
-	starters := make([]interface{}, 0)
+func (*TimingOutSaga) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
 	return append(starters, Command2{})
 }
 

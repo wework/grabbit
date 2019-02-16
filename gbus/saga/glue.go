@@ -10,6 +10,15 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
+func fqnsFromMessages(objs []gbus.Message) []string {
+	fqns := make([]string, 0)
+	for _, obj := range objs {
+		fqn := obj.FQN()
+		fqns = append(fqns, fqn)
+	}
+	return fqns
+}
+
 //Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
 	svcName  string
@@ -46,7 +55,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	def := &Def{
 		bus:            imsm.bus,
 		sagaType:       sagaType,
-		startedBy:      gbus.GetFqns(saga.StartedBy()),
+		startedBy:      fqnsFromMessages(saga.StartedBy()),
 		handlersFunMap: make(map[string]string),
 		lock:           &sync.Mutex{},
 		msgHandler:     imsm.handler}
@@ -63,7 +72,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	timeoutEtfs, requestsTimeout := saga.(gbus.RequestSagaTimeout)
 	if requestsTimeout {
 		timeoutMessage := gbus.SagaTimeoutMessage{}
-		timeoutMsgName := gbus.GetFqn(timeoutMessage)
+		timeoutMsgName := timeoutMessage.FQN()
 		_ = def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
 
 		// def.addMsgToHandlerMapping(timeoutMessage, timeoutEtfs.Timeout)
@@ -91,6 +100,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
+
 	defs := imsm.msgToDefMap[msgName]
 
 	for _, def := range defs {

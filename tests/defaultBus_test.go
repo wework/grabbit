@@ -105,8 +105,10 @@ func TestPubSub(t *testing.T) {
 
 func TestHandlerRetry(t *testing.T) {
 
-	cmd := gbus.NewBusMessage(Command1{})
-	reply := gbus.NewBusMessage(Reply1{})
+	c1 := Command1{}
+	r1 := Reply1{}
+	cmd := gbus.NewBusMessage(c1)
+	reply := gbus.NewBusMessage(r1)
 
 	bus := createBusForTest()
 
@@ -130,8 +132,8 @@ func TestHandlerRetry(t *testing.T) {
 		return nil
 	}
 
-	bus.HandleMessage(cmd.Payload, cmdHandler)
-	bus.HandleMessage(reply.Payload, replyHandler)
+	bus.HandleMessage(c1, cmdHandler)
+	bus.HandleMessage(r1, replyHandler)
 
 	bus.Start()
 	defer bus.Shutdown()
@@ -143,7 +145,8 @@ func TestHandlerRetry(t *testing.T) {
 
 func TestRPC(t *testing.T) {
 
-	cmd := gbus.NewBusMessage(Command1{})
+	c1 := Command1{}
+	cmd := gbus.NewBusMessage(c1)
 	reply := gbus.NewBusMessage(Reply1{})
 
 	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
@@ -153,7 +156,7 @@ func TestRPC(t *testing.T) {
 	}
 
 	svc1 := createNamedBusForTest(testSvc1)
-	svc1.HandleMessage(cmd.Payload, handler)
+	svc1.HandleMessage(c1, handler)
 	svc1.Start()
 	defer svc1.Shutdown()
 	svc2 := createNamedBusForTest(testSvc2)
