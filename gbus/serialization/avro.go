@@ -60,7 +60,12 @@ func NewAvroSerializer(schemaRegistryUrls ...string) *AvroSerializer {
 	}
 }
 
-//Decode encodes an object into a byte array
+//EncoderID implements MessageEncoding.EncoderID
+func (as *AvroSerializer) EncoderID() string {
+	return "avro"
+}
+
+//Encode encodes an object into a byte array
 func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 
 	fqn := obj.FQN()

@@ -491,9 +491,6 @@ func (b *DefaultBus) handleConnErrors() {
 
 func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, message *BusMessage, customHeaders ...keyVal) (er error) {
 
-	mm := message.Payload.(Message)
-	fqn := GetFqn(message.Payload)
-	fqn = mm.FQN()
 	defer func() {
 		if err := recover(); err != nil {
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%v", err, debug.Stack())
@@ -501,27 +498,27 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 		}
 	}()
 
+	headers := message.GetAMQPHeaders()
+	//apply passed in custom headers
+	for _, keyVal := range customHeaders {
+		headers[keyVal.key] = keyVal.val
+	}
+
 	buffer, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
 		b.log("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
 		return err
 	}
 
-	headers := message.GetAMQPHeaders()
-	headers["x-msg-name"] = fqn
-	headers["x-msg-type"] = message.Semantics
-
-	for _, keyVal := range customHeaders {
-		headers[keyVal.key] = keyVal.val
-	}
-
 	//TODO: Add message TTL
 	msg := amqp.Publishing{
-		Body:         buffer,
-		DeliveryMode: amqp.Persistent,
-		ReplyTo:      replyTo,
-		MessageId:    xid.New().String(),
-		Headers:      headers,
+		Body:            buffer,
+		DeliveryMode:    amqp.Persistent,
+		ReplyTo:         replyTo,
+		MessageId:       message.ID,
+		CorrelationId:   message.CorrelationID,
+		ContentEncoding: b.Serializer.EncoderID(),
+		Headers:         headers,
 	}
 
 	key := ""
@@ -541,7 +538,6 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 	if err != nil {
 		return err
 	}
-
 	return err
 }
 

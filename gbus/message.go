@@ -41,6 +41,8 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers["x-msg-correlation-id"] = bm.CorrelationID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
 	headers["x-grabbit-rpc-id"] = bm.RPCID
+	headers["x-msg-name"] = bm.Payload.FQN()
+	headers["x-msg-type"] = bm.Semantics
 	return
 }
 
@@ -53,6 +55,7 @@ func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 	bm.SagaCorrelationID = headers["x-msg-saga-correlation-id"].(string)
 	bm.RPCID = headers["x-grabbit-rpc-id"].(string)
 	bm.PayloadFQN = headers["x-msg-name"].(string)
+	bm.Semantics = headers["x-msg-type"].(string)
 }
 
 //SetPayload sets the payload and makes sure that FQN is saved

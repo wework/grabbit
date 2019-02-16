@@ -136,6 +136,7 @@ type Invocation interface {
 
 //MessageEncoding is the base interface for all message serializers
 type MessageEncoding interface {
+	EncoderID() string
 	Encode(message Message) ([]byte, error)
 	Decode(buffer []byte) (Message, error)
 	Register(obj Message)
