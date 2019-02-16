@@ -567,11 +567,14 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 		key = topic
 	}
 
-	err = b.amqpChannel.Publish(exchange, /*exchange*/
-		key,   /*key*/
-		false, /*mandatory*/
-		false, /*immediate*/
-		msg /*msg*/)
+	publish := func() error {
+		return b.amqpChannel.Publish(exchange, /*exchange*/
+			key,   /*key*/
+			false, /*mandatory*/
+			false, /*immediate*/
+			msg /*msg*/)
+	}
+	err = b.safeWithRetries(publish)
 
 	if err != nil {
 		return err
