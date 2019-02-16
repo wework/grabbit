@@ -445,19 +445,30 @@ func (b *DefaultBus) consumeMessages() {
 			tx, txErr = b.TxProvider.New()
 			if txErr != nil {
 				b.log("failed to create transaction.\n%v", txErr)
+				continue
 			}
 		}
-
+		var ackErr, commitErr, rollbackErr, rejectErr error
 		invkErr := b.invokeHandlers(handlers, bm, &delivery, tx)
 		if invkErr == nil {
-			//TODO:retry akc if error
-			ackErr := delivery.Ack(false /*multiple*/)
+
+			ack := func() error { return delivery.Ack(false /*multiple*/) }
+			ackErr = b.safeWithRetries(ack)
 			if b.IsTxnl && ackErr == nil {
 				b.log("bus commiting transaction")
-				tx.Commit()
+
+				commitErr = b.safeWithRetries(tx.Commit)
+				if commitErr != nil {
+					log.Printf("failed to commit transaction\nerror:%v", commitErr)
+				}
+
 			} else if b.IsTxnl && ackErr != nil {
 				b.log("bus rollingback transaction")
-				tx.Rollback()
+				//TODO:retry on error
+				rollbackErr = b.safeWithRetries(tx.Rollback)
+				if rollbackErr != nil {
+					log.Printf("failed to rollback transaction\nerror:%v", rollbackErr)
+				}
 			}
 		} else {
 			logMsg := `Failed to consume message due to failure of one or more handlers.\n
@@ -467,14 +478,38 @@ func (b *DefaultBus) consumeMessages() {
 				Error:\n%v`
 			b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
 			if b.IsTxnl {
-				tx.Rollback()
+				rollbackErr = b.safeWithRetries(tx.Rollback)
+
+				if rollbackErr != nil {
+					log.Printf("failed to rollback transaction\nerror:%v", rollbackErr)
+				}
 			}
-			delivery.Reject(false /*requeue*/)
+
+			reject := func() error { return delivery.Reject(false /*requeue*/) }
+			rejectErr = b.safeWithRetries(reject)
+			if rejectErr != nil {
+				log.Printf("failed to reject message.\nerror:%v", rejectErr)
+			}
 		}
 
 	}
 }
 
+func (b *DefaultBus) safeWithRetries(funk func() error) error {
+	action := func(attempts uint) (actionErr error) {
+		defer func() {
+			if p := recover(); p != nil {
+				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
+				actionErr = errors.New(pncMsg)
+			}
+		}()
+		return funk()
+	}
+
+	return retry.Retry(action,
+		strategy.Limit(MAX_RETRY_COUNT),
+		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
+}
 func (b *DefaultBus) log(format string, v ...interface{}) {
 
 	log.Printf(b.SvcName+":"+format, v...)
