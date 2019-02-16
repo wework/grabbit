@@ -43,6 +43,7 @@ type DefaultBus struct {
 	WorkerNum            uint
 	Serializer           MessageEncoding
 	DLX                  string
+	DefaultPolicies      []MessagePolicy
 }
 
 var (
@@ -203,7 +204,7 @@ func (b *DefaultBus) Shutdown() {
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
-func (b *DefaultBus) Send(toService string, message *BusMessage) error {
+func (b *DefaultBus) Send(toService string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
@@ -231,10 +232,10 @@ func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout tim
 	//we do not defer this as we do not want b.RPCHandlers to be locked until a reply returns
 	b.RPCLock.Unlock()
 	request.Semantics = "cmd"
-	kv := keyVal{
-		key: rpcHeaderName,
-		val: rpcID}
-	b.sendImpl(service, b.rpcQueue.Name, "", "", request, kv)
+	rpc := rpcPolicy{
+		rpcID: rpcID}
+
+	b.sendImpl(service, b.rpcQueue.Name, "", "", request, rpc)
 
 	//wait for reply or timeout
 	select {
@@ -254,7 +255,7 @@ func (b *DefaultBus) RPC(service string, request, reply *BusMessage, timeout tim
 }
 
 //Publish implements GBus.Publish(topic, message)
-func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage) error {
+func (b *DefaultBus) Publish(exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
@@ -489,7 +490,7 @@ func (b *DefaultBus) handleConnErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, message *BusMessage, customHeaders ...keyVal) (er error) {
+func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -499,10 +500,6 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 	}()
 
 	headers := message.GetAMQPHeaders()
-	//apply passed in custom headers
-	for _, keyVal := range customHeaders {
-		headers[keyVal.key] = keyVal.val
-	}
 
 	buffer, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
@@ -510,15 +507,21 @@ func (b *DefaultBus) sendImpl(toService, replyTo, exchange, topic string, messag
 		return err
 	}
 
-	//TODO: Add message TTL
 	msg := amqp.Publishing{
 		Body:            buffer,
-		DeliveryMode:    amqp.Persistent,
 		ReplyTo:         replyTo,
 		MessageId:       message.ID,
 		CorrelationId:   message.CorrelationID,
 		ContentEncoding: b.Serializer.EncoderID(),
 		Headers:         headers,
+	}
+
+	for _, defaultPolicy := range b.DefaultPolicies {
+		defaultPolicy.Apply(&msg)
+	}
+
+	for _, policy := range policies {
+		policy.Apply(&msg)
 	}
 
 	key := ""
@@ -562,7 +565,10 @@ func (b *DefaultBus) bindQueue(topic, exchange string) error {
 	return b.amqpChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
 }
 
-type keyVal struct {
-	key string
-	val string
+type rpcPolicy struct {
+	rpcID string
+}
+
+func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
+	publishing.Headers[rpcHeaderName] = p.rpcID
 }

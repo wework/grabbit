@@ -25,6 +25,7 @@ type defaultBuilder struct {
 	workerNum        uint
 	serializer       gbus.MessageEncoding
 	dlx              string
+	defaultPolicies  []gbus.MessagePolicy
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -41,7 +42,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
-		DLX:                  builder.dlx}
+		DLX:                  builder.dlx,
+		DefaultPolicies:      make([]gbus.MessagePolicy, 0)}
 
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
@@ -108,6 +110,11 @@ func (builder *defaultBuilder) WithSagas(sagaStoreConnStr string) gbus.Builder {
 	return builder
 }
 
+func (builder *defaultBuilder) WithPolicies(policies ...gbus.MessagePolicy) gbus.Builder {
+	builder.defaultPolicies = append(builder.defaultPolicies, policies...)
+	return builder
+}
+
 func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 	builder.txnl = true
 	builder.txConnStr = connStr
@@ -133,7 +140,7 @@ type Nu struct {
 //Bus inits a new BusBuilder
 func (Nu) Bus(brokerConnStr string) gbus.Builder {
 	return &defaultBuilder{
-		connStr:    brokerConnStr,
-		serializer: serialization.NewGobSerializer(),
-	}
+		connStr:         brokerConnStr,
+		serializer:      serialization.NewGobSerializer(),
+		defaultPolicies: make([]gbus.MessagePolicy, 0)}
 }

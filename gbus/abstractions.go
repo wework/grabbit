@@ -3,6 +3,8 @@ package gbus
 import (
 	"database/sql"
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
@@ -23,12 +25,12 @@ type Messaging interface {
 		Send a command or a command response to a specific service
 		one-to-one semantics
 	*/
-	Send(toService string, command *BusMessage) error
+	Send(toService string, command *BusMessage, policies ...MessagePolicy) error
 
 	/*
 		Publish and event, one-to-many semantics
 	*/
-	Publish(exchange, topic string, event *BusMessage) error
+	Publish(exchange, topic string, event *BusMessage, policies ...MessagePolicy) error
 
 	/*
 		RPC calls the service passing him the request BusMessage and blocks until a reply is
@@ -36,6 +38,11 @@ type Messaging interface {
 
 	*/
 	RPC(service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error)
+}
+
+//MessagePolicy defines a user policy for out going amqp messages User policies can control message ttl, durability etc..
+type MessagePolicy interface {
+	Apply(publishing *amqp.Publishing)
 }
 
 //BusSwitch starts and shutdowns the bus
@@ -118,12 +125,17 @@ type Builder interface {
 		connStr: connection string in the format of the passed in provider
 	*/
 	Txnl(provider, connStr string) Builder
+	//WithSerializer provides teh ability to plugin custom serializers
 	WithSerializer(serializer MessageEncoding) Builder
 	/*
 		 		WorkerNum sets the number of worker go routines consuming messages from the queue
 				The default value if this option is not set is 1
 	*/
 	WorkerNum(workers uint) Builder
+
+	//WithPolicies defines the default policies that are applied for evey outgoing amqp messge
+	WithPolicies(policies ...MessagePolicy) Builder
+	//Build the bus
 	Build(svcName string) Bus
 }
 

@@ -25,7 +25,7 @@ func NewGobSerializer() gbus.MessageEncoding {
 	return g
 }
 
-//Encoder implements MessageEncoding.EncoderID
+//EncoderID implements MessageEncoding.EncoderID
 func (gs *GobSerializer) EncoderID() string {
 	return "gob"
 }

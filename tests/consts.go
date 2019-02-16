@@ -3,6 +3,7 @@ package tests
 import (
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/builder"
+	"github.com/rhinof/grabbit/gbus/policy"
 )
 
 var connStr string
@@ -26,6 +27,7 @@ func createNamedBusForTest(svcName string) gbus.Bus {
 		New().
 		Bus(connStr).
 		PurgeOnStartUp().
+		WithPolicies(&policy.Durable{}).
 		Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
 		Build(svcName)
 
