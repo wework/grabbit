@@ -26,6 +26,10 @@ Planned:
 1) gob
 2) Avro
 
+## Instrumentation
+
+1) Opentracing
+
 ## Usage
 
 ```Go
