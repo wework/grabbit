@@ -44,7 +44,7 @@ Define a message
 ```Go
 type SomeMessage struct {}
 
-func(SomeMessage) FQN() string{
+func(SomeMessage) Name() string{
    return "some.unique.namespace.somemessage"
 }
 
