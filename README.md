@@ -35,7 +35,16 @@ import (
 )
 
 ```
+Define a message
 
+```Go
+type SomeMessage struct {}
+
+func(SomeMessage) FQN() string{
+   return "some.unique.namespace.somemessage"
+}
+
+```
 
 Creating a transactional GBus instance
 ```Go
@@ -49,7 +58,7 @@ gb := builder.
 Register a command handler
 
 ```Go
-type SomeCommand struct {}
+
 
 handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
     cmd, ok := message.Payload.(SomeCommand)
@@ -66,7 +75,7 @@ gb.HandleMessage(SomeCommand{}, handler)
 Register an event handler
 
 ```Go
-type SomeEvent struct{}
+
 
 eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
     evt, ok := message.Payload.(SomeEvent)
@@ -99,8 +108,7 @@ gb.Publish("name of exchange", "name of topic", gbus.NewBusMessage(SomeEvent))
 
 RPC style call
 ```Go
-type SomeRPCRequest struct{}
-type SomeRPCReply struct{}
+
 
 request := gbus.NewBusMessage(SomeRPCRequest{})
 reply := gbus.NewBusMessage(SomeRPCReply{})
