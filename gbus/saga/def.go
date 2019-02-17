@@ -41,7 +41,7 @@ func (sd *Def) getHandledMessages() []string {
 }
 
 func (sd *Def) addMsgToHandlerMapping(message gbus.Message, handler gbus.MessageHandler) {
-	msgName := message.FQN()
+	msgName := message.Name()
 	funName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
 	splits := strings.Split(funName, ".")
 	fn := strings.Replace(splits[len(splits)-1], "-fm", "", -1)

@@ -17,7 +17,7 @@ type Bus interface {
 }
 
 type Message interface {
-	FQN() string
+	Name() string
 }
 
 //Messaging interface to send and publish messages to the bus
@@ -101,13 +101,15 @@ type RequestSagaTimeout interface {
 	Timeout(invocation Invocation, message *BusMessage) error
 }
 
+var _ Message = &SagaTimeoutMessage{}
+
 //SagaTimeoutMessage is the timeout message for Saga's
 type SagaTimeoutMessage struct {
 	SagaID string
 }
 
-//FQN implements gbus.Message
-func (SagaTimeoutMessage) FQN() string {
+//Name implements gbus.Message
+func (SagaTimeoutMessage) Name() string {
 	return "grabbit.timeout"
 }
 
