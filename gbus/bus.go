@@ -407,7 +407,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	bm := NewFromAMQPHeaders(delivery.Headers)
 
 	//msgName := delivery.Headers["x-msg-name"].(string)
-	msgType := delivery.Headers["x-msg-type"].(string)
+	msgType := castToSgtring(delivery.Headers["x-msg-type"])
 	if bm.PayloadFQN == "" || msgType == "" {
 		//TODO: Log poision pill message
 		b.log("message received but no headers found...rejecting message")
@@ -477,7 +477,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				b.log("failed to commit transaction\nerror:%v", commitErr)
 			}
 		} else if b.IsTxnl && ackErr != nil {
-			b.log("bus rollingback transaction")
+			b.log("bus rolling back transaction", ackErr)
 			//TODO:retry on error
 			rollbackErr = b.safeWithRetries(tx.Rollback)
 			if rollbackErr != nil {
@@ -609,7 +609,7 @@ func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) er
 	defer b.HandlersLock.Unlock()
 
 	b.Serializer.Register(msg)
-	fqn := msg.FQN()
+	fqn := msg.Name()
 
 	handlers := b.MsgHandlers[fqn]
 	if handlers == nil {

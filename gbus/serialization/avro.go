@@ -32,6 +32,7 @@ type avroRelation struct {
 
 type avroMessageGenerated interface {
 	Schema() string
+	Name() string
 	Serialize(w io.Writer) error
 }
 
@@ -68,11 +69,11 @@ func (as *AvroSerializer) EncoderID() string {
 //Encode encodes an object into a byte array
 func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 
-	fqn := obj.FQN()
-	rel, ok := as.registeredSchemas[fqn]
+	name := obj.Name()
+	rel, ok := as.registeredSchemas[name]
 	if !ok {
 		err = fmt.Errorf("not a registered obbject :(")
-		logrus.WithError(err).WithField("fqn", fqn).Error("not a registered type")
+		logrus.WithError(err).WithField("name", name).Error("not a registered type")
 		return
 	}
 
@@ -97,7 +98,7 @@ func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 	if err != nil {
 		logrus.
 			WithError(err).
-			WithField("fqn", fqn).
+			WithField("name", name).
 			Error("could not convert obj to bindata")
 		return nil, err
 	}
@@ -164,8 +165,7 @@ func (as *AvroSerializer) RegisterAvroMessageFromFile(schemaName, schemaPath str
 func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avroMessageGenerated, deserializer avroDeserializer) (err error) {
 	as.lock.Lock()
 	defer as.lock.Unlock()
-	fqn := gbus.GetFqn(obj)
-	if _, ok := as.registeredSchemas[fqn]; !ok {
+	if _, ok := as.registeredSchemas[obj.Name()]; !ok {
 		rel := &avroRelation{
 			SchemaName:   schemaName,
 			Schema:       schema,
@@ -182,7 +182,7 @@ func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avr
 			return
 		}
 		rel.ObjType = reflect.TypeOf(obj)
-		as.registeredSchemas[fqn] = rel
+		as.registeredSchemas[obj.Name()] = rel
 		as.registeredObjects[rel.SchemaId] = rel
 	}
 	return

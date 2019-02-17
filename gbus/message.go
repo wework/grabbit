@@ -41,25 +41,33 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers["x-msg-correlation-id"] = bm.CorrelationID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
 	headers["x-grabbit-rpc-id"] = bm.RPCID
-	headers["x-msg-name"] = bm.Payload.FQN()
+	headers["x-msg-name"] = bm.Payload.Name()
 	headers["x-msg-type"] = bm.Semantics
 	return
 }
 
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
 func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
-	bm.ID = headers["x-msg-id"].(string)
-	bm.SagaID = headers["x-msg-saga-id"].(string)
-	bm.Semantics = headers["x-msg-semantics"].(string)
-	bm.CorrelationID = headers["x-msg-correlation-id"].(string)
-	bm.SagaCorrelationID = headers["x-msg-saga-correlation-id"].(string)
-	bm.RPCID = headers["x-grabbit-rpc-id"].(string)
-	bm.PayloadFQN = headers["x-msg-name"].(string)
-	bm.Semantics = headers["x-msg-type"].(string)
+	bm.ID = castToSgtring(headers["x-msg-id"])
+	bm.SagaID = castToSgtring(headers["x-msg-saga-id"])
+	bm.Semantics = castToSgtring(headers["x-msg-semantics"])
+	bm.CorrelationID = castToSgtring(headers["x-msg-correlation-id"])
+	bm.SagaCorrelationID = castToSgtring(headers["x-msg-saga-correlation-id"])
+	bm.RPCID = castToSgtring(headers["x-grabbit-rpc-id"])
+	bm.PayloadFQN = castToSgtring(headers["x-msg-name"])
+	bm.Semantics = castToSgtring(headers["x-msg-type"])
 }
 
-//SetPayload sets the payload and makes sure that FQN is saved
+//SetPayload sets the payload and makes sure that Name is saved
 func (bm *BusMessage) SetPayload(payload Message) {
-	bm.PayloadFQN = payload.FQN()
+	bm.PayloadFQN = payload.Name()
 	bm.Payload = payload
+}
+
+func castToSgtring(i interface{}) string {
+	v, ok := i.(string)
+	if !ok {
+		return ""
+	}
+	return v
 }
