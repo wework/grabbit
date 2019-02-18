@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/opentracing-contrib/go-amqp/amqptracer"
-	"github.com/opentracing/opentracing-go"
 	"log"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/opentracing-contrib/go-amqp/amqptracer"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
@@ -23,9 +24,11 @@ import (
 
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
+	*Safety
+	outgoing             *AMQPOutbox
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
-	amqpChannel          *amqp.Channel
+	AMQPChannel          *amqp.Channel
 	serviceQueue         amqp.Queue
 	rpcQueue             amqp.Queue
 	SvcName              string
@@ -47,6 +50,7 @@ type DefaultBus struct {
 	Serializer           MessageEncoding
 	DLX                  string
 	DefaultPolicies      []MessagePolicy
+	Confirm              bool
 }
 
 var (
@@ -64,7 +68,7 @@ func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
 	*/
 	uid := xid.New().String()
 	qName := b.SvcName + "_rpc_" + uid
-	q, e := b.amqpChannel.QueueDeclare(qName,
+	q, e := b.AMQPChannel.QueueDeclare(qName,
 		false, /*durable*/
 		true,  /*autoDelete*/
 		false, /*exclusive*/
@@ -75,7 +79,7 @@ func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
 }
 
 func (b *DefaultBus) createMessagesChannel(q amqp.Queue, consumerTag string) (<-chan amqp.Delivery, error) {
-	msgs, e := b.amqpChannel.Consume(q.Name, /*queue*/
+	msgs, e := b.AMQPChannel.Consume(q.Name, /*queue*/
 		consumerTag, /*consumer*/
 		false,       /*autoAck*/
 		false,       /*exclusive*/
@@ -93,7 +97,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	var q amqp.Queue
 
 	if b.PurgeOnStartup {
-		msgsPurged, purgeError := b.amqpChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
+		msgsPurged, purgeError := b.AMQPChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
 		if purgeError != nil {
 			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", b.SvcName, msgsPurged, purgeError)
 			return q, purgeError
@@ -104,7 +108,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	if b.DLX != "" {
 		args["x-dead-letter-exchange"] = b.DLX
 	}
-	q, e := b.amqpChannel.QueueDeclare(qName,
+	q, e := b.AMQPChannel.QueueDeclare(qName,
 		true,  /*durable*/
 		false, /*autoDelete*/
 		false, /*exclusive*/
@@ -121,7 +125,7 @@ func (b *DefaultBus) bindServiceQueue() {
 	for _, subscription := range b.DelayedSubscriptions {
 		topic := subscription[0]
 		exchange := subscription[1]
-		e := b.amqpChannel.ExchangeDeclare(exchange, /*name*/
+		e := b.AMQPChannel.ExchangeDeclare(exchange, /*name*/
 			"topic", /*kind*/
 			true,    /*durable*/
 			false,   /*autoDelete*/
@@ -144,7 +148,7 @@ func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) error {
 	if e != nil {
 		return e
 	}
-	b.amqpChannel = channel
+	b.AMQPChannel = channel
 	return nil
 }
 
@@ -162,7 +166,10 @@ func (b *DefaultBus) Start() error {
 	if e != nil {
 		return e
 	}
-
+	//create the outbox that sends the messages to the amqp transport and handles publisher confirms
+	if b.outgoing, e = NewAMQPOutbox(b.AMQPChannel, b.Confirm); e != nil {
+		return e
+	}
 	//declare queue
 	var q amqp.Queue
 	if q, e = b.createServiceQueue(); e != nil {
@@ -199,8 +206,9 @@ func (b *DefaultBus) Start() error {
 
 //Shutdown implements GBus.Start()
 func (b *DefaultBus) Shutdown() {
-
+	b.outgoing.shutdown()
 	b.started = false
+
 	b.amqpConn.Close()
 	if b.IsTxnl {
 		b.TxProvider.Dispose()
@@ -469,17 +477,18 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	invkErr := b.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
 	if invkErr == nil {
 		ack := func() error { return delivery.Ack(false /*multiple*/) }
-		ackErr = b.safeWithRetries(ack)
+
+		ackErr = b.SafeWithRetries(ack, MAX_RETRY_COUNT)
 		if b.IsTxnl && ackErr == nil {
 			b.log("bus commiting transaction")
-			commitErr = b.safeWithRetries(tx.Commit)
+			commitErr = b.SafeWithRetries(tx.Commit, MAX_RETRY_COUNT)
 			if commitErr != nil {
 				b.log("failed to commit transaction\nerror:%v", commitErr)
 			}
 		} else if b.IsTxnl && ackErr != nil {
 			b.log("bus rolling back transaction", ackErr)
 			//TODO:retry on error
-			rollbackErr = b.safeWithRetries(tx.Rollback)
+			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
 			if rollbackErr != nil {
 				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
 			}
@@ -492,7 +501,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				Error:\n%v`
 		b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
 		if b.IsTxnl {
-			rollbackErr = b.safeWithRetries(tx.Rollback)
+			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
 
 			if rollbackErr != nil {
 				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
@@ -502,7 +511,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
 		// b.Publish(b.DLX, "", message)
 		reject := func() error { return delivery.Reject(false /*requeue*/) }
-		rejectErr = b.safeWithRetries(reject)
+		rejectErr = b.SafeWithRetries(reject, MAX_RETRY_COUNT)
 		if rejectErr != nil {
 
 			b.log("failed to reject message.\nerror:%v", rejectErr)
@@ -510,21 +519,6 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 }
 
-func (b *DefaultBus) safeWithRetries(funk func() error) error {
-	action := func(attempts uint) (actionErr error) {
-		defer func() {
-			if p := recover(); p != nil {
-				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
-				actionErr = errors.New(pncMsg)
-			}
-		}()
-		return funk()
-	}
-
-	return retry.Retry(action,
-		strategy.Limit(MAX_RETRY_COUNT),
-		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
-}
 func (b *DefaultBus) log(format string, v ...interface{}) {
 
 	log.Printf(b.SvcName+":"+format, v...)
@@ -589,15 +583,12 @@ func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange,
 	}
 
 	publish := func() error {
-		return b.amqpChannel.Publish(exchange, /*exchange*/
-			key,   /*key*/
-			false, /*mandatory*/
-			false, /*immediate*/
-			msg /*msg*/)
+		return b.outgoing.send(exchange, key, msg)
 	}
-	err = b.safeWithRetries(publish)
+	err = b.SafeWithRetries(publish, MAX_RETRY_COUNT)
 
 	if err != nil {
+		log.Printf("failed publishing message.\n error:%v", err)
 		return err
 	}
 	return err
@@ -621,7 +612,7 @@ func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) er
 }
 
 func (b *DefaultBus) bindQueue(topic, exchange string) error {
-	return b.amqpChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
+	return b.AMQPChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
 }
 
 type rpcPolicy struct {

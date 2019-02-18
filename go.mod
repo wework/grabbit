@@ -27,6 +27,8 @@ require (
 	github.com/mdempsky/unconvert v0.0.0-20190117010209-2db5a8ead8e7 // indirect
 	github.com/mibk/dupl v1.0.0 // indirect
 	github.com/opennota/check v0.0.0-20180911053232-0c771f5545ff // indirect
+	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
+	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/rs/xid v1.2.1

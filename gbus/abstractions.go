@@ -136,6 +136,11 @@ type Builder interface {
 	*/
 	WorkerNum(workers uint) Builder
 
+	/*
+	   WithConfirms enables publisher confirms
+	*/
+	WithConfirms() Builder
+
 	//WithPolicies defines the default policies that are applied for evey outgoing amqp messge
 	WithPolicies(policies ...MessagePolicy) Builder
 	//Build the bus

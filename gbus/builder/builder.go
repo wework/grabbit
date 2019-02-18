@@ -7,7 +7,6 @@ import (
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
-
 	"github.com/rhinof/grabbit/gbus/saga/stores"
 	"github.com/rhinof/grabbit/gbus/serialization"
 	"github.com/rhinof/grabbit/gbus/tx"
@@ -26,6 +25,7 @@ type defaultBuilder struct {
 	serializer       gbus.MessageEncoding
 	dlx              string
 	defaultPolicies  []gbus.MessagePolicy
+	confirm          bool
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -45,6 +45,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		DLX:                  builder.dlx,
 		DefaultPolicies:      make([]gbus.MessagePolicy, 0)}
 
+	gb.Confirm = builder.confirm
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
 	} else {
@@ -107,6 +108,11 @@ func (builder *defaultBuilder) WorkerNum(workers uint) gbus.Builder {
 */
 func (builder *defaultBuilder) WithSagas(sagaStoreConnStr string) gbus.Builder {
 	builder.sagaStoreConnStr = sagaStoreConnStr
+	return builder
+}
+
+func (builder *defaultBuilder) WithConfirms() gbus.Builder {
+	builder.confirm = true
 	return builder
 }
 
