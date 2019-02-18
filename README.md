@@ -13,6 +13,8 @@ A lightweight message bus on top of RabbitMQ supporting:
 2) Pub/Sub
 3) Saga pattern
 4) Retry and backoffs
+5) Publisher confirms
+6) Deadlettering
 
 Planned:
 
