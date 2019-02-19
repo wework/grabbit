@@ -32,7 +32,8 @@ type DefaultBus struct {
 	serviceQueue         amqp.Queue
 	rpcQueue             amqp.Queue
 	SvcName              string
-	ConnErrors           chan *amqp.Error
+	amqpErrors           chan *amqp.Error
+	amqpBlocks           chan amqp.Blocking
 	MsgHandlers          map[string][]MessageHandler
 	RPCHandlers          map[string]MessageHandler
 	msgs                 <-chan amqp.Delivery
@@ -51,6 +52,7 @@ type DefaultBus struct {
 	DLX                  string
 	DefaultPolicies      []MessagePolicy
 	Confirm              bool
+	healthChan           chan error
 }
 
 var (
@@ -143,29 +145,35 @@ func (b *DefaultBus) bindServiceQueue() {
 	}
 }
 
-func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) error {
+func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) (*amqp.Channel, error) {
 	channel, e := conn.Channel()
 	if e != nil {
-		return e
+		return nil, e
 	}
 	b.AMQPChannel = channel
-	return nil
+	return channel, nil
 }
 
 //Start implements GBus.Start()
 func (b *DefaultBus) Start() error {
 	//create connection
-	conn, e := b.connect(int(MAX_RETRY_COUNT))
-	if e != nil {
+	var e error
+
+	//create amqo connection and channel
+	if b.amqpConn, e = b.connect(int(MAX_RETRY_COUNT)); e != nil {
 		return e
 	}
-	conn.NotifyClose(b.ConnErrors)
-	b.amqpConn = conn
-	//create channel
-	e = b.createAMQPChannel(conn)
-	if e != nil {
+
+	if b.AMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
 		return e
 	}
+	//register on failure notifications
+	b.amqpErrors = make(chan *amqp.Error)
+	b.amqpBlocks = make(chan amqp.Blocking)
+	b.amqpConn.NotifyClose(b.amqpErrors)
+	b.amqpConn.NotifyBlocked(b.amqpBlocks)
+	b.AMQPChannel.NotifyClose(b.amqpErrors)
+
 	//create the outbox that sends the messages to the amqp transport and handles publisher confirms
 	if b.outgoing, e = NewAMQPOutbox(b.AMQPChannel, b.Confirm); e != nil {
 		return e
@@ -205,14 +213,31 @@ func (b *DefaultBus) Start() error {
 }
 
 //Shutdown implements GBus.Start()
-func (b *DefaultBus) Shutdown() {
+func (b *DefaultBus) Shutdown() (shutdwonErr error) {
+
+	defer func() {
+		if p := recover(); p != nil {
+			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
+			shutdwonErr = errors.New(pncMsg)
+		}
+	}()
+
 	b.outgoing.shutdown()
 	b.started = false
-
 	b.amqpConn.Close()
 	if b.IsTxnl {
 		b.TxProvider.Dispose()
 	}
+
+	return nil
+}
+
+//NotifyHealth implements Health.NotifyHealth
+func (b *DefaultBus) NotifyHealth(health chan error) {
+	if health == nil {
+		panic("can't pass nil as health channel")
+	}
+	b.healthChan = health
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
@@ -523,13 +548,21 @@ func (b *DefaultBus) log(format string, v ...interface{}) {
 
 	log.Printf(b.SvcName+":"+format, v...)
 }
-func (b *DefaultBus) handleConnErrors() {
+func (b *DefaultBus) monitorAMQPErrors() {
 
 	for !b.started {
-		connErr := <-b.ConnErrors
-		e := b.Start()
-		if e != nil {
-			b.ConnErrors <- connErr
+		select {
+		case blocked := <-b.amqpBlocks:
+			if blocked.Active {
+				b.log("amqp connection blocked. reason:%v", blocked.Reason)
+			} else {
+				b.log("amqp connection unblocked")
+			}
+		case amqpErr := <-b.amqpErrors:
+			b.log("amqp error: %v", amqpErr.Error())
+			if b.healthChan != nil {
+				b.healthChan <- amqpErr
+			}
 		}
 	}
 }

@@ -14,6 +14,7 @@ type Bus interface {
 	BusSwitch
 	Messaging
 	SagaRegister
+	Health
 }
 
 type Message interface {
@@ -46,6 +47,11 @@ type MessagePolicy interface {
 	Apply(publishing *amqp.Publishing)
 }
 
+//Health reports om health issues in which the bus needs to be restarted
+type Health interface {
+	NotifyHealth(health chan error)
+}
+
 //BusSwitch starts and shutdowns the bus
 type BusSwitch interface {
 	/*
@@ -57,7 +63,7 @@ type BusSwitch interface {
 	/*
 		Shutdown the bus and close connection to the underlying broker
 	*/
-	Shutdown()
+	Shutdown() error
 }
 
 //HandlerRegister registers message handlers to specific messages and events

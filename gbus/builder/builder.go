@@ -10,7 +10,6 @@ import (
 	"github.com/rhinof/grabbit/gbus/saga/stores"
 	"github.com/rhinof/grabbit/gbus/serialization"
 	"github.com/rhinof/grabbit/gbus/tx"
-	"github.com/streadway/amqp"
 )
 
 type defaultBuilder struct {
@@ -34,7 +33,6 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		AmqpConnStr:          builder.connStr,
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
-		ConnErrors:           make(chan *amqp.Error),
 		DelayedSubscriptions: [][]string{},
 		HandlersLock:         &sync.Mutex{},
 		RPCLock:              &sync.Mutex{},
