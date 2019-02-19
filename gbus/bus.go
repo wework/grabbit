@@ -58,7 +58,7 @@ type DefaultBus struct {
 var (
 	//TODO: Replace constants with configuration
 	MAX_RETRY_COUNT uint = 3
-	rpcHeaderName        = "x-grabbit-rpc-id"
+	rpcHeaderName        = "x-grabbit-msg-rpc-id"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -438,10 +438,15 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	// Update the context with the span for the subsequent reference.
 	bm := NewFromAMQPHeaders(delivery.Headers)
+	bm.ID = delivery.MessageId
+	bm.CorrelationID = delivery.CorrelationId
+	if delivery.Exchange != "" {
+		bm.Semantics = "evt"
+	} else {
+		bm.Semantics = "cmd"
+	}
 
-	//msgName := delivery.Headers["x-msg-name"].(string)
-	msgType := castToSgtring(delivery.Headers["x-msg-type"])
-	if bm.PayloadFQN == "" || msgType == "" {
+	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poision pill message
 		b.log("message received but no headers found...rejecting message")
 		delivery.Reject(false /*requeue*/)
@@ -475,7 +480,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		b.HandlersLock.Unlock()
 	}
 	if len(handlers) == 0 {
-		b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, msgType)
+		b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
 		delivery.Reject(false /*requeue*/)
 		return
 	}
@@ -524,7 +529,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				Message name: %v\n
 				Message type: %v\n
 				Error:\n%v`
-		b.log(logMsg, bm.PayloadFQN, msgType, invkErr)
+		b.log(logMsg, bm.PayloadFQN, bm.Semantics, invkErr)
 		if b.IsTxnl {
 			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
 

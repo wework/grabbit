@@ -1,6 +1,8 @@
 package gbus
 
 import (
+	"log"
+
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -35,27 +37,24 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
 func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers = amqp.Table{}
-	headers["x-msg-id"] = bm.ID
 	headers["x-msg-saga-id"] = bm.SagaID
-	headers["x-msg-semantics"] = bm.Semantics
-	headers["x-msg-correlation-id"] = bm.CorrelationID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
-	headers["x-grabbit-rpc-id"] = bm.RPCID
+	headers["x-grabbit-msg-rpc-id"] = bm.RPCID
 	headers["x-msg-name"] = bm.Payload.Name()
-	headers["x-msg-type"] = bm.Semantics
+
 	return
 }
 
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
 func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
-	bm.ID = castToSgtring(headers["x-msg-id"])
+
+	log.Printf("%v", headers)
+
 	bm.SagaID = castToSgtring(headers["x-msg-saga-id"])
-	bm.Semantics = castToSgtring(headers["x-msg-semantics"])
-	bm.CorrelationID = castToSgtring(headers["x-msg-correlation-id"])
 	bm.SagaCorrelationID = castToSgtring(headers["x-msg-saga-correlation-id"])
-	bm.RPCID = castToSgtring(headers["x-grabbit-rpc-id"])
+	bm.RPCID = castToSgtring(headers["x-grabbit-msg-rpc-id"])
 	bm.PayloadFQN = castToSgtring(headers["x-msg-name"])
-	bm.Semantics = castToSgtring(headers["x-msg-type"])
+
 }
 
 //SetPayload sets the payload and makes sure that Name is saved
