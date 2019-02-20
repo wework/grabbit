@@ -585,9 +585,9 @@ func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange,
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			stackBytes := debug.Stack()
-			stacktrace := string(stackBytes)
-			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%v", err, stacktrace)
+
+			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n", err)
+			debug.PrintStack()
 			er = errors.New(errMsg)
 		}
 	}()
