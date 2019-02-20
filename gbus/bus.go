@@ -53,6 +53,7 @@ type DefaultBus struct {
 	DefaultPolicies      []MessagePolicy
 	Confirm              bool
 	healthChan           chan error
+	backpreasure         bool
 }
 
 var (
@@ -204,6 +205,8 @@ func (b *DefaultBus) Start() error {
 	}
 
 	b.started = true
+	//start monitoring on amqp related errors
+	go b.monitorAMQPErrors()
 	//start consuming messags from service queue
 	for workers := uint(0); workers < b.WorkerNum; workers++ {
 		go b.consumeMessages()
@@ -555,7 +558,7 @@ func (b *DefaultBus) log(format string, v ...interface{}) {
 }
 func (b *DefaultBus) monitorAMQPErrors() {
 
-	for !b.started {
+	for b.started {
 		select {
 		case blocked := <-b.amqpBlocks:
 			if blocked.Active {
@@ -563,8 +566,10 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			} else {
 				b.log("amqp connection unblocked")
 			}
+			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
-			b.log("amqp error: %v", amqpErr.Error())
+
+			b.log("amqp error: %v", amqpErr)
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr
 			}
@@ -574,6 +579,10 @@ func (b *DefaultBus) monitorAMQPErrors() {
 
 func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 
+	//do not attempt to contact the borker if backpreasure is beeing applied
+	if b.backpreasure {
+		return errors.New("can't send message due to backpreasure from amqp broker")
+	}
 	defer func() {
 		if err := recover(); err != nil {
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%v", err, debug.Stack())
