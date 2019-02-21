@@ -28,10 +28,10 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage) {
 	message.SagaID = si.sagaID
 }
 
-func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) {
+func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) error {
 
 	si.setCorrelationIDs(message)
-	si.decoratedInvocation.Reply(ctx, message)
+	return si.decoratedInvocation.Reply(ctx, message)
 }
 
 func (si *sagaInvocation) Bus() gbus.Messaging {

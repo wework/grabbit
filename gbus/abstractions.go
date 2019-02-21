@@ -155,7 +155,7 @@ type Builder interface {
 
 //Invocation context for a specific processed message
 type Invocation interface {
-	Reply(ctx context.Context, message *BusMessage)
+	Reply(ctx context.Context, message *BusMessage) error
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
