@@ -452,6 +452,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poision pill message
 		b.log("message received but no headers found...rejecting message")
+		b.log("recieved message fqn %v, recieved message semantics %v", bm.PayloadFQN, bm.Semantics)
 		delivery.Reject(false /*requeue*/)
 		return
 	}
