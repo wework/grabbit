@@ -642,7 +642,7 @@ func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) er
 	defer b.HandlersLock.Unlock()
 
 	b.Serializer.Register(msg)
-	fqn := msg.Name()
+	fqn := msg.SchemaName()
 
 	handlers := b.MsgHandlers[fqn]
 	if handlers == nil {
