@@ -437,7 +437,9 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		"processMessage",
 		opentracing.FollowsFrom(spCtx),
 	)
-	defer sp.Finish()
+	if sp != nil {
+		defer sp.Finish()
+	}
 
 	// Update the context with the span for the subsequent reference.
 	bm := NewFromAMQPHeaders(delivery.Headers)
@@ -609,7 +611,9 @@ func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange,
 		Headers:         headers,
 	}
 	sp := opentracing.SpanFromContext(ctx)
-	defer sp.Finish()
+	if sp != nil {
+		defer sp.Finish()
+	}
 	// Inject the span context into the AMQP header.
 	if err := amqptracer.Inject(sp, msg.Headers); err != nil {
 		return err
