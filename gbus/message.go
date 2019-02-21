@@ -40,7 +40,7 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers["x-msg-saga-id"] = bm.SagaID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
 	headers["x-grabbit-msg-rpc-id"] = bm.RPCID
-	headers["x-msg-name"] = bm.Payload.Name()
+	headers["x-msg-name"] = bm.Payload.SchemaName()
 
 	return
 }
@@ -59,7 +59,7 @@ func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 
 //SetPayload sets the payload and makes sure that Name is saved
 func (bm *BusMessage) SetPayload(payload Message) {
-	bm.PayloadFQN = payload.Name()
+	bm.PayloadFQN = payload.SchemaName()
 	bm.Payload = payload
 }
 

@@ -13,7 +13,7 @@ import (
 func fqnsFromMessages(objs []gbus.Message) []string {
 	fqns := make([]string, 0)
 	for _, obj := range objs {
-		fqn := obj.Name()
+		fqn := obj.SchemaName()
 		fqns = append(fqns, fqn)
 	}
 	return fqns
@@ -72,7 +72,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	timeoutEtfs, requestsTimeout := saga.(gbus.RequestSagaTimeout)
 	if requestsTimeout {
 		timeoutMessage := gbus.SagaTimeoutMessage{}
-		timeoutMsgName := timeoutMessage.Name()
+		timeoutMsgName := timeoutMessage.SchemaName()
 		_ = def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
 
 		// def.addMsgToHandlerMapping(timeoutMessage, timeoutEtfs.Timeout)

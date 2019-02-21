@@ -18,7 +18,7 @@ type Bus interface {
 }
 
 type Message interface {
-	Name() string
+	SchemaName() string
 }
 
 //Messaging interface to send and publish messages to the bus
@@ -115,7 +115,7 @@ type SagaTimeoutMessage struct {
 }
 
 //Name implements gbus.Message
-func (SagaTimeoutMessage) Name() string {
+func (SagaTimeoutMessage) SchemaName() string {
 	return "grabbit.timeout"
 }
 
