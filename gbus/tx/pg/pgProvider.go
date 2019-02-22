@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	_ "github.com/lib/pq" //blank import
-	"github.com/rhinof/grabbit/gbus/tx"
+	"github.com/rhinof/grabbit/gbus"
 )
 
 //Provider for PostgreSQL
@@ -26,8 +26,8 @@ func (pg *Provider) Dispose() {
 	pg.db.Close()
 }
 
-//NewProvider returns a new PgProvider
-func NewTxProvider(connStr string) (tx.Provider, error) {
+//NewTxProvider returns a new PgProvider
+func NewTxProvider(connStr string) (gbus.TxProvider, error) {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err

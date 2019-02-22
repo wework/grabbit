@@ -168,3 +168,9 @@ type MessageEncoding interface {
 	Decode(buffer []byte) (Message, error)
 	Register(obj Message)
 }
+
+//TxProvider provides a new Tx from the configured driver to the bus
+type TxProvider interface {
+	New() (*sql.Tx, error)
+	Dispose()
+}

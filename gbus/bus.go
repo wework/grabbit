@@ -17,7 +17,6 @@ import (
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 
-	"github.com/rhinof/grabbit/gbus/tx"
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -45,7 +44,7 @@ type DefaultBus struct {
 	PurgeOnStartup       bool
 	started              bool
 	Glue                 SagaRegister
-	TxProvider           tx.Provider
+	TxProvider           TxProvider
 	IsTxnl               bool
 	WorkerNum            uint
 	Serializer           MessageEncoding
