@@ -1,19 +1,20 @@
-package tx
+package pg
 
 import (
 	"context"
 	"database/sql"
 
 	_ "github.com/lib/pq" //blank import
+	"github.com/rhinof/grabbit/gbus/tx"
 )
 
-//PgProvider for PostgreSQL
-type PgProvider struct {
+//Provider for PostgreSQL
+type Provider struct {
 	db *sql.DB
 }
 
 //New PostgreSQL transaction
-func (pg *PgProvider) New() (*sql.Tx, error) {
+func (pg *Provider) New() (*sql.Tx, error) {
 	ctx := context.Background()
 
 	return pg.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -21,17 +22,17 @@ func (pg *PgProvider) New() (*sql.Tx, error) {
 }
 
 //Dispose database connections
-func (pg *PgProvider) Dispose() {
+func (pg *Provider) Dispose() {
 	pg.db.Close()
 }
 
-//NewPgProvider returns a new PgProvider
-func NewPgProvider(connStr string) (Provider, error) {
+//NewProvider returns a new PgProvider
+func NewTxProvider(connStr string) (tx.Provider, error) {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
 	}
-	pg := PgProvider{
+	pg := Provider{
 		db: db}
 	return &pg, nil
 

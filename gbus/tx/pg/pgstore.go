@@ -1,4 +1,4 @@
-package stores
+package pg
 
 import (
 	"bytes"
@@ -14,13 +14,13 @@ import (
 	"github.com/rhinof/grabbit/gbus/tx"
 )
 
-//PgStore implements the saga/store interface on top of PostgreSQL
-type PgStore struct {
+//SagaStore implements the saga/store interface on top of PostgreSQL
+type SagaStore struct {
 	tx      tx.Provider
 	svcName string
 }
 
-func (store *PgStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) {
+func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) {
 
 	instances := make([]*saga.Instance, 0)
 	// reader := &Reader{0, -1}
@@ -56,7 +56,7 @@ func (store *PgStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) {
 }
 
 //GetSagasByType implements interface method store.GetSagasByType
-func (store *PgStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*saga.Instance, error) {
+func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*saga.Instance, error) {
 
 	tblName := store.getSagatableName()
 	selectSQL := "SELECT saga_id, saga_type, saga_data, version FROM " + tblName + " WHERE saga_type=$1"
@@ -71,17 +71,17 @@ func (store *PgStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*saga
 	if instances, scanError := store.scanInstances(rows); scanError == nil {
 		return instances, nil
 	} else {
-		log.Printf("PgStore failed yo scan saga db record\nError:\n%v", error)
+		log.Printf("SagaStore failed yo scan saga db record\nError:\n%v", error)
 		log.Println(error)
 		return nil, scanError
 	}
 }
 
 //UpdateSaga implements interface method store.UpdateSaga
-func (store *PgStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
+func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.getSagatableName()
 	if buf, error := store.serilizeSaga(instance); error != nil {
-		log.Printf("PgStore failed to encode saga with sagaID - %v\n%v", instance.ID, error)
+		log.Printf("SagaStore failed to encode saga with sagaID - %v\n%v", instance.ID, error)
 		return error
 	} else {
 		nextRecVersion := instance.ConcurrencyCtrl + 1
@@ -99,12 +99,12 @@ func (store *PgStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 }
 
 //RegisterSagaType implements interface method store.RegisterSagaType
-func (store *PgStore) RegisterSagaType(saga gbus.Saga) {
+func (store *SagaStore) RegisterSagaType(saga gbus.Saga) {
 	gob.Register(saga)
 }
 
 //DeleteSaga implements interface method store.DeleteSaga
-func (store *PgStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
+func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.getSagatableName()
 	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id=$1`
 	_, err := tx.Exec(deleteSQL, instance.ID)
@@ -112,7 +112,7 @@ func (store *PgStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 }
 
 //GetSagaByID implements interface method store.GetSagaByID
-func (store *PgStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, error) {
+func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, error) {
 
 	tblName := store.getSagatableName()
 	selectSQL := `SELECT saga_id, saga_type, saga_data, version FROM ` + tblName + ` WHERE saga_id=$1`
@@ -133,7 +133,7 @@ func (store *PgStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, er
 }
 
 //SaveNewSaga implements interface method store.SaveNewSaga
-func (store *PgStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) error {
+func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) error {
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := store.getSagatableName()
 	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version)
@@ -152,14 +152,14 @@ func (store *PgStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance
 	return nil
 }
 
-func (store *PgStore) serilizeSaga(instance *saga.Instance) ([]byte, error) {
+func (store *SagaStore) serilizeSaga(instance *saga.Instance) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	error := enc.Encode(instance)
 	return buf.Bytes(), error
 }
 
-func (store *PgStore) newTx() *sql.Tx {
+func (store *SagaStore) newTx() *sql.Tx {
 	tx, error := store.tx.New()
 	if error != nil {
 		e := fmt.Errorf("can't initialize sage store.\nerror:\n%s", error)
@@ -169,7 +169,7 @@ func (store *PgStore) newTx() *sql.Tx {
 	return tx
 }
 
-func (store *PgStore) ensureSchema() {
+func (store *SagaStore) ensureSchema() {
 	log.Println("ensuring saga schema exists")
 	if tablesExists := store.sagaTablesExist(); tablesExists == false {
 		log.Println("could not find saga schema, attempting to creat schema")
@@ -177,11 +177,11 @@ func (store *PgStore) ensureSchema() {
 	}
 }
 
-func (store *PgStore) getSagatableName() string {
+func (store *SagaStore) getSagatableName() string {
 
 	return strings.ToLower("grabbit_" + store.svcName + "_sagas")
 }
-func (store *PgStore) sagaTablesExist() bool {
+func (store *SagaStore) sagaTablesExist() bool {
 
 	tblName := store.getSagatableName()
 	tx := store.newTx()
@@ -203,7 +203,7 @@ func (store *PgStore) sagaTablesExist() bool {
 	return exists
 }
 
-func (store *PgStore) createSagaTables() {
+func (store *SagaStore) createSagaTables() {
 	tblName := store.getSagatableName()
 	tx := store.newTx()
 
@@ -241,9 +241,9 @@ func (store *PgStore) createSagaTables() {
 
 }
 
-//NewPgStore creates a bew PgStore
-func NewPgStore(svcName string, txProvider tx.Provider) saga.Store {
-	store := &PgStore{
+//NewSagaStore creates a bew SagaStore
+func NewSagaStore(svcName string, txProvider tx.Provider) saga.Store {
+	store := &SagaStore{
 		tx:      txProvider,
 		svcName: svcName}
 	store.ensureSchema()

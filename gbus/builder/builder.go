@@ -9,7 +9,7 @@ import (
 	"github.com/rhinof/grabbit/gbus/saga"
 	"github.com/rhinof/grabbit/gbus/saga/stores"
 	"github.com/rhinof/grabbit/gbus/serialization"
-	"github.com/rhinof/grabbit/gbus/tx"
+	"github.com/rhinof/grabbit/gbus/tx/pg"
 )
 
 type defaultBuilder struct {
@@ -54,12 +54,12 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		gb.IsTxnl = true
 		switch builder.txnlProvider {
 		case "pg":
-			pgtx, err := tx.NewPgProvider(builder.txConnStr)
+			pgtx, err := pg.NewTxProvider(builder.txConnStr)
 			if err != nil {
 				panic(err)
 			}
 			gb.TxProvider = pgtx
-			sagaStore = stores.NewPgStore(gb.SvcName, pgtx)
+			sagaStore = pg.NewSagaStore(gb.SvcName, pgtx)
 
 		default:
 			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
