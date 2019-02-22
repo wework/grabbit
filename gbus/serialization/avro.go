@@ -69,7 +69,7 @@ func (as *AvroSerializer) EncoderID() string {
 //Encode encodes an object into a byte array
 func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 
-	name := obj.Name()
+	name := obj.SchemaName()
 	rel, ok := as.registeredSchemas[name]
 	if !ok {
 		err = fmt.Errorf("not a registered obbject :(")
