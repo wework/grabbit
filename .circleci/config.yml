@@ -13,6 +13,14 @@ jobs:
         environment:
           POSTGRES_PASSWORD: rhinof
           POSTGRES_USER: rhinof
+      - image: mysql
+        command: --default-authentication-plugin=mysql_native_password
+        environment:
+            MYSQL_DATABASE: rhinof
+            MYSQL_ROOT_PASSWORD: rhinof
+            MYSQL_USER: rhinof
+            MYSQL_PASSWORD:  rhinof
+
     steps:
       - checkout
       - run:
@@ -21,8 +29,11 @@ jobs:
           environment:
             DOCKERIZE_VERSION: v0.6.1
       - run:
-          name: Wait for db
+          name: Wait for pg
           command: dockerize -wait tcp://localhost:5432 -timeout 1m
+      - run:
+          name: Wait for mysql
+          command: dockerize -wait tcp://localhost:3306 -timeout 1m
       - run:
           name: Wait for rabbitmq
           command: dockerize -wait tcp://localhost:5672 -timeout 1m
