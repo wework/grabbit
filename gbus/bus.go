@@ -536,6 +536,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				Error:\n%v`
 		b.log(logMsg, bm.PayloadFQN, bm.Semantics, invkErr)
 		if b.IsTxnl {
+			b.log("rolling back transaction")
 			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
 
 			if rollbackErr != nil {
