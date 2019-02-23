@@ -9,6 +9,7 @@ import (
 	"github.com/rhinof/grabbit/gbus/saga"
 	"github.com/rhinof/grabbit/gbus/saga/stores"
 	"github.com/rhinof/grabbit/gbus/serialization"
+	"github.com/rhinof/grabbit/gbus/tx/mysql"
 	"github.com/rhinof/grabbit/gbus/tx/pg"
 )
 
@@ -60,6 +61,13 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 			gb.TxProvider = pgtx
 			sagaStore = pg.NewSagaStore(gb.SvcName, pgtx)
+		case "mysql":
+			mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
+			if err != nil {
+				panic(err)
+			}
+			gb.TxProvider = mysqltx
+			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 
 		default:
 			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)

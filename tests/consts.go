@@ -30,7 +30,8 @@ func createNamedBusForTest(svcName string) gbus.Bus {
 		WithPolicies(&policy.Durable{}).
 		WithDeadlettering("grabbit-dead").
 		WithConfirms().
-		Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
+		// Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
+		Txnl("mysql", "rhinof:rhinof@/rhinof").
 		Build(svcName)
 
 }

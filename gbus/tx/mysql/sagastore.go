@@ -1,6 +1,7 @@
-package pg
+package mysql
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 
@@ -27,21 +28,18 @@ func (store *SagaStore) sagaTablesExist() bool {
 	tblName := store.GetSagatableName()
 	tx := store.NewTx()
 
-	sql := `SELECT EXISTS (
-   SELECT 1
-   FROM   information_schema.tables
-   WHERE  table_schema = 'public'
-   AND    table_name = '` + tblName + `');`
+	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 
-	log.Println(sql)
+	log.Println(selectSQL)
 
-	row := tx.QueryRow(sql)
-	var exists bool
-	if err := row.Scan(&exists); err != nil {
-		e := fmt.Errorf("can't initialize sage store.\nerror:\n%s", err)
-		panic(e)
+	row := tx.QueryRow(selectSQL)
+	var exists int
+	err := row.Scan(&exists)
+	if err != nil && err != sql.ErrNoRows {
+		return false
 	}
-	return exists
+
+	return true
 }
 
 func (store *SagaStore) createSagaTables() {
@@ -49,10 +47,10 @@ func (store *SagaStore) createSagaTables() {
 	tx := store.NewTx()
 
 	createTable := `CREATE TABLE ` + tblName + ` (
-		rec_id SERIAL PRIMARY KEY,
+		rec_id INT PRIMARY KEY AUTO_INCREMENT,
 		saga_id VARCHAR(255) UNIQUE NOT NULL,
 		saga_type VARCHAR(255)  NOT NULL,
-		saga_data bytea NOT NULL,
+		saga_data LONGBLOB NOT NULL,
 		version integer NOT NULL DEFAULT 0,
 		last_update timestamp  DEFAULT NOW()
 		)`
@@ -86,10 +84,21 @@ func (store *SagaStore) createSagaTables() {
 func NewSagaStore(svcName string, txProvider gbus.TxProvider) saga.Store {
 
 	base := &tx.SagaStore{
-		Tx:      txProvider,
-		SvcName: svcName}
+		Tx:            txProvider,
+		SvcName:       svcName,
+		ParamsMarkers: getParamsMarker()}
 	store := &SagaStore{
 		base}
 	store.ensureSchema()
 	return store
+}
+
+func getParamsMarker() []string {
+
+	markers := make([]string, 0)
+	for i := 0; i < 100; i++ {
+		markers = append(markers, "?")
+	}
+
+	return markers
 }

@@ -15,8 +15,9 @@ import (
 
 //SagaStore base type for embedding for new transactional saga stores
 type SagaStore struct {
-	Tx      gbus.TxProvider
-	SvcName string
+	Tx            gbus.TxProvider
+	SvcName       string
+	ParamsMarkers []string
 }
 
 func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) {
@@ -58,7 +59,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*saga.Instance, error) {
 
 	tblName := store.GetSagatableName()
-	selectSQL := "SELECT saga_id, saga_type, saga_data, version FROM " + tblName + " WHERE saga_type=$1"
+	selectSQL := "SELECT saga_id, saga_type, saga_data, version FROM " + tblName + " WHERE saga_type=" + store.ParamsMarkers[0]
 
 	rows, error := tx.Query(selectSQL, sagaType.String())
 	defer rows.Close()
@@ -84,8 +85,8 @@ func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 		return error
 	} else {
 		nextRecVersion := instance.ConcurrencyCtrl + 1
-		updateSQL := `UPDATE ` + tblName + ` SET saga_data=$1, version=$2
-	WHERE saga_id=$3 AND version=$4`
+		updateSQL := `UPDATE ` + tblName + ` SET saga_data=` + store.ParamsMarkers[0] + `, version=` + store.ParamsMarkers[1] + `
+	WHERE saga_id=` + store.ParamsMarkers[2] + ` AND version=` + store.ParamsMarkers[3] + ``
 		result, error := tx.Exec(updateSQL, buf, nextRecVersion, instance.ID, instance.ConcurrencyCtrl)
 
 		if error != nil {
@@ -105,7 +106,7 @@ func (store *SagaStore) RegisterSagaType(saga gbus.Saga) {
 //DeleteSaga implements interface method store.DeleteSaga
 func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.GetSagatableName()
-	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id=$1`
+	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
 	_, err := tx.Exec(deleteSQL, instance.ID)
 	return err
 }
@@ -114,7 +115,7 @@ func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, error) {
 
 	tblName := store.GetSagatableName()
-	selectSQL := `SELECT saga_id, saga_type, saga_data, version FROM ` + tblName + ` WHERE saga_id=$1`
+	selectSQL := `SELECT saga_id, saga_type, saga_data, version FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
 
 	rows, error := tx.Query(selectSQL, sagaID)
 	defer rows.Close()
@@ -136,7 +137,7 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := store.GetSagatableName()
 	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version)
-	VALUES ($1, $2, $3, $4)`
+	VALUES (` + store.ParamsMarkers[0] + `, ` + store.ParamsMarkers[1] + `, ` + store.ParamsMarkers[2] + `, ` + store.ParamsMarkers[3] + `)`
 
 	if buf, error := store.serilizeSaga(newInstance); error != nil {
 		log.Printf("failed to encode saga with sagaID - %v\n%v", newInstance.ID, error)
