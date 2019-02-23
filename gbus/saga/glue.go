@@ -21,11 +21,11 @@ func fqnsFromMessages(objs []gbus.Message) []string {
 
 //Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
-	svcName  string
-	bus      gbus.Bus
-	sagaDefs []*Def
-	lock     *sync.Mutex
-
+	svcName              string
+	bus                  gbus.Bus
+	sagaDefs             []*Def
+	lock                 *sync.Mutex
+	alreadyRegistred     map[string]bool
 	msgToDefMap          map[string][]*Def
 	sagaStore            Store
 	timeoutManger        TimeoutManager
@@ -53,12 +53,11 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	imsm.sagaStore.RegisterSagaType(saga)
 
 	def := &Def{
-		bus:            imsm.bus,
+		glue:           imsm,
 		sagaType:       sagaType,
 		startedBy:      fqnsFromMessages(saga.StartedBy()),
 		handlersFunMap: make(map[string]string),
-		lock:           &sync.Mutex{},
-		msgHandler:     imsm.handler}
+		lock:           &sync.Mutex{}}
 
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
@@ -130,7 +129,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
 			}
-
+			return nil
 		} else if message.SagaCorrelationID != "" {
 			instance, e := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 			if e != nil {
@@ -183,16 +182,34 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessa
 	return imsm.sagaStore.UpdateSaga(tx, instance)
 }
 
+func (imsm *Glue) registerMessage(message gbus.Message) error {
+	//only register once on each message so we will not duplicate invokations
+	if _, exists := imsm.alreadyRegistred[message.SchemaName()]; exists {
+		return nil
+	}
+	imsm.alreadyRegistred[message.SchemaName()] = true
+	return imsm.bus.HandleMessage(message, imsm.handler)
+}
+
+func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) error {
+
+	if _, exists := imsm.alreadyRegistred[event.SchemaName()]; exists {
+		return nil
+	}
+	imsm.alreadyRegistred[event.SchemaName()] = true
+	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
+}
+
 //NewGlue creates a new Sagamanager
 func NewGlue(bus gbus.Bus, sagaStore Store, svcName string) *Glue {
 	return &Glue{
-		svcName:  svcName,
-		bus:      bus,
-		sagaDefs: make([]*Def, 0),
-		lock:     &sync.Mutex{},
-
-		msgToDefMap:   make(map[string][]*Def),
-		timeoutManger: TimeoutManager{bus: bus},
-		sagaStore:     sagaStore,
+		svcName:          svcName,
+		bus:              bus,
+		sagaDefs:         make([]*Def, 0),
+		lock:             &sync.Mutex{},
+		alreadyRegistred: make(map[string]bool),
+		msgToDefMap:      make(map[string][]*Def),
+		timeoutManger:    TimeoutManager{bus: bus},
+		sagaStore:        sagaStore,
 	}
 }

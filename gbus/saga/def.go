@@ -11,7 +11,7 @@ import (
 
 //Def defines a saga type
 type Def struct {
-	bus            gbus.Bus
+	glue           *Glue
 	sagaType       reflect.Type
 	startedBy      []string
 	lock           *sync.Mutex
@@ -23,13 +23,13 @@ type Def struct {
 //HandleMessage implements HandlerRegister interface
 func (sd *Def) HandleMessage(message gbus.Message, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(message, handler)
-	return sd.bus.HandleMessage(message, sd.msgHandler)
+	return sd.glue.registerMessage(message)
 }
 
 //HandleEvent implements HandlerRegister interface
 func (sd *Def) HandleEvent(exchange, topic string, event gbus.Message, handler gbus.MessageHandler) error {
 	sd.addMsgToHandlerMapping(event, handler)
-	return sd.bus.HandleEvent(exchange, topic, event, sd.msgHandler)
+	return sd.glue.registerEvent(exchange, topic, event)
 }
 
 func (sd *Def) getHandledMessages() []string {
