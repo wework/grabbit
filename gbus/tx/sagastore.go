@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/rhinof/grabbit/gbus"
@@ -172,5 +173,8 @@ func (store *SagaStore) NewTx() *sql.Tx {
 
 func (store *SagaStore) GetSagatableName() string {
 
-	return strings.ToLower("grabbit_" + store.SvcName + "_sagas")
+	var re = regexp.MustCompile("-|;|\\|")
+	sanitized := re.ReplaceAllString(store.SvcName, "")
+
+	return strings.ToLower("grabbit_" + sanitized + "_sagas")
 }
