@@ -32,7 +32,7 @@ type avroRelation struct {
 
 type avroMessageGenerated interface {
 	Schema() string
-	Name() string
+	SchemaName() string
 	Serialize(w io.Writer) error
 }
 
@@ -165,7 +165,7 @@ func (as *AvroSerializer) RegisterAvroMessageFromFile(schemaName, schemaPath str
 func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avroMessageGenerated, deserializer avroDeserializer) (err error) {
 	as.lock.Lock()
 	defer as.lock.Unlock()
-	if _, ok := as.registeredSchemas[obj.Name()]; !ok {
+	if _, ok := as.registeredSchemas[obj.SchemaName()]; !ok {
 		rel := &avroRelation{
 			SchemaName:   schemaName,
 			Schema:       schema,
@@ -182,7 +182,7 @@ func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avr
 			return
 		}
 		rel.ObjType = reflect.TypeOf(obj)
-		as.registeredSchemas[obj.Name()] = rel
+		as.registeredSchemas[obj.SchemaName()] = rel
 		as.registeredObjects[rel.SchemaId] = rel
 	}
 	return

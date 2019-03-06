@@ -23,6 +23,7 @@ Planned:
 
 ## Supported transactional resources
 1) PostgreSQL
+2) MySql
 ## Supported serializers
 1) gob
 2) Avro
