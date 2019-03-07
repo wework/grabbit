@@ -53,6 +53,7 @@ type DefaultBus struct {
 	Confirm              bool
 	healthChan           chan error
 	backpreasure         bool
+	rabbitFailure        bool
 }
 
 var (
@@ -240,6 +241,15 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 		panic("can't pass nil as health channel")
 	}
 	b.healthChan = health
+}
+
+//GetHealth implements Health.GetHealth
+func (b *DefaultBus) GetHealth() HealthCard {
+	return HealthCard{
+		DbConnected:        b.TxProvider.Ping(),
+		RabbitBackPressure: b.backpreasure,
+		RabbitConnected:    !b.rabbitFailure,
+	}
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
@@ -571,7 +581,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
-
+			b.rabbitFailure = true
 			b.log("amqp error: %v", amqpErr)
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr

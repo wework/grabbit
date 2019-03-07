@@ -50,6 +50,14 @@ type MessagePolicy interface {
 //Health reports om health issues in which the bus needs to be restarted
 type Health interface {
 	NotifyHealth(health chan error)
+	GetHealth() HealthCard
+}
+
+//HealthCard that holds the health values of the bus
+type HealthCard struct {
+	DbConnected        bool
+	RabbitConnected    bool
+	RabbitBackPressure bool
 }
 
 //BusSwitch starts and shutdowns the bus
@@ -173,4 +181,5 @@ type MessageEncoding interface {
 type TxProvider interface {
 	New() (*sql.Tx, error)
 	Dispose()
+	Ping() bool
 }
