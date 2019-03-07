@@ -26,8 +26,9 @@ func (provider *Provider) Dispose() {
 	provider.Database.Close()
 }
 
-func (provider *Provider) Ping() bool {
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
+	ctx, cancel := context.WithTimeout(ctx, timeoutInSeconds*time.Second)
+
 	defer cancel()
 
 	hasPing := true

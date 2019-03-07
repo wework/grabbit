@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/types"
 	"sync"
+	"time"
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
@@ -26,6 +27,8 @@ type defaultBuilder struct {
 	dlx              string
 	defaultPolicies  []gbus.MessagePolicy
 	confirm          bool
+	dbPingTimeout    time.Duration
+	usingPingTimeout bool
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -42,7 +45,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx,
-		DefaultPolicies:      make([]gbus.MessagePolicy, 0)}
+		DefaultPolicies:      make([]gbus.MessagePolicy, 0),
+		DbPingTimeout:        3}
 
 	gb.Confirm = builder.confirm
 	if builder.workerNum < 1 {
@@ -75,6 +79,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		}
 	} else {
 		sagaStore = stores.NewInMemoryStore()
+	}
+
+	if builder.usingPingTimeout {
+		gb.DbPingTimeout = builder.dbPingTimeout
 	}
 
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
@@ -135,8 +143,13 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 }
 
 func (builder *defaultBuilder) WithSerializer(serializer gbus.MessageEncoding) gbus.Builder {
-
 	builder.serializer = serializer
+	return builder
+}
+
+func (builder *defaultBuilder) WithDbPingTimeout(timeoutInSeconds time.Duration) gbus.Builder {
+	builder.usingPingTimeout = true
+	builder.dbPingTimeout = timeoutInSeconds
 	return builder
 }
 

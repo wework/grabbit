@@ -50,7 +50,7 @@ type MessagePolicy interface {
 //Health reports om health issues in which the bus needs to be restarted
 type Health interface {
 	NotifyHealth(health chan error)
-	GetHealth() HealthCard
+	GetHealth(dbTimeoutInSeconds time.Duration) HealthCard
 }
 
 //HealthCard that holds the health values of the bus
@@ -157,6 +157,8 @@ type Builder interface {
 
 	//WithPolicies defines the default policies that are applied for evey outgoing amqp messge
 	WithPolicies(policies ...MessagePolicy) Builder
+	//WithDbPingTimeout defines the default DB ping timeout in seconds
+	WithDbPingTimeout(timeoutInSeconds time.Duration) Builder
 	//Build the bus
 	Build(svcName string) Bus
 }
@@ -181,5 +183,5 @@ type MessageEncoding interface {
 type TxProvider interface {
 	New() (*sql.Tx, error)
 	Dispose()
-	Ping() bool
+	Ping(timeoutInSeconds time.Duration) bool
 }

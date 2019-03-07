@@ -54,6 +54,7 @@ type DefaultBus struct {
 	healthChan           chan error
 	backpreasure         bool
 	rabbitFailure        bool
+	DbPingTimeout        time.Duration
 }
 
 var (
@@ -244,9 +245,9 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 }
 
 //GetHealth implements Health.GetHealth
-func (b *DefaultBus) GetHealth() HealthCard {
+func (b *DefaultBus) GetHealth(dbTimeoutInSeconds time.Duration) HealthCard {
 	return HealthCard{
-		DbConnected:        b.TxProvider.Ping(),
+		DbConnected:        b.TxProvider.Ping(dbTimeoutInSeconds),
 		RabbitBackPressure: b.backpreasure,
 		RabbitConnected:    !b.rabbitFailure,
 	}
