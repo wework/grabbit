@@ -121,6 +121,7 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 	rows, error := tx.Query(selectSQL, sagaID)
 	defer rows.Close()
 	if error != nil {
+		log.Printf("%v Failed to fetch saga with id %s\n%s", store.GetSagatableName(), sagaID, error)
 		return nil, error
 	}
 	instances, error := store.scanInstances(rows)
@@ -150,6 +151,22 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 			return txError
 		}
 	}
+	return nil
+}
+
+func (store *SagaStore) Purge() error {
+	// tx := store.NewTx()
+	//
+	// log.Printf("Purging saga table %v", store.GetSagatableName())
+	// results, err := tx.Exec("SELECT 1 FROM  " + store.GetSagatableName())
+	// tx.Commit()
+	// rowsEffected, err := results.RowsAffected()
+	// if err != nil {
+	// 	log.Printf("Failed to purge saga table %s", err)
+	// } else {
+	// 	log.Printf("Purged %d saga instances", rowsEffected)
+	// }
+
 	return nil
 }
 

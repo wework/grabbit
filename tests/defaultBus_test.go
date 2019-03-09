@@ -3,11 +3,12 @@ package tests
 import (
 	"context"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
 	"log"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/rhinof/grabbit/gbus"
 )
 
@@ -19,9 +20,10 @@ func TestSendCommand(t *testing.T) {
 	b := createBusForTest()
 
 	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		log.Printf("on the moo...%v", message.ID)
 		_, ok := message.Payload.(Command1)
 		if !ok {
-			t.Errorf("handler invoced with wrong message type\r\n%v", cmd)
+			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
 		}
 		proceed <- true
 		return nil
@@ -51,7 +53,8 @@ func TestReply(t *testing.T) {
 	reply := Reply1{}
 	cmdBusMsg := gbus.NewBusMessage(cmd)
 
-	b := createBusForTest()
+	svc1 := createNamedBusForTest(testSvc1)
+	svc2 := createNamedBusForTest(testSvc2)
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
@@ -74,13 +77,16 @@ func TestReply(t *testing.T) {
 		return nil
 	}
 
-	b.HandleMessage(cmd, cmdHandler)
-	b.HandleMessage(reply, replyHandler)
+	svc2.HandleMessage(cmd, cmdHandler)
+	svc1.HandleMessage(reply, replyHandler)
 
-	b.Start()
-	defer b.Shutdown()
+	svc1.Start()
+	defer svc1.Shutdown()
 
-	b.Send(noopTraceContext(), testSvc1, cmdBusMsg)
+	svc2.Start()
+	defer svc2.Shutdown()
+
+	svc1.Send(noopTraceContext(), testSvc2, cmdBusMsg)
 	<-proceed
 }
 
@@ -164,9 +170,9 @@ func TestRPC(t *testing.T) {
 	svc2 := createNamedBusForTest(testSvc2)
 	svc2.Start()
 	defer svc2.Shutdown()
-
+	t.Log("Sending RPC")
 	reply, _ = svc2.RPC(noopTraceContext(), testSvc1, cmd, reply, 5*time.Second)
-
+	t.Log("Tested RPC")
 	if reply == nil {
 		t.Fail()
 	}

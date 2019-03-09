@@ -32,11 +32,14 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
 		AmqpConnStr:          builder.connStr,
+		Outgoing:             &gbus.AMQPOutbox{},
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
 		DelayedSubscriptions: [][]string{},
 		HandlersLock:         &sync.Mutex{},
 		RPCLock:              &sync.Mutex{},
+		SenderLock:           &sync.Mutex{},
+		ConsumerLock:         &sync.Mutex{},
 		IsTxnl:               builder.txnl,
 		MsgHandlers:          make(map[string][]gbus.MessageHandler),
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
@@ -50,7 +53,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	} else {
 		gb.WorkerNum = builder.workerNum
 	}
-	var sagaStore saga.Store
+	var (
+		sagaStore saga.Store
+		txOutbox  gbus.TxOutbox
+	)
 	if builder.txnl {
 		gb.IsTxnl = true
 		switch builder.txnlProvider {
@@ -68,6 +74,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 			gb.TxProvider = mysqltx
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
+			txOutbox = mysql.NewTxOutbox(gb.SvcName, gb.Outgoing, mysqltx, builder.purgeOnStartup)
+			gb.TxOutgoing = txOutbox
 
 		default:
 			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
@@ -77,6 +85,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		sagaStore = stores.NewInMemoryStore()
 	}
 
+	if builder.purgeOnStartup {
+		sagaStore.Purge()
+	}
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
 	return gb
 }

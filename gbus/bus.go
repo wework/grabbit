@@ -24,10 +24,12 @@ import (
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
-	outgoing             *AMQPOutbox
+	Outgoing             *AMQPOutbox
+	TxOutgoing           TxOutbox
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
 	AMQPChannel          *amqp.Channel
+	outAMQPChannel       *amqp.Channel
 	serviceQueue         amqp.Queue
 	rpcQueue             amqp.Queue
 	SvcName              string
@@ -39,6 +41,8 @@ type DefaultBus struct {
 	rpcMsgs              <-chan amqp.Delivery
 	HandlersLock         *sync.Mutex
 	RPCLock              *sync.Mutex
+	SenderLock           *sync.Mutex
+	ConsumerLock         *sync.Mutex
 	RegisteredSchemas    map[string]bool
 	DelayedSubscriptions [][]string
 	PurgeOnStartup       bool
@@ -150,15 +154,13 @@ func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) (*amqp.Channel, er
 	if e != nil {
 		return nil, e
 	}
-	b.AMQPChannel = channel
 	return channel, nil
 }
 
 //Start implements GBus.Start()
 func (b *DefaultBus) Start() error {
-	//create connection
-	var e error
 
+	var e error
 	//create amqo connection and channel
 	if b.amqpConn, e = b.connect(int(MAX_RETRY_COUNT)); e != nil {
 		return e
@@ -167,17 +169,31 @@ func (b *DefaultBus) Start() error {
 	if b.AMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
 		return e
 	}
+	if b.outAMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
+		return e
+	}
+
 	//register on failure notifications
 	b.amqpErrors = make(chan *amqp.Error)
 	b.amqpBlocks = make(chan amqp.Blocking)
 	b.amqpConn.NotifyClose(b.amqpErrors)
 	b.amqpConn.NotifyBlocked(b.amqpBlocks)
 	b.AMQPChannel.NotifyClose(b.amqpErrors)
+	b.outAMQPChannel.NotifyClose(b.amqpErrors)
+	//TODO:Figure out what should be done
 
-	//create the outbox that sends the messages to the amqp transport and handles publisher confirms
-	if b.outgoing, e = NewAMQPOutbox(b.AMQPChannel, b.Confirm); e != nil {
+	//init the outbox that sends the messages to the amqp transport and handles publisher confirms
+	if b.Outgoing.init(b.outAMQPChannel, b.Confirm); e != nil {
 		return e
 	}
+	/*
+		start the transactional outbox, make sure calling b.TxOutgoing.Start() is done only after b.Outgoing.init is called
+		TODO://the design is crap and needs to be refactored
+	*/
+	if b.IsTxnl {
+		b.TxOutgoing.Start()
+	}
+
 	//declare queue
 	var q amqp.Queue
 	if q, e = b.createServiceQueue(); e != nil {
@@ -207,9 +223,10 @@ func (b *DefaultBus) Start() error {
 	//start monitoring on amqp related errors
 	go b.monitorAMQPErrors()
 	//start consuming messags from service queue
-	for workers := uint(0); workers < b.WorkerNum; workers++ {
-		go b.consumeMessages()
-	}
+	go b.consumeMessages()
+	// for workers := uint(0); workers < b.WorkerNum; workers++ {
+	// 	go b.consumeMessages()
+	// }
 
 	return nil
 }
@@ -224,7 +241,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		}
 	}()
 
-	b.outgoing.shutdown()
+	b.Outgoing.shutdown()
 	b.started = false
 	b.amqpConn.Close()
 	if b.IsTxnl {
@@ -242,13 +259,44 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 	b.healthChan = health
 }
 
+func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambiantTx *sql.Tx) error {
+	var activeTx *sql.Tx
+	if b.IsTxnl && ambiantTx == nil {
+		newTx, newTxErr := b.TxProvider.New()
+		if newTxErr != nil {
+			b.log("failed to create transaction when sending a transactional message\n%s", newTxErr)
+			return newTxErr
+		}
+		activeTx = newTx
+	} else {
+		activeTx = ambiantTx
+	}
+	retryAction := func() error {
+		return action(activeTx)
+	}
+	actionErr := b.SafeWithRetries(retryAction, MAX_RETRY_COUNT)
+
+	/*
+		if the bus is transactional and there is no ambient tranaction then create a new one else use the ambient tranaction.
+		if the bus is not transactional a nil transaction reference  will be passed
+	*/
+	if b.IsTxnl {
+		if actionErr != nil {
+			activeTx.Rollback()
+		} else {
+			commitErr := activeTx.Commit()
+			if commitErr != nil {
+				return commitErr
+			}
+		}
+	}
+	return actionErr
+
+}
+
 //Send implements  GBus.Send(destination string, message interface{})
 func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMessage, policies ...MessagePolicy) error {
-	if !b.started {
-		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
-	}
-	message.Semantics = "cmd"
-	return b.sendImpl(ctx, toService, b.SvcName, "", "", message, policies...)
+	return b.sendWithTx(ctx, nil, toService, message, policies...)
 }
 
 //RPC implements  GBus.RPC
@@ -274,7 +322,7 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 	rpc := rpcPolicy{
 		rpcID: rpcID}
 
-	b.sendImpl(ctx, service, b.rpcQueue.Name, "", "", request, rpc)
+	b.sendImpl(ctx, nil, service, b.rpcQueue.Name, "", "", request, rpc)
 
 	//wait for reply or timeout
 	select {
@@ -292,13 +340,31 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 	}
 }
 
-//Publish implements GBus.Publish(topic, message)
-func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = "evt"
-	return b.sendImpl(ctx, "", b.SvcName, exchange, topic, message, policies...)
+	publish := func(tx *sql.Tx) error {
+		return b.sendImpl(ctx, tx, "", b.SvcName, exchange, topic, message, policies...)
+	}
+	return b.withTx(publish, ambientTx)
+}
+
+func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toService string, message *BusMessage, policies ...MessagePolicy) error {
+	if !b.started {
+		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+	}
+	message.Semantics = "cmd"
+	send := func(tx *sql.Tx) error {
+		return b.sendImpl(ctx, tx, toService, b.SvcName, "", "", message, policies...)
+	}
+	return b.withTx(send, ambientTx)
+}
+
+//Publish implements GBus.Publish(topic, message)
+func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
+	return b.publishWithTx(ctx, nil, exchange, topic, message, policies...)
 }
 
 //HandleMessage implements GBus.HandleMessage
@@ -427,6 +493,8 @@ func (b *DefaultBus) consumeMessages() {
 }
 
 func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
+	b.ConsumerLock.Lock()
+	defer b.ConsumerLock.Unlock()
 	if !b.started {
 		return
 	}
@@ -449,7 +517,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	} else {
 		bm.Semantics = "cmd"
 	}
-
+	b.log("Message fqn:%v", bm.PayloadFQN)
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poision pill message
 		b.log("message received but no headers found...rejecting message")
@@ -486,6 +554,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 	if len(handlers) == 0 {
 		b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
+
 		delivery.Reject(false /*requeue*/)
 		return
 	}
@@ -494,6 +563,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	if decErr != nil {
 		b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
+
 		delivery.Reject(false /*requeue*/)
 		return
 	}
@@ -510,16 +580,21 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 	var ackErr, commitErr, rollbackErr, rejectErr error
 	invkErr := b.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
+
 	if invkErr == nil {
 		ack := func() error { return delivery.Ack(false /*multiple*/) }
 
 		ackErr = b.SafeWithRetries(ack, MAX_RETRY_COUNT)
 		if b.IsTxnl && ackErr == nil {
-			b.log("bus commiting transaction")
+
 			commitErr = b.SafeWithRetries(tx.Commit, MAX_RETRY_COUNT)
-			if commitErr != nil {
+			if commitErr == nil {
+				b.log("bus transaction commited successfully ")
+
+			} else {
 				b.log("failed to commit transaction\nerror:%v", commitErr)
 			}
+
 		} else if b.IsTxnl && ackErr != nil {
 			b.log("bus rolling back transaction", ackErr)
 			//TODO:retry on error
@@ -529,11 +604,7 @@ func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 			}
 		}
 	} else {
-		logMsg := `Failed to consume message due to failure of one or more handlers.\n
-				Message rejected as poison.
-				Message name: %v\n
-				Message type: %v\n
-				Error:\n%v`
+		logMsg := "Failed to consume message due to failure of one or more handlers.\n Message rejected as poison. Message name: %v \n  Error: %s"
 		b.log(logMsg, bm.PayloadFQN, bm.Semantics, invkErr)
 		if b.IsTxnl {
 			b.log("rolling back transaction")
@@ -567,7 +638,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			if blocked.Active {
 				b.log("amqp connection blocked. reason:%v", blocked.Reason)
 			} else {
-				b.log("amqp connection unblocked")
+				b.log("amqp connection unblocked, reason:%v", blocked.Reason)
 			}
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
@@ -580,8 +651,9 @@ func (b *DefaultBus) monitorAMQPErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
-
+func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
+	b.SenderLock.Lock()
+	defer b.SenderLock.Unlock()
 	//do not attempt to contact the borker if backpreasure is beeing applied
 	if b.backpreasure {
 		return errors.New("can't send message due to backpreasure from amqp broker")
@@ -636,8 +708,16 @@ func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange,
 	}
 
 	publish := func() error {
-		return b.outgoing.send(exchange, key, msg)
+		if b.IsTxnl && tx != nil {
+			//	b.TxOutgoing.Save(tx, exchange, key, msg)
+
+		}
+		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
+		return outgoingErr
 	}
+	//currently only one thread can publish at a time
+	//TODO:add a publishing workers
+
 	err = b.SafeWithRetries(publish, MAX_RETRY_COUNT)
 
 	if err != nil {
@@ -645,6 +725,32 @@ func (b *DefaultBus) sendImpl(ctx context.Context, toService, replyTo, exchange,
 		return err
 	}
 	return err
+}
+
+func (b *DefaultBus) saveToTxnlOutbox(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
+	tx, newTxErr := b.TxProvider.New()
+
+	if newTxErr != nil {
+		b.log("failed to create transaction for outbox when sending a message\n%s", newTxErr)
+		return newTxErr
+	}
+
+	action := func() error {
+		return b.TxOutgoing.Save(tx, exchange, routingKey, amqpMessage)
+	}
+
+	actionError := b.SafeWithRetries(action, MAX_RETRY_COUNT)
+	if actionError != nil {
+		b.log("failed to save outgoing message to outbox\n%s\n%s", actionError, routingKey)
+		b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
+	} else {
+		commitErr := tx.Commit()
+		if commitErr != nil {
+			b.log("failed to commit outbox transaction\n%s", commitErr)
+		}
+		return commitErr
+	}
+	return actionError
 }
 
 func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) error {

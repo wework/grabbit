@@ -49,22 +49,20 @@ func (out *AMQPOutbox) shutdown() {
 
 }
 
-//Send implements Outbox.Send
-func (out *AMQPOutbox) send(exchange, routingKey string, amqpMessage amqp.Publishing) error {
+//Post implements Outbox.Send
+func (out *AMQPOutbox) Post(exchange, routingKey string, amqpMessage amqp.Publishing) (uint64, error) {
 
+	out.locker.Lock()
+	defer out.locker.Unlock()
+	out.sequence++
 	if out.confirm {
-		out.locker.Lock()
-		out.sequence++
-
 		p := pendingConfirmation{
 			exchange:    exchange,
 			routingKey:  routingKey,
 			amqpMessage: amqpMessage}
 		out.pending[out.sequence] = p
-		out.locker.Unlock()
-		return out.sendToChannel(exchange, routingKey, amqpMessage)
 	}
-	return out.sendToChannel(exchange, routingKey, amqpMessage)
+	return out.sequence, out.sendToChannel(exchange, routingKey, amqpMessage)
 }
 
 func (out *AMQPOutbox) confirmationLoop() {
@@ -94,7 +92,7 @@ func (out *AMQPOutbox) confirmationLoop() {
 			delete(out.pending, nack)
 			out.locker.Unlock()
 		case resend := <-out.resends:
-			out.send(resend.exchange, resend.routingKey, resend.amqpMessage)
+			out.Post(resend.exchange, resend.routingKey, resend.amqpMessage)
 		}
 
 	}

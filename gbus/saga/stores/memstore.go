@@ -88,6 +88,10 @@ func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*s
 	return instances, nil
 }
 
+func (store *InMemorySagaStore) Purge() error {
+	return nil
+}
+
 //NewInMemoryStore is a factory method for the InMemorySagaStore
 func NewInMemoryStore() saga.Store {
 	return &InMemorySagaStore{
