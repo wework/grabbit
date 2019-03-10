@@ -155,17 +155,17 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 }
 
 func (store *SagaStore) Purge() error {
-	// tx := store.NewTx()
-	//
-	// log.Printf("Purging saga table %v", store.GetSagatableName())
-	// results, err := tx.Exec("SELECT 1 FROM  " + store.GetSagatableName())
-	// tx.Commit()
-	// rowsEffected, err := results.RowsAffected()
-	// if err != nil {
-	// 	log.Printf("Failed to purge saga table %s", err)
-	// } else {
-	// 	log.Printf("Purged %d saga instances", rowsEffected)
-	// }
+	tx := store.NewTx()
+
+	log.Printf("Purging saga table %v", store.GetSagatableName())
+	results, err := tx.Exec("DELETE FROM  " + store.GetSagatableName())
+	tx.Commit()
+	rowsEffected, err := results.RowsAffected()
+	if err != nil {
+		log.Printf("Failed to purge saga table %s", err)
+	} else {
+		log.Printf("Purged %d saga instances", rowsEffected)
+	}
 
 	return nil
 }

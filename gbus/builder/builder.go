@@ -74,6 +74,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 			gb.TxProvider = mysqltx
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
+			if builder.purgeOnStartup {
+				sagaStore.Purge()
+			}
 			txOutbox = mysql.NewTxOutbox(gb.SvcName, gb.Outgoing, mysqltx, builder.purgeOnStartup)
 			gb.TxOutgoing = txOutbox
 
