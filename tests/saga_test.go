@@ -172,7 +172,6 @@ func TestSagas(t *testing.T) {
 	}
 }
 
-/*
 func TestSagaTimeout(t *testing.T) {
 	proceed := make(chan bool)
 	svc1 := createNamedBusForTest(testSvc1)
@@ -209,7 +208,7 @@ func TestSagaTimeout(t *testing.T) {
 	<-proceed
 	time.Sleep(5 * time.Second)
 }
-*/
+
 /*Test Sagas*/
 
 type SagaA struct {

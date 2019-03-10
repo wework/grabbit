@@ -23,6 +23,10 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 		replyMessage.RPCID = dfi.inboundMsg.RPCID
 	}
 	var err error
+
+	if dfi.tx != nil {
+		return dfi.bus.sendWithTx(ctx, dfi.tx, false, dfi.invocingSvc, replyMessage)
+	}
 	if err = dfi.bus.Send(ctx, dfi.invocingSvc, replyMessage); err != nil {
 		//TODO: add logs?
 		logrus.WithError(err).Error("could not send reply")
@@ -33,7 +37,7 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 
 func (dfi *defaultInvocationContext) Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error {
 	if dfi.tx != nil {
-		return dfi.bus.sendWithTx(ctx, dfi.tx, toService, command, policies...)
+		return dfi.bus.sendWithTx(ctx, dfi.tx, false, toService, command, policies...)
 	}
 	return dfi.bus.Send(ctx, toService, command, policies...)
 }
@@ -41,7 +45,7 @@ func (dfi *defaultInvocationContext) Send(ctx context.Context, toService string,
 func (dfi *defaultInvocationContext) Publish(ctx context.Context, exchange, topic string, event *BusMessage, policies ...MessagePolicy) error {
 
 	if dfi.tx != nil {
-		return dfi.bus.publishWithTx(ctx, dfi.tx, exchange, topic, event, policies...)
+		return dfi.bus.publishWithTx(ctx, dfi.tx, false, exchange, topic, event, policies...)
 	}
 	return dfi.bus.Publish(ctx, exchange, topic, event, policies...)
 }
