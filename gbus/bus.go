@@ -281,17 +281,31 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 	b.healthChan = health
 }
 
-func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambiantTx *sql.Tx, autoCommit bool) error {
+func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) error {
+	var shouldCommitTx bool
 	var activeTx *sql.Tx
-	if b.IsTxnl && ambiantTx == nil {
+	//create a new transaction only if there is no active one already passed in
+	if b.IsTxnl && ambientTx == nil {
+
+		/*
+			if the passed in ambient transaction is not nil it means that some caller has created the transaction
+			and knows when should this transaction bee commited or rolledback.
+			In these cases we only invoke the passed in action with the passed in transaction
+			and do not commit/rollback the transaction.action
+			If no ambient transaction is passed in then we create a new transaction and commit or rollback after
+			invoking the passed in action
+		*/
+		shouldCommitTx = true
+
 		newTx, newTxErr := b.TxProvider.New()
 		if newTxErr != nil {
 			b.log("failed to create transaction when sending a transactional message\n%s", newTxErr)
 			return newTxErr
 		}
 		activeTx = newTx
+
 	} else {
-		activeTx = ambiantTx
+		activeTx = ambientTx
 	}
 	retryAction := func() error {
 		return action(activeTx)
@@ -302,7 +316,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambiantTx *sql.Tx, au
 		if the bus is transactional and there is no ambient tranaction then create a new one else use the ambient tranaction.
 		if the bus is not transactional a nil transaction reference  will be passed
 	*/
-	if b.IsTxnl && autoCommit {
+	if b.IsTxnl && shouldCommitTx {
 		if actionErr != nil {
 			activeTx.Rollback()
 		} else {
@@ -318,7 +332,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambiantTx *sql.Tx, au
 
 //Send implements  GBus.Send(destination string, message interface{})
 func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMessage, policies ...MessagePolicy) error {
-	return b.sendWithTx(ctx, nil, true, toService, message, policies...)
+	return b.sendWithTx(ctx, nil, toService, message, policies...)
 }
 
 //RPC implements  GBus.RPC
@@ -362,7 +376,7 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 	}
 }
 
-func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, autoCommit bool, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
@@ -370,10 +384,10 @@ func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, autoC
 	publish := func(tx *sql.Tx) error {
 		return b.sendImpl(ctx, tx, "", b.SvcName, exchange, topic, message, policies...)
 	}
-	return b.withTx(publish, ambientTx, autoCommit)
+	return b.withTx(publish, ambientTx)
 }
 
-func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, autoCommit bool, toService string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toService string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
@@ -381,12 +395,12 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, autoComm
 	send := func(tx *sql.Tx) error {
 		return b.sendImpl(ctx, tx, toService, b.SvcName, "", "", message, policies...)
 	}
-	return b.withTx(send, ambientTx, autoCommit)
+	return b.withTx(send, ambientTx)
 }
 
 //Publish implements GBus.Publish(topic, message)
 func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
-	return b.publishWithTx(ctx, nil, true, exchange, topic, message, policies...)
+	return b.publishWithTx(ctx, nil, exchange, topic, message, policies...)
 }
 
 //HandleMessage implements GBus.HandleMessage

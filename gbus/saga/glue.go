@@ -96,7 +96,7 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 }
 
 func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) error {
-	log.Printf("GLUE GLUE -%v- %v", imsm.svcName, message.PayloadFQN)
+
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
