@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"testing"
 	"time"
@@ -20,7 +19,7 @@ func TestSendCommand(t *testing.T) {
 	b := createBusForTest()
 
 	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		log.Printf("on the moo...%v", message.ID)
+
 		_, ok := message.Payload.(Command1)
 		if !ok {
 			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
@@ -158,7 +157,7 @@ func TestRPC(t *testing.T) {
 	reply := gbus.NewBusMessage(Reply1{})
 
 	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-		log.Println("on the moo !!!!")
+
 		invocation.Reply(noopTraceContext(), reply)
 		return nil
 	}

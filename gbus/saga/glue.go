@@ -133,9 +133,9 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return nil
 		} else if message.SagaCorrelationID != "" {
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
-			log.Printf("Konggggddd33 %v", getErr)
+
 			if getErr != nil {
-				log.Printf("KKooooong failed to fetch saga by id (%v)\n%s", message.SagaCorrelationID, getErr)
+				log.Printf("failed to fetch saga by id (%v)\n%s", message.SagaCorrelationID, getErr)
 				return getErr
 			}
 			if instance == nil {

@@ -13,10 +13,6 @@ import (
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
 	"github.com/opentracing/opentracing-go"
 
-	"github.com/Rican7/retry"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
-
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -28,6 +24,7 @@ type DefaultBus struct {
 	TxOutgoing           TxOutbox
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
+	workers              []*worker
 	AMQPChannel          *amqp.Channel
 	outAMQPChannel       *amqp.Channel
 	serviceQueue         amqp.Queue
@@ -80,7 +77,6 @@ func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
 		false, /*exclusive*/
 		false, /*noWait*/
 		nil /*args*/)
-	b.rpcQueue = q
 	return q, e
 }
 
@@ -199,36 +195,62 @@ func (b *DefaultBus) Start() error {
 	if q, e = b.createServiceQueue(); e != nil {
 		return e
 	}
+	b.serviceQueue = q
 
 	//bind queue
 	b.bindServiceQueue()
-	//consume queue
-	b.msgs, e = b.createMessagesChannel(q, b.SvcName)
-	if e != nil {
-		return e
-	}
 
 	//declare rpc queue
-	var rpcQ amqp.Queue
-	if rpcQ, e = b.createRPCQueue(); e != nil {
+
+	if b.rpcQueue, e = b.createRPCQueue(); e != nil {
 		return e
 	}
 
-	b.rpcMsgs, e = b.createMessagesChannel(rpcQ, b.SvcName+"_rpc")
-	if e != nil {
-		return e
-	}
+	workers, createWorkersErr := b.createBusWorkers(b.WorkerNum)
+	if createWorkersErr != nil {
 
+		b.log("error creating channel for worker\n%s", createWorkersErr)
+
+		return createWorkersErr
+	}
+	b.workers = workers
 	b.started = true
 	//start monitoring on amqp related errors
 	go b.monitorAMQPErrors()
 	//start consuming messags from service queue
-	go b.consumeMessages()
-	// for workers := uint(0); workers < b.WorkerNum; workers++ {
-	// 	go b.consumeMessages()
-	// }
 
 	return nil
+}
+
+func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
+	workers := make([]*worker, 0)
+	for i := uint(0); i < workerNum; i++ {
+		//create a channel per worker as we can't share channels accross go routines
+		amqpChan, createChanErr := b.createAMQPChannel(b.amqpConn)
+		if createChanErr != nil {
+			return nil, createChanErr
+		}
+		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
+		w := &worker{
+			consumerTag:  tag,
+			channel:      amqpChan,
+			q:            b.serviceQueue,
+			rpcq:         b.rpcQueue,
+			svcName:      b.SvcName,
+			isTxnl:       b.IsTxnl,
+			txProvider:   b.TxProvider,
+			rpcLock:      b.RPCLock,
+			rpcHandlers:  b.RPCHandlers,
+			msgHandlers:  b.MsgHandlers,
+			handlersLock: b.HandlersLock,
+			serializer:   b.Serializer,
+			b:            b,
+			amqpErrors:   b.amqpErrors}
+		go w.Start()
+
+		workers = append(workers, w)
+	}
+	return workers, nil
 }
 
 //Shutdown implements GBus.Start()
@@ -428,202 +450,6 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 		attempts++
 	}
 	return nil, lastErr
-}
-
-func (b *DefaultBus) invokeHandlers(sctx context.Context, handlers []MessageHandler,
-	message *BusMessage,
-	delivery *amqp.Delivery,
-	tx *sql.Tx) (err error) {
-
-	action := func(attempts uint) (actionErr error) {
-		defer func() {
-			if p := recover(); p != nil {
-
-				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
-				b.log("recovered from panic while invoking handler.\n%v", pncMsg)
-				actionErr = errors.New(pncMsg)
-			}
-		}()
-		for _, handler := range handlers {
-			ctx := &defaultInvocationContext{
-				invocingSvc: delivery.ReplyTo,
-				bus:         b,
-				inboundMsg:  message,
-				tx:          tx,
-				ctx:         sctx,
-			}
-
-			e := handler(ctx, message)
-			if e != nil {
-				return e
-			}
-		}
-		return nil
-	}
-
-	//retry for MAX_RETRY_COUNT, back off by a Fibonacci series 50, 50, 100, 150, 250 ms
-	return retry.Retry(action,
-		strategy.Limit(MAX_RETRY_COUNT),
-		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
-}
-
-func (b *DefaultBus) consumeMessages() {
-	//TODO:Handle panics due to tx errors so the consumption of messages will continue
-
-	for {
-		var isRPCreply bool
-		var delivery, serviceDelivery, rpcDelivery amqp.Delivery
-		select {
-		case serviceDelivery = <-b.msgs:
-			delivery = serviceDelivery
-			isRPCreply = false
-		case rpcDelivery = <-b.rpcMsgs:
-			delivery = rpcDelivery
-			isRPCreply = true
-		}
-
-		//	b.log("consumed message with deliver tag %v\n", delivery.ConsumerTag)
-		/*
-			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
-			and delivery is a zero value so in order not to panic down the road we return if bus is shutdown
-		*/
-		b.processMessage(delivery, isRPCreply)
-
-	}
-}
-
-func (b *DefaultBus) processMessage(delivery amqp.Delivery, isRPCreply bool) {
-	b.ConsumerLock.Lock()
-	defer b.ConsumerLock.Unlock()
-	if !b.started {
-		return
-	}
-	b.log("GOT MSG")
-	spCtx, _ := amqptracer.Extract(delivery.Headers)
-	sp := opentracing.StartSpan(
-		"processMessage",
-		opentracing.FollowsFrom(spCtx),
-	)
-	if sp != nil {
-		defer sp.Finish()
-	}
-
-	// Update the context with the span for the subsequent reference.
-	bm := NewFromAMQPHeaders(delivery.Headers)
-	bm.ID = delivery.MessageId
-	bm.CorrelationID = delivery.CorrelationId
-	if delivery.Exchange != "" {
-		bm.Semantics = "evt"
-	} else {
-		bm.Semantics = "cmd"
-	}
-	b.log("Message fqn:%v", bm.PayloadFQN)
-	if bm.PayloadFQN == "" || bm.Semantics == "" {
-		//TODO: Log poision pill message
-		b.log("message received but no headers found...rejecting message")
-		b.log("recieved message fqn %v, recieved message semantics %v", bm.PayloadFQN, bm.Semantics)
-		delivery.Reject(false /*requeue*/)
-		return
-	}
-
-	//TODO:Dedup message
-	handlers := make([]MessageHandler, 0)
-	if isRPCreply {
-		rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
-		if !rpcHeaderFound {
-			b.log("rpc message received but no rpc header found...rejecting message")
-			delivery.Reject(false /*requeue*/)
-			return
-		}
-		b.RPCLock.Lock()
-		rpcHandler := b.RPCHandlers[rpcID]
-		b.RPCLock.Unlock()
-
-		if rpcHandler == nil {
-			b.log("rpc message received but no rpc header found...rejecting message")
-			delivery.Reject(false /*requeue*/)
-			return
-		}
-
-		handlers = append(handlers, rpcHandler)
-
-	} else {
-		b.HandlersLock.Lock()
-		handlers = b.MsgHandlers[bm.PayloadFQN]
-		b.HandlersLock.Unlock()
-	}
-	if len(handlers) == 0 {
-		b.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
-
-		delivery.Reject(false /*requeue*/)
-		return
-	}
-	var decErr error
-	bm.Payload, decErr = b.Serializer.Decode(delivery.Body)
-
-	if decErr != nil {
-		b.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
-
-		delivery.Reject(false /*requeue*/)
-		return
-	}
-
-	var tx *sql.Tx
-	var txErr error
-	if b.IsTxnl {
-		//TODO:Add retries, and reject message with requeue=true
-		tx, txErr = b.TxProvider.New()
-		if txErr != nil {
-			b.log("failed to create transaction.\n%v", txErr)
-			return
-		}
-	}
-	var ackErr, commitErr, rollbackErr, rejectErr error
-	invkErr := b.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
-
-	if invkErr == nil {
-		ack := func() error { return delivery.Ack(false /*multiple*/) }
-
-		ackErr = b.SafeWithRetries(ack, MAX_RETRY_COUNT)
-		if b.IsTxnl && ackErr == nil {
-
-			commitErr = b.SafeWithRetries(tx.Commit, MAX_RETRY_COUNT)
-			if commitErr == nil {
-				b.log("bus transaction commited successfully ")
-
-			} else {
-				b.log("failed to commit transaction\nerror:%v", commitErr)
-			}
-
-		} else if b.IsTxnl && ackErr != nil {
-			b.log("bus rolling back transaction", ackErr)
-			//TODO:retry on error
-			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
-			if rollbackErr != nil {
-				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
-			}
-		}
-	} else {
-		logMsg := "Failed to consume message due to failure of one or more handlers.\n Message rejected as poison. Message name: %v \n  Error: %s"
-		b.log(logMsg, bm.PayloadFQN, bm.Semantics, invkErr)
-		if b.IsTxnl {
-			b.log("rolling back transaction")
-			rollbackErr = b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
-
-			if rollbackErr != nil {
-				b.log("failed to rollback transaction\nerror:%v", rollbackErr)
-			}
-		}
-		// //add the error to the delivery so if it will be availble in the deadletter
-		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
-		// b.Publish(b.DLX, "", message)
-		reject := func() error { return delivery.Reject(false /*requeue*/) }
-		rejectErr = b.SafeWithRetries(reject, MAX_RETRY_COUNT)
-		if rejectErr != nil {
-
-			b.log("failed to reject message.\nerror:%v", rejectErr)
-		}
-	}
 }
 
 func (b *DefaultBus) log(format string, v ...interface{}) {
