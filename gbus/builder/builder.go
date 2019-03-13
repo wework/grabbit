@@ -74,8 +74,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 
 		default:
-			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
-			panic(error)
+			err := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
+			panic(err)
 		}
 	} else {
 		sagaStore = stores.NewInMemoryStore()
@@ -144,12 +144,6 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 
 func (builder *defaultBuilder) WithSerializer(serializer gbus.MessageEncoding) gbus.Builder {
 	builder.serializer = serializer
-	return builder
-}
-
-func (builder *defaultBuilder) WithDbPingTimeout(timeoutInSeconds time.Duration) gbus.Builder {
-	builder.usingPingTimeout = true
-	builder.dbPingTimeout = timeoutInSeconds
 	return builder
 }
 

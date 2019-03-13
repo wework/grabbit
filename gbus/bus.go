@@ -246,8 +246,16 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 
 //GetHealth implements Health.GetHealth
 func (b *DefaultBus) GetHealth(dbTimeoutInSeconds time.Duration) HealthCard {
+	dbInitiated := b.TxProvider != nil
+	var dbConnected bool
+
+	if dbConnected = false; dbInitiated {
+		dbConnected = b.TxProvider.Ping(dbTimeoutInSeconds)
+	}
+
 	return HealthCard{
-		DbConnected:        b.TxProvider.Ping(dbTimeoutInSeconds),
+		DbInitiated:        dbInitiated,
+		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpreasure,
 		RabbitConnected:    !b.rabbitFailure,
 	}
