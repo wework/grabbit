@@ -13,6 +13,7 @@ import (
 	The test sends three commands and counts the number of reply messages
 	and makes sure all reply messages have unique SagaCorrelationID values
 */
+
 func TestSagaStartUps(t *testing.T) {
 
 	proceed := make(chan bool)
@@ -205,6 +206,7 @@ func TestSagaTimeout(t *testing.T) {
 	}
 
 	<-proceed
+	time.Sleep(5 * time.Second)
 }
 
 /*Test Sagas*/
@@ -284,7 +286,7 @@ func (*SagaB) StartedBy() []gbus.Message {
 func (s *SagaB) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command1{}, s.Startup)
 	register.HandleEvent("test_exchange", "some.topic.1", Event1{}, s.HandleEvent1)
-	register.HandleEvent("test_exchange", "some.topic.2", Event2{}, s.HandleEvent1)
+
 }
 
 func (s *SagaB) New() gbus.Saga {
@@ -301,7 +303,7 @@ func (s *SagaB) Startup(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 }
 
 func (s *SagaB) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-	reply := gbus.NewBusMessage(Reply2{
+	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.HandleEvent1",
 	})
 	invocation.Reply(noopTraceContext(), reply)

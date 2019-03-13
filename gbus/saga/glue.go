@@ -96,6 +96,7 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 }
 
 func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
@@ -131,19 +132,19 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			}
 			return nil
 		} else if message.SagaCorrelationID != "" {
-			instance, e := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
-			if e != nil {
-				return e
+			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
+
+			if getErr != nil {
+				log.Printf("failed to fetch saga by id (%v)\n%s", message.SagaCorrelationID, getErr)
+				return getErr
 			}
 			if instance == nil {
 				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
 				return e
 			}
 			instance.invoke(invocation, message)
-			e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
-			if e != nil {
-				return e
-			}
+			return imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
+
 		} else if message.Semantics == "cmd" {
 			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
 			return e

@@ -15,4 +15,5 @@ type Store interface {
 	SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *Instance) error
 	UpdateSaga(tx *sql.Tx, instance *Instance) error
 	DeleteSaga(tx *sql.Tx, instance *Instance) error
+	Purge() error
 }

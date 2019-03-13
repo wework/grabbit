@@ -185,3 +185,9 @@ type TxProvider interface {
 	Dispose()
 	Ping(timeoutInSeconds time.Duration) bool
 }
+
+//TxOutbox abstracts the transactional outgoing channel type
+type TxOutbox interface {
+	Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error
+	Start() error
+}

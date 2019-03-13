@@ -27,6 +27,7 @@ func (store *SagaStore) sagaTablesExist() bool {
 
 	tblName := store.GetSagatableName()
 	tx := store.NewTx()
+	defer tx.Commit()
 
 	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 

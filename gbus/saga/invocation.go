@@ -16,21 +16,24 @@ type sagaInvocation struct {
 	ctx                 context.Context
 }
 
-func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage) {
+func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
 
 	message.CorrelationID = si.inboundMsg.ID
 
-	//support saga-to-saga communication
-	if si.inboundMsg.SagaID != "" {
-		message.SagaCorrelationID = message.SagaID
+	if isEvent == false {
+		//support saga-to-saga communication
+		if si.inboundMsg.SagaID != "" {
+			message.SagaCorrelationID = message.SagaID
+		}
+
+		message.SagaID = si.sagaID
 	}
 
-	message.SagaID = si.sagaID
 }
 
 func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) error {
 
-	si.setCorrelationIDs(message)
+	si.setCorrelationIDs(message, false)
 	return si.decoratedInvocation.Reply(ctx, message)
 }
 
@@ -47,12 +50,12 @@ func (si *sagaInvocation) Ctx() context.Context {
 }
 
 func (si *sagaInvocation) Send(ctx context.Context, toService string, command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
-	si.setCorrelationIDs(command)
+	si.setCorrelationIDs(command, false)
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
 func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string, event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
-	si.setCorrelationIDs(event)
+	si.setCorrelationIDs(event, true)
 	return si.decoratedBus.Publish(ctx, exchange, topic, event, policies...)
 }
 
