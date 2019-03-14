@@ -284,12 +284,12 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 }
 
 //GetHealth implements Health.GetHealth
-func (b *DefaultBus) GetHealth(dbTimeoutInSeconds time.Duration) HealthCard {
+func (b *DefaultBus) GetHealth() HealthCard {
 	dbInitiated := b.TxProvider != nil
 	var dbConnected bool
 
 	if dbConnected = false; dbInitiated {
-		dbConnected = b.TxProvider.Ping(dbTimeoutInSeconds)
+		dbConnected = b.TxProvider.Ping(b.DbPingTimeout)
 	}
 
 	return HealthCard{

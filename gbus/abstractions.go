@@ -50,7 +50,7 @@ type MessagePolicy interface {
 //Health reports om health issues in which the bus needs to be restarted
 type Health interface {
 	NotifyHealth(health chan error)
-	GetHealth(dbTimeoutInSeconds time.Duration) HealthCard
+	GetHealth() HealthCard
 }
 
 //HealthCard that holds the health values of the bus
