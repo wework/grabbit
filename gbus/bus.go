@@ -285,15 +285,14 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 
 //GetHealth implements Health.GetHealth
 func (b *DefaultBus) GetHealth() HealthCard {
-	dbInitiated := b.TxProvider != nil
 	var dbConnected bool
 
-	if dbConnected = false; dbInitiated {
+	if b.IsTxnl {
 		dbConnected = b.TxProvider.Ping(b.DbPingTimeout)
 	}
 
 	return HealthCard{
-		DbInitiated:        dbInitiated,
+		IsTransactional:    b.IsTxnl,
 		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpreasure,
 		RabbitConnected:    !b.rabbitFailure,

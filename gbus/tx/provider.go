@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-var ctx context.Context
-
 //Provider for PostgreSQL or MySQ
 type Provider struct {
 	Database *sql.DB
@@ -27,6 +25,7 @@ func (provider *Provider) Dispose() {
 }
 
 func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
+	var ctx context.Context
 	ctx, cancel := context.WithTimeout(ctx, timeoutInSeconds*time.Second)
 
 	defer cancel()

@@ -161,7 +161,7 @@ func (builder *defaultBuilder) WithSerializer(serializer gbus.MessageEncoding) g
 	return builder
 }
 
-func (builder *defaultBuilder) WithDbPingTimeout(timeoutInSeconds time.Duration) gbus.Builder {
+func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Duration) gbus.Builder {
 	builder.usingPingTimeout = true
 	builder.dbPingTimeout = timeoutInSeconds
 	return builder

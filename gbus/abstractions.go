@@ -55,7 +55,7 @@ type Health interface {
 
 //HealthCard that holds the health values of the bus
 type HealthCard struct {
-	DbInitiated        bool
+	IsTransactional    bool
 	DbConnected        bool
 	RabbitConnected    bool
 	RabbitBackPressure bool
@@ -159,8 +159,8 @@ type Builder interface {
 	//WithPolicies defines the default policies that are applied for evey outgoing amqp messge
 	WithPolicies(policies ...MessagePolicy) Builder
 
-	//WithDbPingTimeout defines the default timeout in seconds for the db ping check
-	WithDbPingTimeout(timeoutInSeconds time.Duration) Builder
+	//ConfigureHealthCheck defines the default timeout in seconds for the db ping check
+	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
 
 	//Build the bus
 	Build(svcName string) Bus
