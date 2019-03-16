@@ -13,12 +13,12 @@ A lightweight message bus on top of RabbitMQ supporting:
 2) Long running processes via the Saga pattern
 3) Retry and backoffs
 4) Publisher confirms
-5) Deadlettering
+5) Reliable messaging and local service transactivity via Transaction Outbox pattern
+6) Deadlettering
 
 Planned:
 
-1) Transactional Outbox
-2) Deduplication of inbound messages
+1) Deduplication of inbound messages
 
 
 ## Supported transactional resources
