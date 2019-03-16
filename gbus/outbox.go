@@ -9,19 +9,20 @@ import (
 
 //AMQPOutbox sends messages to the amqp transport
 type AMQPOutbox struct {
-	channel  *amqp.Channel
-	confirm  bool
-	sequence uint64
-	ack      chan uint64
-	nack     chan uint64
-	resends  chan pendingConfirmation
-	locker   *sync.Mutex
-	pending  map[uint64]pendingConfirmation
-	active   bool
+	channel      *amqp.Channel
+	confirm      bool
+	resendOnNack bool
+	sequence     uint64
+	ack          chan uint64
+	nack         chan uint64
+	resends      chan pendingConfirmation
+	locker       *sync.Mutex
+	pending      map[uint64]pendingConfirmation
+	stop         chan bool
 }
 
-func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm bool) error {
-	out.active = true
+func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm, resendOnNack bool) error {
+	out.stop = make(chan bool)
 	out.pending = make(map[uint64]pendingConfirmation)
 	out.locker = &sync.Mutex{}
 	out.channel = amqp
@@ -33,19 +34,23 @@ func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm bool) error {
 		out.resends = make(chan pendingConfirmation)
 
 		err := out.channel.Confirm(false /*noWait*/)
-		out.channel.NotifyConfirm(out.ack, out.nack)
 
 		if err != nil {
 			return err
 		}
-		go out.confirmationLoop()
+		if resendOnNack {
+			out.resendOnNack = resendOnNack
+			out.channel.NotifyConfirm(out.ack, out.nack)
+			go out.confirmationLoop()
+		}
+
 	}
 
 	return nil
 }
 
 func (out *AMQPOutbox) shutdown() {
-	out.active = false
+	out.stop <- true
 
 }
 
@@ -54,21 +59,37 @@ func (out *AMQPOutbox) Post(exchange, routingKey string, amqpMessage amqp.Publis
 
 	out.locker.Lock()
 	defer out.locker.Unlock()
-	out.sequence++
+	//generate the delivery tag for this message
+	nextSequence := out.sequence + 1
+
 	if out.confirm {
 		p := pendingConfirmation{
 			exchange:    exchange,
 			routingKey:  routingKey,
 			amqpMessage: amqpMessage}
-		out.pending[out.sequence] = p
+		out.pending[nextSequence] = p
 	}
-	return out.sequence, out.sendToChannel(exchange, routingKey, amqpMessage)
+
+	sendErr := out.sendToChannel(exchange, routingKey, amqpMessage)
+	if sendErr != nil {
+		//if an error was recieved then move the pending confirmation from the pending map
+		delete(out.pending, nextSequence)
+		return 0, sendErr
+
+	} else {
+		// only update the global sequence if the send optation on the channel does not return an error
+		// so that the global sequence and the channel delivery tag counter stay in sync
+		out.sequence = nextSequence
+	}
+	return out.sequence, nil
 }
 
 func (out *AMQPOutbox) confirmationLoop() {
 
-	for out.active {
+	for {
 		select {
+		case <-out.stop:
+			return
 		case ack := <-out.ack:
 			if ack <= 0 {
 				continue
@@ -94,7 +115,6 @@ func (out *AMQPOutbox) confirmationLoop() {
 		case resend := <-out.resends:
 			out.Post(resend.exchange, resend.routingKey, resend.amqpMessage)
 		}
-
 	}
 }
 
@@ -107,10 +127,8 @@ func (out *AMQPOutbox) sendToChannel(exchange, routingKey string, amqpMessage am
 		amqpMessage /*msg*/)
 }
 
-func NewAMQPOutbox(amqp *amqp.Channel, confirm bool) (*AMQPOutbox, error) {
-	outbox := &AMQPOutbox{}
-	e := outbox.init(amqp, confirm)
-	return outbox, e
+func (out *AMQPOutbox) NotifyConfirm(ack, nack chan uint64) {
+	out.channel.NotifyConfirm(ack, nack)
 }
 
 type pendingConfirmation struct {

@@ -20,8 +20,9 @@ import (
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
-	Outgoing             *AMQPOutbox
-	TxOutgoing           TxOutbox
+	Outgoing *AMQPOutbox
+	Outbox   TxOutbox
+
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
 	workers              []*worker
@@ -78,20 +79,6 @@ func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
 		false, /*noWait*/
 		nil /*args*/)
 	return q, e
-}
-
-func (b *DefaultBus) createMessagesChannel(q amqp.Queue, consumerTag string) (<-chan amqp.Delivery, error) {
-	msgs, e := b.AMQPChannel.Consume(q.Name, /*queue*/
-		consumerTag, /*consumer*/
-		false,       /*autoAck*/
-		false,       /*exclusive*/
-		false,       /*noLocal*/
-		false,       /*noWait*/
-		nil /*args* amqp.Table*/)
-	if e != nil {
-		return nil, e
-	}
-	return msgs, nil
 }
 
 func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
@@ -174,12 +161,11 @@ func (b *DefaultBus) Start() error {
 	b.amqpBlocks = make(chan amqp.Blocking)
 	b.amqpConn.NotifyClose(b.amqpErrors)
 	b.amqpConn.NotifyBlocked(b.amqpBlocks)
-	b.AMQPChannel.NotifyClose(b.amqpErrors)
 	b.outAMQPChannel.NotifyClose(b.amqpErrors)
 	//TODO:Figure out what should be done
 
 	//init the outbox that sends the messages to the amqp transport and handles publisher confirms
-	if b.Outgoing.init(b.outAMQPChannel, b.Confirm); e != nil {
+	if b.Outgoing.init(b.outAMQPChannel, b.Confirm, true); e != nil {
 		return e
 	}
 	/*
@@ -187,7 +173,19 @@ func (b *DefaultBus) Start() error {
 		TODO://the design is crap and needs to be refactored
 	*/
 	if b.IsTxnl {
-		b.TxOutgoing.Start()
+
+		if amqpChan, e := b.createAMQPChannel(b.amqpConn); e != nil {
+			b.log("failed to create amqp channel for transactional relay\n%v", e)
+			return e
+		} else {
+			amqpChan.NotifyClose(b.amqpErrors)
+			amqpOutbox := &AMQPOutbox{}
+			amqpOutbox.init(amqpChan, b.Confirm, false)
+			if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
+				b.log("failed to start transactional relay\n%v", startErr)
+				return startErr
+			}
+		}
 	}
 
 	//declare queue
@@ -206,6 +204,7 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 
+	b.log("initiating %v workers", b.WorkerNum)
 	workers, createWorkersErr := b.createBusWorkers(b.WorkerNum)
 	if createWorkersErr != nil {
 
@@ -256,6 +255,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 //Shutdown implements GBus.Start()
 func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 
+	b.log("Shuting down %v ", b.SvcName)
 	defer func() {
 		if p := recover(); p != nil {
 			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
@@ -263,13 +263,17 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		}
 	}()
 
+	for _, worker := range b.workers {
+		worker.Stop()
+	}
+
 	b.Outgoing.shutdown()
 	b.started = false
 	b.amqpConn.Close()
 	if b.IsTxnl {
 		b.TxProvider.Dispose()
+		b.Outbox.Stop()
 	}
-
 	return nil
 }
 
@@ -548,9 +552,15 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 	}
 
 	publish := func() error {
+		//send to the transactional outbox if the bus is transactional
+		//otherwise send directly to amqp
 		if b.IsTxnl && tx != nil {
-			//	b.TxOutgoing.Save(tx, exchange, key, msg)
-
+			b.log("sending message %v to outbox", msg.MessageId)
+			saveErr := b.Outbox.Save(tx, exchange, key, msg)
+			if saveErr != nil {
+				log.Printf("fialed to save to transactional outbox\n%v", saveErr)
+			}
+			return saveErr
 		}
 		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
 		return outgoingErr
@@ -565,32 +575,6 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		return err
 	}
 	return err
-}
-
-func (b *DefaultBus) saveToTxnlOutbox(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
-	tx, newTxErr := b.TxProvider.New()
-
-	if newTxErr != nil {
-		b.log("failed to create transaction for outbox when sending a message\n%s", newTxErr)
-		return newTxErr
-	}
-
-	action := func() error {
-		return b.TxOutgoing.Save(tx, exchange, routingKey, amqpMessage)
-	}
-
-	actionError := b.SafeWithRetries(action, MAX_RETRY_COUNT)
-	if actionError != nil {
-		b.log("failed to save outgoing message to outbox\n%s\n%s", actionError, routingKey)
-		b.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
-	} else {
-		commitErr := tx.Commit()
-		if commitErr != nil {
-			b.log("failed to commit outbox transaction\n%s", commitErr)
-		}
-		return commitErr
-	}
-	return actionError
 }
 
 func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) error {

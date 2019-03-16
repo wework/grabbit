@@ -51,6 +51,8 @@ func TestSagaStartUps(t *testing.T) {
 	cmd3 := gbus.NewBusMessage(Command1{
 		Data: "over",
 	})
+
+	log.Printf("%v - %v - %v", cmd1.ID, cmd2.ID, cmd3.ID)
 	svc1.Send(noopTraceContext(), testSvc2, cmd1)
 	svc1.Send(noopTraceContext(), testSvc2, cmd2)
 	svc1.Send(noopTraceContext(), testSvc2, cmd3)
@@ -206,7 +208,6 @@ func TestSagaTimeout(t *testing.T) {
 	}
 
 	<-proceed
-	time.Sleep(5 * time.Second)
 }
 
 /*Test Sagas*/

@@ -1,8 +1,6 @@
 package gbus
 
 import (
-	"log"
-
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -47,8 +45,6 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
 func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
-
-	log.Printf("%v", headers)
 
 	bm.SagaID = castToSgtring(headers["x-msg-saga-id"])
 	bm.SagaCorrelationID = castToSgtring(headers["x-msg-saga-correlation-id"])

@@ -55,7 +55,6 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 	var (
 		sagaStore saga.Store
-		txOutbox  gbus.TxOutbox
 	)
 	if builder.txnl {
 		gb.IsTxnl = true
@@ -77,8 +76,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			if builder.purgeOnStartup {
 				sagaStore.Purge()
 			}
-			txOutbox = mysql.NewTxOutbox(gb.SvcName, gb.Outgoing, mysqltx, builder.purgeOnStartup)
-			gb.TxOutgoing = txOutbox
+			gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
 
 		default:
 			error := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)

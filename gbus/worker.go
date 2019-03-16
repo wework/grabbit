@@ -36,10 +36,12 @@ type worker struct {
 	serializer   MessageEncoding
 	txProvider   TxProvider
 	amqpErrors   chan *amqp.Error
+	stop         chan bool
 }
 
 func (worker *worker) Start() error {
 
+	worker.log("starting worker")
 	worker.channel.NotifyClose(worker.amqpErrors)
 
 	var (
@@ -55,9 +57,15 @@ func (worker *worker) Start() error {
 	}
 	worker.messages = messages
 	worker.rpcMessages = rpcmsgs
+	worker.stop = make(chan bool)
+	go worker.consumeMessages()
 
-	worker.consumeMessages()
+	return nil
+}
 
+func (worker *worker) Stop() error {
+	worker.log("stopping worker")
+	worker.stop <- true
 	return nil
 }
 
@@ -77,14 +85,19 @@ func (worker *worker) createMessagesChannel(q amqp.Queue, consumerTag string) (<
 }
 
 func (worker *worker) consumeMessages() {
-	//TODO:Handle panics due to tx errors so the consumption of messages will continue
 
+	//TODO:Handle panics due to tx errors so the consumption of messages will continue
 	for {
 
 		var isRPCreply bool
 		var delivery amqp.Delivery
 		var shouldProceed bool
+		worker.log("pingy ping ping %v", worker.messages)
 		select {
+
+		case <-worker.stop:
+			worker.log("stopping to consume messages")
+			return
 		case msgDelivery, ok := <-worker.messages:
 			if ok {
 				shouldProceed = true
@@ -98,20 +111,25 @@ func (worker *worker) consumeMessages() {
 			delivery = rpcDelivery
 			isRPCreply = true
 		}
+
 		/*
 			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
 			and delivery is a zero value so in order not to panic down the road we return if bus is shutdown
 		*/
 		if shouldProceed {
+
 			worker.processMessage(delivery, isRPCreply)
+		} else {
+			worker.log("no proceed %v", delivery.MessageId)
 		}
 
 	}
+
 }
 
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
-	worker.log("GOT MSG")
+	worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
 	spCtx, _ := amqptracer.Extract(delivery.Headers)
 	sp := opentracing.StartSpan(
 		"processMessage",
@@ -120,7 +138,6 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if sp != nil {
 		defer sp.Finish()
 	}
-
 	// Update the context with the span for the subsequent reference.
 	bm := NewFromAMQPHeaders(delivery.Headers)
 	bm.ID = delivery.MessageId
@@ -193,7 +210,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 	var ackErr, commitErr, rollbackErr, rejectErr error
 	invkErr := worker.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
-
+	worker.log("invoked")
 	if invkErr == nil {
 		ack := func() error { return delivery.Ack(false /*multiple*/) }
 

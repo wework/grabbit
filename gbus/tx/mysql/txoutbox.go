@@ -7,25 +7,75 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/rhinof/grabbit/gbus"
+	"github.com/rs/xid"
 	"github.com/streadway/amqp"
+)
+
+var (
+	pending        int
+	waitingConfirm = 1
+	confirmed      = 2
 )
 
 //TxOutbox is a mysql based transactional outbox
 type TxOutbox struct {
-	*gbus.AMQPOutbox
-	svcName string
-	txProv  gbus.TxProvider
+	svcName        string
+	txProv         gbus.TxProvider
+	purgeOnStartup bool
+	ID             string
+	amqpOutbox     *gbus.AMQPOutbox
+
+	ack  chan uint64
+	nack chan uint64
+	exit chan bool
 }
 
-func (outbox *TxOutbox) Start() error {
+func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
+
+	tx, e := outbox.txProv.New()
+	if e != nil {
+		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
+	}
+	if ensureErr := ensureSchema(tx, outbox.svcName); ensureErr != nil {
+		tx.Rollback()
+		return ensureErr
+	}
+	if outbox.purgeOnStartup {
+		if purgeErr := outbox.purge(tx); purgeErr != nil {
+			log.Printf("failed to purge transactional outbox %v", purgeErr)
+			tx.Rollback()
+			return purgeErr
+		}
+	}
+	if commitErr := tx.Commit(); commitErr != nil {
+		return commitErr
+	} else {
+		outbox.amqpOutbox = amqpOut
+		outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
+
+		go outbox.processOutbox()
+		return nil
+	}
+}
+
+func (outbox *TxOutbox) Stop() error {
+	outbox.exit <- true
 	return nil
 }
 
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
 
-	insertSQL := `INSERT INTO ` + outbox.getOutboxName() + ` (delivery_tag, exchange, routing_key, delivery, status) VALUES(?, ?, ?, ?, ?)`
+	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (
+							 message_id,
+							 message_type,
+							 delivery_tag,
+							 exchange,
+							 routing_key,
+							 publishing,
+							 status) VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -34,48 +84,193 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 	if err != nil {
 		return err
 	}
-
-	var pending uint = 0
-	_, insertErr := tx.Exec(insertSQL, -1, exchange, routingKey, buf.Bytes(), pending)
+	unknownDeliverTag := -1
+	_, insertErr := tx.Exec(insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
 
 	return insertErr
 }
 
-func (outbox *TxOutbox) purge(tx *sql.Tx) {
-
-	purgeSQL := `TRUNCATE TABLE ` + outbox.getOutboxName()
-	tx.Exec(purgeSQL)
+func (outbox *TxOutbox) purge(tx *sql.Tx) error {
+	purgeSQL := `DELETE FROM  ` + getOutboxName(outbox.svcName)
+	_, err := tx.Exec(purgeSQL)
+	return err
 }
 
-func (outbox *TxOutbox) ensureSchema(tx *sql.Tx) {
+//NewOutbox creates a new mysql transactional outbox
+func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxOutbox {
 
-	schemaExists := outbox.outBoxTablesExists(tx)
+	txo := &TxOutbox{
+		svcName:        svcName,
+		txProv:         txProv,
+		purgeOnStartup: purgeOnStartup,
+		ID:             xid.New().String(),
+		ack:            make(chan uint64, 10000),
+		nack:           make(chan uint64, 10000),
+		exit:           make(chan bool)}
+	return txo
+}
 
-	if schemaExists {
-		return
+func (outbox *TxOutbox) processOutbox() {
+
+	for {
+		select {
+		case <-outbox.exit:
+			return
+		case <-time.After(time.Second * 1):
+			err := outbox.sendMessages(outbox.getMessageRecords)
+			if err != nil {
+				log.Printf("failed to processOutbox")
+			}
+		case <-time.After(time.Second * 30):
+			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
+			if err != nil {
+				log.Printf("failed to scavenge records")
+			}
+			//scavenge
+		case <-time.After(time.Second * 60):
+			err := outbox.deleteCompletedRecords()
+			if err != nil {
+				log.Printf("failed to delete completed records")
+			}
+		case ack := <-outbox.ack:
+			outbox.updateAckedRecord(ack)
+		case nack := <-outbox.nack:
+			log.Printf("nack received for delivery tag %v", nack)
+		}
+	}
+}
+
+func (outbox *TxOutbox) deleteCompletedRecords() error {
+	tx, txErr := outbox.txProv.New()
+	if txErr != nil {
+		return txErr
+	}
+	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + " WHERE status=?"
+	_, execErr := tx.Exec(deleteSQL, confirmed)
+	if execErr != nil {
+		log.Printf("failed to delete processed records")
+		tx.Rollback()
+	}
+	return tx.Commit()
+}
+
+func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
+	tx, txErr := outbox.txProv.New()
+	if txErr != nil {
+		return txErr
+	}
+	log.Printf("ack received for delivery tag %v", deliveryTag)
+	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE relay_id=? AND delivery_tag=?"
+	_, execErr := tx.Exec(updateSQL, confirmed, outbox.ID, deliveryTag)
+	if execErr != nil {
+		log.Printf("failed to update delivery tag %v for relay_id %v", deliveryTag, outbox.ID)
+		tx.Rollback()
+	}
+	return tx.Commit()
+}
+
+func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 ORDER BY rec_id ASC FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL)
+}
+
+func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1 ORDER BY rec_id ASC FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL)
+}
+
+func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
+
+	tx, txNewErr := outbox.txProv.New()
+
+	if txNewErr != nil {
+		log.Printf("failed creating transaction for outbox.\n%s", txNewErr)
+		return txNewErr
 	}
 
-	createTablesSQL := `CREATE TABLE IF NOT EXISTS ` + outbox.getOutboxName() + ` (
+	rows, selectErr := recordSelector(tx)
+
+	if selectErr != nil {
+		log.Printf("failed fetching messages from outbox.\n%s", selectErr)
+		return selectErr
+	}
+
+	deliverTagsToRecIDs := make(map[uint64]int, 0)
+
+	for rows.Next() {
+		var (
+			recID                int
+			exchange, routingKey string
+			publishingBytes      []byte
+		)
+		if err := rows.Scan(&recID, &exchange, &routingKey, &publishingBytes); err != nil {
+			log.Printf("failed to scan outbox record\n%s", err)
+
+		}
+
+		//de-serialize the amqp message to send over the wire
+		reader := bytes.NewReader(publishingBytes)
+		dec := gob.NewDecoder(reader)
+		var publishing amqp.Publishing
+		decErr := dec.Decode(&publishing)
+
+		if decErr != nil {
+			log.Printf("failed to decode amqp message from outbox record \n%v", decErr)
+			continue
+		}
+		log.Printf("%v relay message %v", outbox.svcName, publishing.MessageId)
+
+		//send the amqp message to rabbitmq
+		if deliveryTag, postErr := outbox.amqpOutbox.Post(exchange, routingKey, publishing); postErr != nil {
+			log.Printf("failed to send amqp message %v with id %v.\n%v", publishing.Headers["x-msg-name"], publishing.MessageId, postErr)
+		} else {
+			deliverTagsToRecIDs[deliveryTag] = recID
+		}
+	}
+	rows.Close()
+
+	for deliveryTag, id := range deliverTagsToRecIDs {
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
+		if updateErr != nil {
+			log.Printf("failed to update transactional outbox with delivery tag %v for message %v\n%v", 111, id, updateErr)
+		}
+	}
+	if cmtErr := tx.Commit(); cmtErr != nil {
+		log.Printf("Error commiting outbox transaction %v", cmtErr)
+	}
+	return nil
+}
+
+func ensureSchema(tx *sql.Tx, svcName string) error {
+
+	schemaExists := outBoxTablesExists(tx, svcName)
+
+	if schemaExists {
+		return nil
+	}
+
+	createTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
 	rec_id int NOT NULL AUTO_INCREMENT,
-	exchange	varchar(50) NULL,
+	message_id varchar(50) NOT NULL UNIQUE,
+	message_type varchar(50) NOT NULL,
+	exchange	varchar(50) NOT NULL,
 	routing_key	varchar(50) NOT NULL,
-	delivery	longblob NOT NULL,
+	publishing	longblob NOT NULL,
 	status	int(11) NOT NULL,
+	relay_id varchar(50)  NULL,
 	delivery_tag	bigint(20) NOT NULL,
 	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(rec_id))`
 
 	_, createErr := tx.Exec(createTablesSQL)
 
-	if createErr != nil {
-		panic(createErr)
-	}
+	return createErr
 
 }
 
-func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx) bool {
+func outBoxTablesExists(tx *sql.Tx, svcName string) bool {
 
-	tblName := outbox.getOutboxName()
+	tblName := getOutboxName(svcName)
 
 	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 
@@ -91,25 +286,7 @@ func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx) bool {
 	return true
 }
 
-func (outbox *TxOutbox) getOutboxName() string {
+func getOutboxName(svcName string) string {
 
-	return strings.ToLower("grabbit_" + sanitizeTableName(outbox.svcName) + "_outbox")
-}
-
-//NewTxOutbox creates a new mysql transactional outbox
-func NewTxOutbox(svcName string, amqpOut *gbus.AMQPOutbox, txProv gbus.TxProvider, purgeOnStartup bool) *TxOutbox {
-
-	txo := &TxOutbox{
-		amqpOut,
-		svcName,
-		txProv}
-	tx, e := txProv.New()
-	if e != nil {
-		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
-	}
-	txo.ensureSchema(tx)
-	if purgeOnStartup {
-		txo.purge(tx)
-	}
-	return txo
+	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
 }

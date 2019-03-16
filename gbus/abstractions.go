@@ -178,5 +178,6 @@ type TxProvider interface {
 //TxOutbox abstracts the transactional outgoing channel type
 type TxOutbox interface {
 	Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error
-	Start() error
+	Start(amqpOut *AMQPOutbox) error
+	Stop() error
 }
