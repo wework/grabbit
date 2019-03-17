@@ -30,7 +30,7 @@ type avroRelation struct {
 	Deserializer avroDeserializer
 }
 
-type avroMessageGenerated interface {
+type AvroMessageGenerated interface {
 	Schema() string
 	SchemaName() string
 	Serialize(w io.Writer) error
@@ -85,9 +85,9 @@ func (as *AvroSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
 	//4-byte schema ID as returned by the Schema Registry
 	msg = append(msg, binarySchemaId...)
 
-	tobj, ok := obj.(avroMessageGenerated)
+	tobj, ok := obj.(AvroMessageGenerated)
 	if !ok {
-		err = fmt.Errorf("could not convert obj to avroMessageGenerated")
+		err = fmt.Errorf("could not convert obj to AvroMessageGenerated")
 		logrus.WithError(err).WithField("obj", obj).Error("could not convert object")
 		return nil, err
 	}
@@ -152,17 +152,17 @@ func (as *AvroSerializer) Register(obj gbus.Message) {
 }
 
 //RegisterAvroMessageFromFile reads an avro schema (.avsc) and registers it to a topic and binds it to an object (obj)
-func (as *AvroSerializer) RegisterAvroMessageFromFile(schemaName, schemaPath string, obj avroMessageGenerated, deserializer avroDeserializer) (err error) {
+func (as *AvroSerializer) RegisterAvroMessageFromFile(schemaName, schemaPath, namespace string, obj AvroMessageGenerated, deserializer avroDeserializer) (err error) {
 	dat, err := ioutil.ReadFile(schemaPath)
 	if err != nil {
 		logrus.WithError(err).WithField("schema_path", schemaPath).Error("could not find schema")
 		return
 	}
-	return as.RegisterAvroMessage(schemaName, string(dat), obj, deserializer)
+	return as.RegisterAvroMessage(schemaName, namespace, string(dat), obj, deserializer)
 }
 
 //RegisterAvroMessage registers a schema to a topic and binds it to an object (obj)
-func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avroMessageGenerated, deserializer avroDeserializer) (err error) {
+func (as *AvroSerializer) RegisterAvroMessage(schemaName, namespace, schema string, obj AvroMessageGenerated, deserializer avroDeserializer) (err error) {
 	as.lock.Lock()
 	defer as.lock.Unlock()
 	if _, ok := as.registeredSchemas[obj.SchemaName()]; !ok {
@@ -176,7 +176,7 @@ func (as *AvroSerializer) RegisterAvroMessage(schemaName, schema string, obj avr
 			logrus.WithError(err).Error("could not get codec for schema")
 			return
 		}
-		rel.SchemaId, err = as.registerOrGetSchemaId(fmt.Sprintf("we.avro.%s", schemaName), rel.Codec)
+		rel.SchemaId, err = as.registerOrGetSchemaId(fmt.Sprintf("%s.%s", namespace, schemaName), rel.Codec)
 		if err != nil {
 			logrus.WithError(err).Error("could not get schema id")
 			return
