@@ -50,6 +50,14 @@ type MessagePolicy interface {
 //Health reports om health issues in which the bus needs to be restarted
 type Health interface {
 	NotifyHealth(health chan error)
+	GetHealth() HealthCard
+}
+
+//HealthCard that holds the health values of the bus
+type HealthCard struct {
+	DbConnected        bool
+	RabbitConnected    bool
+	RabbitBackPressure bool
 }
 
 //BusSwitch starts and shutdowns the bus
@@ -149,6 +157,10 @@ type Builder interface {
 
 	//WithPolicies defines the default policies that are applied for evey outgoing amqp messge
 	WithPolicies(policies ...MessagePolicy) Builder
+
+	//ConfigureHealthCheck defines the default timeout in seconds for the db ping check
+	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
+
 	//Build the bus
 	Build(svcName string) Bus
 }
@@ -173,6 +185,7 @@ type MessageEncoding interface {
 type TxProvider interface {
 	New() (*sql.Tx, error)
 	Dispose()
+	Ping(timeoutInSeconds time.Duration) bool
 }
 
 //TxOutbox abstracts the transactional outgoing channel type

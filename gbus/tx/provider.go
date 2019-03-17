@@ -3,22 +3,37 @@ package tx
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
-//Provider for PostgreSQL
+//Provider for PostgreSQL or MySQ
 type Provider struct {
 	Database *sql.DB
 }
 
-//New PostgreSQL transaction
-func (pg *Provider) New() (*sql.Tx, error) {
+//New transaction
+func (provider *Provider) New() (*sql.Tx, error) {
 	ctx := context.Background()
 
-	return pg.Database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return provider.Database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 
 }
 
 //Dispose database connections
-func (pg *Provider) Dispose() {
-	pg.Database.Close()
+func (provider *Provider) Dispose() {
+	provider.Database.Close()
+}
+
+func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
+	var ctx context.Context
+	ctx, cancel := context.WithTimeout(ctx, timeoutInSeconds*time.Second)
+
+	defer cancel()
+
+	hasPing := true
+	if err := provider.Database.PingContext(ctx); err != nil {
+		hasPing = false
+	}
+
+	return hasPing
 }

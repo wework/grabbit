@@ -52,6 +52,8 @@ type DefaultBus struct {
 	Confirm              bool
 	healthChan           chan error
 	backpreasure         bool
+	rabbitFailure        bool
+	DbPingTimeout        time.Duration
 }
 
 var (
@@ -282,6 +284,21 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 	b.healthChan = health
 }
 
+//GetHealth implements Health.GetHealth
+func (b *DefaultBus) GetHealth() HealthCard {
+	var dbConnected bool
+
+	if b.IsTxnl {
+		dbConnected = b.TxProvider.Ping(b.DbPingTimeout)
+	}
+
+	return HealthCard{
+		DbConnected:        dbConnected,
+		RabbitBackPressure: b.backpreasure,
+		RabbitConnected:    !b.rabbitFailure,
+	}
+}
+
 func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) error {
 	var shouldCommitTx bool
 	var activeTx *sql.Tx
@@ -328,7 +345,6 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 		}
 	}
 	return actionErr
-
 }
 
 //Send implements  GBus.Send(destination string, message interface{})
@@ -483,7 +499,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
-
+			b.rabbitFailure = true
 			b.log("amqp error: %v", amqpErr)
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr
