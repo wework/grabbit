@@ -55,7 +55,6 @@ type Health interface {
 
 //HealthCard that holds the health values of the bus
 type HealthCard struct {
-	IsTransactional    bool
 	DbConnected        bool
 	RabbitConnected    bool
 	RabbitBackPressure bool

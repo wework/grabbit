@@ -292,7 +292,6 @@ func (b *DefaultBus) GetHealth() HealthCard {
 	}
 
 	return HealthCard{
-		IsTransactional:    b.IsTxnl,
 		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpreasure,
 		RabbitConnected:    !b.rabbitFailure,
