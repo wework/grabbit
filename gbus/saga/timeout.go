@@ -2,9 +2,9 @@ package saga
 
 import (
 	"context"
-	"github.com/opentracing/opentracing-go"
-	"github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/rhinof/grabbit/gbus"
 )
@@ -25,11 +25,13 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 			SagaID: sagaID}
 		msg := gbus.NewBusMessage(reuqestTimeout)
 		msg.SagaCorrelationID = sagaID
+		/* TODO:FIX Opentracing
 		span := opentracing.GlobalTracer().StartSpan("timeout")
 		if span != nil {
 			defer span.Finish()
 		}
-		if err := tm.bus.Send(opentracing.ContextWithSpan(context.Background(), span), svcName, msg); err != nil {
+		*/
+		if err := tm.bus.Send(context.Background(), svcName, msg); err != nil {
 			//TODO: add logger
 			logrus.WithError(err).Error("could not send timeout to bus")
 		}

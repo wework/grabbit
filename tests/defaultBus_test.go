@@ -2,10 +2,11 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/rhinof/grabbit/gbus"
 )
 
@@ -106,77 +107,78 @@ func TestPubSub(t *testing.T) {
 
 }
 
-// func TestHandlerRetry(t *testing.T) {
-//
-// 	c1 := Command1{}
-// 	r1 := Reply1{}
-// 	cmd := gbus.NewBusMessage(c1)
-// 	reply := gbus.NewBusMessage(r1)
-//
-// 	bus := createBusForTest()
-//
-// 	proceed := make(chan bool)
-// 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-// 		invocation.Reply(noopTraceContext(), reply)
-// 		return nil
-// 	}
-//
-// 	attempts := 0
-// 	replyHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-// 		if attempts == 0 {
-// 			attempts++
-// 			return fmt.Errorf("expecting retry on errors")
-// 		} else if attempts == 1 {
-// 			attempts++
-// 			panic("expecting retry on panics")
-// 		} else {
-// 			proceed <- true
-// 		}
-// 		return nil
-// 	}
-//
-// 	bus.HandleMessage(c1, cmdHandler)
-// 	bus.HandleMessage(r1, replyHandler)
-//
-// 	bus.Start()
-// 	defer bus.Shutdown()
-//
-// 	bus.Send(noopTraceContext(), testSvc1, cmd)
-// 	<-proceed
-//
-// }
-//
-// func TestRPC(t *testing.T) {
-//
-// 	c1 := Command1{}
-// 	cmd := gbus.NewBusMessage(c1)
-// 	reply := gbus.NewBusMessage(Reply1{})
-//
-// 	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-//
-// 		invocation.Reply(noopTraceContext(), reply)
-// 		return nil
-// 	}
-//
-// 	svc1 := createNamedBusForTest(testSvc1)
-// 	svc1.HandleMessage(c1, handler)
-// 	svc1.Start()
-// 	defer svc1.Shutdown()
-// 	svc2 := createNamedBusForTest(testSvc2)
-// 	svc2.Start()
-// 	defer svc2.Shutdown()
-// 	t.Log("Sending RPC")
-// 	reply, _ = svc2.RPC(noopTraceContext(), testSvc1, cmd, reply, 5*time.Second)
-// 	t.Log("Tested RPC")
-// 	if reply == nil {
-// 		t.Fail()
-// 	}
-//
-// }
+func TestHandlerRetry(t *testing.T) {
+
+	c1 := Command1{}
+	r1 := Reply1{}
+	cmd := gbus.NewBusMessage(c1)
+	reply := gbus.NewBusMessage(r1)
+
+	bus := createBusForTest()
+
+	proceed := make(chan bool)
+	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+		invocation.Reply(noopTraceContext(), reply)
+		return nil
+	}
+
+	attempts := 0
+	replyHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+		if attempts == 0 {
+			attempts++
+			return fmt.Errorf("expecting retry on errors")
+		} else if attempts == 1 {
+			attempts++
+			panic("expecting retry on panics")
+		} else {
+			proceed <- true
+		}
+		return nil
+	}
+
+	bus.HandleMessage(c1, cmdHandler)
+	bus.HandleMessage(r1, replyHandler)
+
+	bus.Start()
+	defer bus.Shutdown()
+
+	bus.Send(noopTraceContext(), testSvc1, cmd)
+	<-proceed
+
+}
+
+func TestRPC(t *testing.T) {
+
+	c1 := Command1{}
+	cmd := gbus.NewBusMessage(c1)
+	reply := gbus.NewBusMessage(Reply1{})
+
+	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+
+		invocation.Reply(noopTraceContext(), reply)
+		return nil
+	}
+
+	svc1 := createNamedBusForTest(testSvc1)
+	svc1.HandleMessage(c1, handler)
+	svc1.Start()
+	defer svc1.Shutdown()
+	svc2 := createNamedBusForTest(testSvc2)
+	svc2.Start()
+	defer svc2.Shutdown()
+	t.Log("Sending RPC")
+	reply, _ = svc2.RPC(noopTraceContext(), testSvc1, cmd, reply, 5*time.Second)
+	t.Log("Tested RPC")
+	if reply == nil {
+		t.Fail()
+	}
+
+}
 
 func noopTraceContext() context.Context {
-	tracer := opentracing.NoopTracer{}
-	span := tracer.StartSpan("test")
-	ctx := opentracing.ContextWithSpan(context.Background(), span)
-	return ctx
+	return context.Background()
+	// tracer := opentracing.NoopTracer{}
+	// span := tracer.StartSpan("test")
+	// ctx := opentracing.ContextWithSpan(context.Background(), span)
+	// return ctx
 }

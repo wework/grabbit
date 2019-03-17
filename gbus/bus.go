@@ -10,9 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opentracing-contrib/go-amqp/amqptracer"
-	"github.com/opentracing/opentracing-go"
-
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -526,6 +523,8 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		ContentEncoding: b.Serializer.EncoderID(),
 		Headers:         headers,
 	}
+
+	/* TODO:FIX Opentracing context
 	sp := opentracing.SpanFromContext(ctx)
 	if sp != nil {
 		defer sp.Finish()
@@ -534,7 +533,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 	if err := amqptracer.Inject(sp, msg.Headers); err != nil {
 		return err
 	}
-
+	*/
 	for _, defaultPolicy := range b.DefaultPolicies {
 		defaultPolicy.Apply(&msg)
 	}

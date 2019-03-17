@@ -13,8 +13,6 @@ import (
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
-	"github.com/opentracing-contrib/go-amqp/amqptracer"
-	"github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
 
@@ -92,7 +90,7 @@ func (worker *worker) consumeMessages() {
 		var isRPCreply bool
 		var delivery amqp.Delivery
 		var shouldProceed bool
-		worker.log("pingy ping ping %v", worker.messages)
+
 		select {
 
 		case <-worker.stop:
@@ -130,6 +128,7 @@ func (worker *worker) consumeMessages() {
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
+	/*TODO:FIX Opentracing
 	spCtx, _ := amqptracer.Extract(delivery.Headers)
 	sp := opentracing.StartSpan(
 		"processMessage",
@@ -138,6 +137,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if sp != nil {
 		defer sp.Finish()
 	}
+	*/
 	// Update the context with the span for the subsequent reference.
 	bm := NewFromAMQPHeaders(delivery.Headers)
 	bm.ID = delivery.MessageId
@@ -209,7 +209,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		}
 	}
 	var ackErr, commitErr, rollbackErr, rejectErr error
-	invkErr := worker.invokeHandlers(opentracing.ContextWithSpan(context.Background(), sp), handlers, bm, &delivery, tx)
+	invkErr := worker.invokeHandlers(context.Background(), handlers, bm, &delivery, tx)
 	worker.log("invoked")
 	if invkErr == nil {
 		ack := func() error { return delivery.Ack(false /*multiple*/) }
