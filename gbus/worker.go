@@ -151,7 +151,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poision pill message
 		worker.log("message received but no headers found...rejecting message")
-		worker.log("recieved message fqn %v, recieved message semantics %v", bm.PayloadFQN, bm.Semantics)
+		worker.log("received message fqn %v, received message semantics %v", bm.PayloadFQN, bm.Semantics)
 		delivery.Reject(false /*requeue*/)
 		return
 	}
@@ -219,7 +219,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 			commitErr = worker.SafeWithRetries(tx.Commit, MAX_RETRY_COUNT)
 			if commitErr == nil {
-				worker.log("bus transaction commited successfully ")
+				worker.log("bus transaction comitted successfully ")
 
 			} else {
 				worker.log("failed to commit transaction\nerror:%v", commitErr)
@@ -244,7 +244,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				worker.log("failed to rollback transaction\nerror:%v", rollbackErr)
 			}
 		}
-		// //add the error to the delivery so if it will be availble in the deadletter
+		// //add the error to the delivery so if it will be available in the deadletter
 		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
 		// b.Publish(b.DLX, "", message)
 		reject := func() error { return delivery.Reject(false /*requeue*/) }

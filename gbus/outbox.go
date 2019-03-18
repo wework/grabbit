@@ -72,7 +72,7 @@ func (out *AMQPOutbox) Post(exchange, routingKey string, amqpMessage amqp.Publis
 
 	sendErr := out.sendToChannel(exchange, routingKey, amqpMessage)
 	if sendErr != nil {
-		//if an error was recieved then move the pending confirmation from the pending map
+		//if an error was received then move the pending confirmation from the pending map
 		delete(out.pending, nextSequence)
 		return 0, sendErr
 
@@ -97,7 +97,7 @@ func (out *AMQPOutbox) confirmationLoop() {
 			out.locker.Lock()
 			pending := out.pending[ack]
 			if pending.deliveryTag > 0 {
-				log.Printf("ack recived for a pending delivery with tag %v", ack)
+				log.Printf("ack received for a pending delivery with tag %v", ack)
 			}
 			delete(out.pending, ack)
 			out.locker.Unlock()
@@ -105,7 +105,7 @@ func (out *AMQPOutbox) confirmationLoop() {
 			if nack <= 0 {
 				continue
 			}
-			log.Printf("nack recived for delivery tag %v", nack)
+			log.Printf("nack received for delivery tag %v", nack)
 			out.locker.Lock()
 			pending := out.pending[nack]
 			pending.deliveryTag = nack

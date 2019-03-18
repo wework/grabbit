@@ -36,7 +36,7 @@ type Messaging interface {
 
 	/*
 		RPC calls the service passing him the request BusMessage and blocks until a reply is
-		recived or timeout experied.
+		received or timeout experied.
 
 	*/
 	RPC(ctx context.Context, service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error)
@@ -142,7 +142,7 @@ type Builder interface {
 		connStr: connection string in the format of the passed in provider
 	*/
 	Txnl(provider, connStr string) Builder
-	//WithSerializer provides teh ability to plugin custom serializers
+	//WithSerializer provides the ability to plugin custom serializers
 	WithSerializer(serializer MessageEncoding) Builder
 	/*
 		 		WorkerNum sets the number of worker go routines consuming messages from the queue

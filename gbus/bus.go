@@ -223,7 +223,7 @@ func (b *DefaultBus) Start() error {
 func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 	workers := make([]*worker, 0)
 	for i := uint(0); i < workerNum; i++ {
-		//create a channel per worker as we can't share channels accross go routines
+		//create a channel per worker as we can't share channels across go routines
 		amqpChan, createChanErr := b.createAMQPChannel(b.amqpConn)
 		if createChanErr != nil {
 			return nil, createChanErr
@@ -307,7 +307,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 
 		/*
 			if the passed in ambient transaction is not nil it means that some caller has created the transaction
-			and knows when should this transaction bee commited or rolledback.
+			and knows when should this transaction bee committed or rolledback.
 			In these cases we only invoke the passed in action with the passed in transaction
 			and do not commit/rollback the transaction.action
 			If no ambient transaction is passed in then we create a new transaction and commit or rollback after
@@ -511,7 +511,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
-	//do not attempt to contact the borker if backpreasure is beeing applied
+	//do not attempt to contact the borker if backpreasure is being applied
 	if b.backpreasure {
 		return errors.New("can't send message due to backpreasure from amqp broker")
 	}
