@@ -43,6 +43,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 
 		dec := gob.NewDecoder(reader)
 		var instance saga.Instance
+		instance.ConcurrencyCtrl = version
 		decErr := dec.Decode(&instance)
 		if decErr != nil {
 			log.Printf("failed to decode saga instance\n%v", decErr)
@@ -81,14 +82,17 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*sa
 //UpdateSaga implements interface method store.UpdateSaga
 func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.GetSagatableName()
+	currentVersion := instance.ConcurrencyCtrl
+	nextVersion := instance.ConcurrencyCtrl + 1
+	instance.ConcurrencyCtrl = nextVersion
 	if buf, error := store.serilizeSaga(instance); error != nil {
 		log.Printf("SagaStore failed to encode saga with sagaID - %v\n%v", instance.ID, error)
 		return error
 	} else {
-		nextRecVersion := instance.ConcurrencyCtrl + 1
+
 		updateSQL := `UPDATE ` + tblName + ` SET saga_data=` + store.ParamsMarkers[0] + `, version=` + store.ParamsMarkers[1] + `
 	WHERE saga_id=` + store.ParamsMarkers[2] + ` AND version=` + store.ParamsMarkers[3] + ``
-		result, error := tx.Exec(updateSQL, buf, nextRecVersion, instance.ID, instance.ConcurrencyCtrl)
+		result, error := tx.Exec(updateSQL, buf, nextVersion, instance.ID, currentVersion)
 
 		if error != nil {
 			return error
