@@ -29,8 +29,8 @@ func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm, resendOnNack bool) erro
 	out.confirm = confirm
 	if confirm {
 
-		out.ack = make(chan uint64, 1000000)
-		out.nack = make(chan uint64, 1000000)
+		out.ack = make(chan uint64, 10)
+		out.nack = make(chan uint64, 10)
 		out.resends = make(chan pendingConfirmation)
 
 		err := out.channel.Confirm(false /*noWait*/)
