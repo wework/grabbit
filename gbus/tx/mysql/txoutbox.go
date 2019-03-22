@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,9 +16,11 @@ import (
 )
 
 var (
-	pending        int
-	waitingConfirm = 1
-	confirmed      = 2
+	pending             int
+	waitingConfirm      = 1
+	confirmed           = 2
+	maxPageSize         = 100
+	maxDeliveryAttempts = 50
 )
 
 //TxOutbox is a mysql based transactional outbox
@@ -91,6 +94,7 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 }
 
 func (outbox *TxOutbox) purge(tx *sql.Tx) error {
+
 	purgeSQL := `DELETE FROM  ` + getOutboxName(outbox.svcName)
 	_, err := tx.Exec(purgeSQL)
 	return err
@@ -170,12 +174,12 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 ORDER BY rec_id ASC FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 AND delivery_attemtps < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
 func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1 ORDER BY rec_id ASC FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
@@ -195,7 +199,8 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		return selectErr
 	}
 
-	deliverTagsToRecIDs := make(map[uint64]int, 0)
+	successfulDeliveries := make(map[uint64]int, 0)
+	failedDeliveries := make([]int, 0)
 
 	for rows.Next() {
 		var (
@@ -223,20 +228,28 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		//send the amqp message to rabbitmq
 		if deliveryTag, postErr := outbox.amqpOutbox.Post(exchange, routingKey, publishing); postErr != nil {
 			log.Printf("failed to send amqp message %v with id %v.\n%v", publishing.Headers["x-msg-name"], publishing.MessageId, postErr)
+			failedDeliveries = append(failedDeliveries, recID)
 		} else {
-			deliverTagsToRecIDs[deliveryTag] = recID
+			successfulDeliveries[deliveryTag] = recID
 		}
 	}
 	rows.Close()
 
-	for deliveryTag, id := range deliverTagsToRecIDs {
+	for deliveryTag, id := range successfulDeliveries {
 		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
 		if updateErr != nil {
 			log.Printf("failed to update transactional outbox with delivery tag %v for message %v\n%v", 111, id, updateErr)
 		}
 	}
+
+	for recid := range failedDeliveries {
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attemtps=delivery_attemtps+1  WHERE rec_id=?", recid)
+		if updateErr != nil {
+			log.Printf("failed to update transactional outbox with failed deivery attempt for record %v\n%v", recid, updateErr)
+		}
+	}
 	if cmtErr := tx.Commit(); cmtErr != nil {
-		log.Printf("Error commiting outbox transaction %v", cmtErr)
+		log.Printf("Error committing outbox transaction %v", cmtErr)
 	}
 	return nil
 }
@@ -259,6 +272,7 @@ func ensureSchema(tx *sql.Tx, svcName string) error {
 	status	int(11) NOT NULL,
 	relay_id varchar(50)  NULL,
 	delivery_tag	bigint(20) NOT NULL,
+	delivery_attemtps int NOT NULL DEFAULT 0,
 	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(rec_id))`
 
