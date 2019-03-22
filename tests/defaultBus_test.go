@@ -19,7 +19,7 @@ func TestSendCommand(t *testing.T) {
 
 	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
-		_, ok := message.Payload.(Command1)
+		_, ok := message.Payload.(*Command1)
 		if !ok {
 			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
 		}
@@ -30,17 +30,18 @@ func TestSendCommand(t *testing.T) {
 
 	err := b.HandleMessage(cmd, handler)
 	if err != nil {
-		t.Fatalf("Registering handler returned false, expected true")
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
 	}
 
 	err = b.Start()
 	if err != nil {
-		t.Errorf("could not start bus for test")
+		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
 
 	err = b.Send(noopTraceContext(), testSvc1, gbus.NewBusMessage(cmd))
 	if err != nil {
-		t.Errorf("could not send message")
+		t.Errorf("could not send message error: %s", err.Error())
+		return
 	}
 
 	<-proceed
@@ -58,13 +59,17 @@ func TestReply(t *testing.T) {
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-		invocation.Reply(noopTraceContext(), gbus.NewBusMessage(reply))
+		err := invocation.Reply(noopTraceContext(), gbus.NewBusMessage(reply))
+		if err != nil {
+			t.Errorf("could not send reply with error: %s", err.Error())
+			return err
+		}
 		return nil
 
 	}
 
 	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		_, ok := message.Payload.(Reply1)
+		_, ok := message.Payload.(*Reply1)
 		if !ok {
 			t.Errorf("message handler for reply message invoced with wrong message type\r\n%v", message)
 		}
@@ -118,8 +123,7 @@ func TestHandlerRetry(t *testing.T) {
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-		invocation.Reply(noopTraceContext(), reply)
-		return nil
+		return invocation.Reply(noopTraceContext(), reply)
 	}
 
 	attempts := 0
@@ -155,8 +159,7 @@ func TestRPC(t *testing.T) {
 
 	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 
-		invocation.Reply(noopTraceContext(), reply)
-		return nil
+		return invocation.Reply(noopTraceContext(), reply)
 	}
 
 	svc1 := createNamedBusForTest(testSvc1)

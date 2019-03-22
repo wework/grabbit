@@ -183,28 +183,33 @@ func TestSagaTimeout(t *testing.T) {
 	}
 	err := svc1.HandleEvent("test_exchange", "some.topic.1", Event1{}, eventHandler)
 	if err != nil {
-		t.Fatal("could not set event handler", err)
+		t.Error("could not set event handler", err)
+		return
 	}
 	err = svc1.Start()
 	if err != nil {
-		t.Fatal("could not start svc1", err)
+		t.Error("could not start svc1", err)
+		return
 	}
 	defer svc1.Shutdown()
 
 	svc2 := createNamedBusForTest(testSvc2)
 	err = svc2.RegisterSaga(&TimingOutSaga{})
 	if err != nil {
-		t.Fatal("could not register saga", err)
+		t.Error("could not register saga", err)
+		return
 	}
 	err = svc2.Start()
 	if err != nil {
-		t.Fatal("could not start saga", err)
+		t.Error("could not start saga", err)
+		return
 	}
 	defer svc2.Shutdown()
 	cmd2 := gbus.NewBusMessage(Command2{})
 	err = svc1.Send(noopTraceContext(), testSvc2, cmd2)
 	if err != nil {
-		t.Fatal("could not start the saga", err)
+		t.Error("could not start the saga", err)
+		return
 	}
 
 	<-proceed
@@ -249,8 +254,7 @@ func (s *SagaA) HandleCommand1(invocation gbus.Invocation, _ *gbus.BusMessage) e
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaA.HandleCommand1",
 	})
-	invocation.Reply(noopTraceContext(), reply)
-	return nil
+	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaA) HandleCommand2(invocation gbus.Invocation, _ *gbus.BusMessage) error {
@@ -258,17 +262,15 @@ func (s *SagaA) HandleCommand2(invocation gbus.Invocation, _ *gbus.BusMessage) e
 	reply := gbus.NewBusMessage(Reply2{
 		Data: "SagaA.HandleCommand2",
 	})
-	invocation.Reply(noopTraceContext(), reply)
-	return nil
+	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaA) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply2{
 		Data: "SagaA.HandleEvent1",
 	})
-	invocation.Reply(noopTraceContext(), reply)
 	log.Println("event1 received")
-	return nil
+	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaA) HandleEvent2(inocation gbus.Invocation, _ *gbus.BusMessage) error {
@@ -299,17 +301,15 @@ func (s *SagaB) Startup(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.Startup",
 	})
-	invocation.Reply(noopTraceContext(), reply)
-	return nil
+	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaB) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.HandleEvent1",
 	})
-	invocation.Reply(noopTraceContext(), reply)
 	log.Println("event1 on SagaB received")
-	return nil
+	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaB) IsComplete() bool {
@@ -321,10 +321,9 @@ func (s *SagaB) RequestTimeout() time.Duration {
 }
 
 func (s *SagaB) Timeout(invocation gbus.Invocation, _ *gbus.BusMessage) error {
-	invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
+	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
 		Data: "SagaB.Timeout",
 	}))
-	return nil
 }
 
 type TimingOutSaga struct {
@@ -357,8 +356,7 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 
 func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	s.TimedOut = true
-	invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
+	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
 		Data: "TimingOutSaga.Timeout",
 	}))
-	return nil
 }

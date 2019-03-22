@@ -6,83 +6,74 @@ package serialization
 import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
+	"reflect"
 	"sync"
 
 	"github.com/rhinof/grabbit/gbus"
 )
 
-var _ gbus.MessageEncoding = &ProtoSerializer{}
+var _ gbus.Serializer = &Proto{}
 
-//ProtoSerializer a serializer for GBus uses protoubf
-type ProtoSerializer struct {
-	lock                 *sync.Mutex
-	//registeredSchemas    map[string]*avroRelation
+//Proto a serializer for GBus uses protobuf
+type Proto struct {
+	lock              *sync.Mutex
+	registeredSchemas map[string]reflect.Type
 }
 
-//NewProtoSerializer creates a new instance of ProtoSerializer and returns it
-func NewProtoSerializer() gbus.MessageEncoding {
-	return &ProtoSerializer{
-		//registeredSchemas:    make(map[string]*avroRelation),
-		lock:                 &sync.Mutex{},
+//NewProtoSerializer creates a new instance of Proto and returns it
+func NewProtoSerializer() gbus.Serializer {
+	return &Proto{
+		registeredSchemas: make(map[string]reflect.Type),
+		lock:              &sync.Mutex{},
 	}
 }
 
-//EncoderID implements MessageEncoding.EncoderID
-func (as *ProtoSerializer) EncoderID() string {
+//Name implements Serializer.Name
+func (as *Proto) Name() string {
 	return "proto"
 }
 
 //Encode encodes an object into a byte array
-func (as *ProtoSerializer) Encode(obj gbus.Message) (msg []byte, err error) {
-	pmsg, ok := obj.(*protoMessage)
+func (as *Proto) Encode(obj gbus.Message) (buffer []byte, err error) {
+	msg, ok := obj.(proto.Message)
 	if !ok {
-		return nil, fmt.Errorf("could not convert message into protoMessage")
+		return nil, fmt.Errorf("could not cast message into proto.Message")
 	}
-	return pmsg.buffer, nil
+	buffer, err = proto.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	return
 }
 
 //Decode decodes a byte array into an object
-func (as *ProtoSerializer) Decode(buffer []byte) (obj gbus.Message, err error) {
-	return &protoMessage{
-		buffer: buffer,
-	}, nil
-}
-
-//Register not really used here :(
-func (as *ProtoSerializer) Register(obj gbus.Message) {
-
-	// TODO: we should think what is the best way to do this
-}
-
-var _ gbus.Message = &protoMessage{}
-type protoMessage struct {
-	buffer []byte
-	msg proto.Message
-	name string
-}
-
-func (pm *protoMessage) SchemaName() string {
-	return pm.name
-}
-
-//CastMessageToProto converts a gbus.Message into a proto.Message if fails returns an error
-func CastMessageToProto(obj gbus.Message, message proto.Message) error {
-	msg, ok := obj.(*protoMessage)
+func (as *Proto) Decode(buffer []byte, schemaName string) (gbus.Message, error) {
+	t, ok := as.registeredSchemas[schemaName]
 	if !ok {
-		return fmt.Errorf("could not cast message to protoMessage")
+		return nil, fmt.Errorf("could not find the message type in proto registry")
 	}
-	return proto.Unmarshal(msg.buffer, message)
+	msg, ok := reflect.New(t.Elem()).Interface().(proto.Message)
+	if !ok {
+		return nil, fmt.Errorf("could not cast item to proto.Message")
+	}
+	err := proto.Unmarshal(buffer, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	gmsg, ok := msg.(gbus.Message)
+	if !ok {
+		return nil, fmt.Errorf("could not cast %v to gbus.Message", msg)
+	}
+
+	return gmsg, nil
 }
 
-//CastProtoToMessage converts a proto.Message into a gbus.Message
-func CastProtoToMessage(message proto.Message) gbus.Message {
-	return &protoMessage{
-		msg: message,
-		name: proto.MessageName(message),
+//Register proto messages so we can have lots of fun!
+func (as *Proto) Register(obj gbus.Message) {
+	as.lock.Lock()
+	defer as.lock.Unlock()
+	if as.registeredSchemas[obj.SchemaName()] == nil {
+		as.registeredSchemas[obj.SchemaName()] = reflect.TypeOf(obj)
 	}
-}
-
-//CastProtoToBusMessage converts a proto.Message into a gbus.BusMessage
-func CastProtoToBusMessage(message proto.Message) *gbus.BusMessage {
-	return gbus.NewBusMessage(CastProtoToMessage(message))
 }

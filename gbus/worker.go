@@ -31,7 +31,7 @@ type worker struct {
 	rpcHandlers  map[string]MessageHandler
 	isTxnl       bool
 	b            *DefaultBus
-	serializer   MessageEncoding
+	serializer   Serializer
 	txProvider   TxProvider
 	amqpErrors   chan *amqp.Error
 	stop         chan bool
@@ -189,7 +189,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 	var decErr error
-	bm.Payload, decErr = worker.serializer.Decode(delivery.Body)
+	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 
 	if decErr != nil {
 		worker.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)

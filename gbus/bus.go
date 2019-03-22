@@ -47,7 +47,7 @@ type DefaultBus struct {
 	TxProvider           TxProvider
 	IsTxnl               bool
 	WorkerNum            uint
-	Serializer           MessageEncoding
+	Serializer           Serializer
 	DLX                  string
 	DefaultPolicies      []MessagePolicy
 	Confirm              bool
@@ -378,6 +378,7 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 	rpc := rpcPolicy{
 		rpcID: rpcID}
 
+	b.Serializer.Register(reply.Payload)
 	b.sendImpl(ctx, nil, service, b.rpcQueue.Name, "", "", request, rpc)
 
 	//wait for reply or timeout
@@ -539,7 +540,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		ReplyTo:         replyTo,
 		MessageId:       message.ID,
 		CorrelationId:   message.CorrelationID,
-		ContentEncoding: b.Serializer.EncoderID(),
+		ContentEncoding: b.Serializer.Name(),
 		Headers:         headers,
 	}
 

@@ -46,10 +46,10 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
 func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 
-	bm.SagaID = castToSgtring(headers["x-msg-saga-id"])
-	bm.SagaCorrelationID = castToSgtring(headers["x-msg-saga-correlation-id"])
-	bm.RPCID = castToSgtring(headers["x-grabbit-msg-rpc-id"])
-	bm.PayloadFQN = castToSgtring(headers["x-msg-name"])
+	bm.SagaID = castToString(headers["x-msg-saga-id"])
+	bm.SagaCorrelationID = castToString(headers["x-msg-saga-correlation-id"])
+	bm.RPCID = castToString(headers["x-grabbit-msg-rpc-id"])
+	bm.PayloadFQN = castToString(headers["x-msg-name"])
 
 }
 
@@ -59,10 +59,22 @@ func (bm *BusMessage) SetPayload(payload Message) {
 	bm.Payload = payload
 }
 
-func castToSgtring(i interface{}) string {
+func castToString(i interface{}) string {
 	v, ok := i.(string)
 	if !ok {
 		return ""
 	}
 	return v
+}
+
+var _ Message = &SagaTimeoutMessage{}
+
+//SagaTimeoutMessage is the timeout message for Saga's
+type SagaTimeoutMessage struct {
+	SagaID string
+}
+
+//Name implements gbus.Message
+func (SagaTimeoutMessage) SchemaName() string {
+	return "grabbit.timeout"
 }
