@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"log"
+	"github.com/sirupsen/logrus"
 	"reflect"
 	"sync"
 
@@ -21,12 +21,10 @@ type Gob struct {
 
 //NewGobSerializer create a new instance of  Gob
 func NewGobSerializer() gbus.Serializer {
-	g := &Gob{
+	return &Gob{
 		lock:              &sync.Mutex{},
 		registeredSchemas: make(map[string]reflect.Type),
 	}
-	// g.Register(&gobMessage{})
-	return g
 }
 
 //Name implements Serializer.Name
@@ -47,7 +45,7 @@ func (gs *Gob) Encode(message gbus.Message) ([]byte, error) {
 }
 
 //Decode implements Serializer.Decode
-func (gs *Gob) Decode(buffer []byte, schemaName string) (gbus.Message, error) {
+func (gs *Gob) Decode(buffer []byte, schemaName string) (msg gbus.Message, err error) {
 	reader := bytes.NewReader(buffer)
 	dec := gob.NewDecoder(reader)
 
@@ -55,17 +53,17 @@ func (gs *Gob) Decode(buffer []byte, schemaName string) (gbus.Message, error) {
 	if !ok {
 		return nil, fmt.Errorf("could not find the message type in gob registry, type: %s", schemaName)
 	}
-	msg := reflect.New(t).Interface()
+	tmsg := reflect.New(t).Interface()
 
-	decErr := dec.Decode(msg)
-	if decErr != nil {
-		return nil, decErr
+	err = dec.Decode(tmsg)
+	if err != nil {
+		return nil, err
 	}
-	gmsg, ok := msg.(gbus.Message)
+	msg, ok = tmsg.(gbus.Message)
 	if !ok {
-		return nil, fmt.Errorf("could not cast %v to gbus.Message", msg)
+		return nil, fmt.Errorf("could not cast %v to gbus.Message", tmsg)
 	}
-	return gmsg, nil
+	return msg, nil
 }
 
 //Register implements Serializer.Register
@@ -73,7 +71,7 @@ func (gs *Gob) Register(obj gbus.Message) {
 	gs.lock.Lock()
 	defer gs.lock.Unlock()
 	if gs.registeredSchemas[obj.SchemaName()] == nil {
-		log.Printf("registering schema to gob\n%v", obj.SchemaName())
+		logrus.WithField("SchemaName", obj.SchemaName()).Debug("registering schema to gob")
 		gob.Register(obj)
 		gs.registeredSchemas[obj.SchemaName()] = reflect.ValueOf(obj).Type()
 	}

@@ -66,7 +66,7 @@ func (as *Avro) Name() string {
 }
 
 //Encode encodes an object into a byte array
-func (as *Avro) Encode(obj gbus.Message) ([]byte, error) {
+func (as *Avro) Encode(obj gbus.Message) (msg []byte, err error) {
 
 	name := obj.SchemaName()
 	rel, ok := as.registeredSchemas[name]
@@ -78,7 +78,7 @@ func (as *Avro) Encode(obj gbus.Message) ([]byte, error) {
 
 	binarySchemaId := make([]byte, 4)
 	binary.BigEndian.PutUint32(binarySchemaId, uint32(rel.SchemaId))
-	msg := make([]byte, 0)
+	msg = make([]byte, 0)
 	// first byte is magic byte, always 0 for now
 	msg = append(msg, byte(0))
 	//4-byte schema ID as returned by the Schema Registry
@@ -93,7 +93,7 @@ func (as *Avro) Encode(obj gbus.Message) ([]byte, error) {
 
 	var buf bytes.Buffer
 	bufWriter := bufio.NewWriter(&buf)
-	err := tobj.Serialize(bufWriter)
+	err = tobj.Serialize(bufWriter)
 	if err != nil {
 		logrus.
 			WithError(err).
@@ -171,6 +171,7 @@ func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj Av
 	as.lock.Lock()
 	defer as.lock.Unlock()
 	if _, ok := as.registeredSchemas[obj.SchemaName()]; !ok {
+		logrus.WithField("SchemaName", obj.SchemaName()).Debug("registering schema to avro")
 		rel := &avroRelation{
 			Schema:       schema,
 			Deserializer: deserializer,
@@ -193,8 +194,8 @@ func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj Av
 }
 
 //getSchema get schema id from schema-registry service
-func (as *Avro) getSchema(id int) (*goavro.Codec, error) {
-	codec, err := as.schemaRegistryClient.GetSchema(id)
+func (as *Avro) getSchema(id int) (codec *goavro.Codec, err error) {
+	codec, err = as.schemaRegistryClient.GetSchema(id)
 	if err != nil {
 		return nil, err
 	}
