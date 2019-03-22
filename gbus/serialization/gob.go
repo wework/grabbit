@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"reflect"
 	"sync"
 
 	"github.com/rhinof/grabbit/gbus"
+	"github.com/sirupsen/logrus"
 )
 
 var _ gbus.Serializer = &Gob{}

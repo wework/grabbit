@@ -76,11 +76,10 @@ func (out *AMQPOutbox) Post(exchange, routingKey string, amqpMessage amqp.Publis
 		delete(out.pending, nextSequence)
 		return 0, sendErr
 
-	} else {
-		// only update the global sequence if the send optation on the channel does not return an error
-		// so that the global sequence and the channel delivery tag counter stay in sync
-		out.sequence = nextSequence
 	}
+	// only update the global sequence if the send optation on the channel does not return an error
+	// so that the global sequence and the channel delivery tag counter stay in sync
+	out.sequence = nextSequence
 	return out.sequence, nil
 }
 
@@ -127,6 +126,7 @@ func (out *AMQPOutbox) sendToChannel(exchange, routingKey string, amqpMessage am
 		amqpMessage /*msg*/)
 }
 
+//NotifyConfirm send an amqp notification
 func (out *AMQPOutbox) NotifyConfirm(ack, nack chan uint64) {
 	out.channel.NotifyConfirm(ack, nack)
 }

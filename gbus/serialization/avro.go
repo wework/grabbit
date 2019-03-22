@@ -10,11 +10,10 @@ import (
 	"reflect"
 	"sync"
 
+	kafka "github.com/dangkaka/go-kafka-avro"
 	"github.com/linkedin/goavro"
-	"github.com/sirupsen/logrus"
-
-	"github.com/dangkaka/go-kafka-avro"
 	"github.com/rhinof/grabbit/gbus"
+	"github.com/sirupsen/logrus"
 )
 
 var _ gbus.Serializer = &Avro{}
@@ -22,13 +21,14 @@ var _ gbus.Serializer = &Avro{}
 type avroDeserializer func(r io.Reader) (interface{}, error)
 
 type avroRelation struct {
-	SchemaId     int
+	SchemaID     int
 	Schema       string
 	Codec        *goavro.Codec
 	ObjType      reflect.Type
 	Deserializer avroDeserializer
 }
 
+//AvroMessageGenerated an interface for the https://github.com/actgardner/gogen-avro since it doesn't have one :(
 type AvroMessageGenerated interface {
 	Schema() string
 	SchemaName() string
@@ -76,13 +76,13 @@ func (as *Avro) Encode(obj gbus.Message) (msg []byte, err error) {
 		return nil, err
 	}
 
-	binarySchemaId := make([]byte, 4)
-	binary.BigEndian.PutUint32(binarySchemaId, uint32(rel.SchemaId))
+	binarySchemaID := make([]byte, 4)
+	binary.BigEndian.PutUint32(binarySchemaID, uint32(rel.SchemaID))
 	msg = make([]byte, 0)
 	// first byte is magic byte, always 0 for now
 	msg = append(msg, byte(0))
 	//4-byte schema ID as returned by the Schema Registry
-	msg = append(msg, binarySchemaId...)
+	msg = append(msg, binarySchemaID...)
 
 	tobj, ok := obj.(AvroMessageGenerated)
 	if !ok {
@@ -114,8 +114,8 @@ func (as *Avro) Encode(obj gbus.Message) (msg []byte, err error) {
 
 //Decode decodes a byte array into an object
 func (as *Avro) Decode(buffer []byte, schemaName string) (msg gbus.Message, err error) {
-	schemaId := binary.BigEndian.Uint32(buffer[1:5])
-	rel, ok := as.registeredObjects[int(schemaId)]
+	schemaID := binary.BigEndian.Uint32(buffer[1:5])
+	rel, ok := as.registeredObjects[int(schemaID)]
 	if !ok {
 		err = fmt.Errorf("could not find avroRelation")
 		logrus.WithError(err).Error("no avroRelation for obj in registeredObjects")
@@ -181,14 +181,14 @@ func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj Av
 			logrus.WithError(err).Error("could not get codec for schema")
 			return
 		}
-		rel.SchemaId, err = as.registerOrGetSchemaId(obj.SchemaName(), rel.Codec)
+		rel.SchemaID, err = as.registerOrGetSchemaID(obj.SchemaName(), rel.Codec)
 		if err != nil {
 			logrus.WithError(err).Error("could not get schema id")
 			return
 		}
 		rel.ObjType = reflect.TypeOf(obj)
 		as.registeredSchemas[obj.SchemaName()] = rel
-		as.registeredObjects[rel.SchemaId] = rel
+		as.registeredObjects[rel.SchemaID] = rel
 	}
 	return
 }
@@ -202,12 +202,12 @@ func (as *Avro) getSchema(id int) (codec *goavro.Codec, err error) {
 	return codec, nil
 }
 
-//registerOrGetSchemaId get schema id from schema-registry service
-func (as *Avro) registerOrGetSchemaId(topic string, avroCodec *goavro.Codec) (schemaId int, err error) {
-	schemaId = 0
-	schemaId, err = as.schemaRegistryClient.IsSchemaRegistered(topic, avroCodec)
+//registerOrGetSchemaID get schema id from schema-registry service
+func (as *Avro) registerOrGetSchemaID(topic string, avroCodec *goavro.Codec) (schemaID int, err error) {
+	schemaID = 0
+	schemaID, err = as.schemaRegistryClient.IsSchemaRegistered(topic, avroCodec)
 	if err != nil {
-		schemaId, err = as.schemaRegistryClient.CreateSubject(topic, avroCodec)
+		schemaID, err = as.schemaRegistryClient.CreateSubject(topic, avroCodec)
 		if err != nil {
 			return 0, err
 		}

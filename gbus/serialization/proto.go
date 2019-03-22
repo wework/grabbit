@@ -5,10 +5,11 @@ package serialization
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/sirupsen/logrus"
 	"reflect"
 	"sync"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/sirupsen/logrus"
 
 	"github.com/rhinof/grabbit/gbus"
 )
@@ -75,7 +76,7 @@ func (as *Proto) Decode(buffer []byte, schemaName string) (msg gbus.Message, err
 	msg, ok = tmsg.(gbus.Message)
 	if !ok {
 		err = fmt.Errorf("could not cast obj to gbus.Message")
-		as.logger.WithError(err).WithField("msg", tmsg).Error("could not cast %v to gbus.Message", tmsg)
+		as.logger.WithError(err).WithField("msg", tmsg).Errorf("could not cast %v to gbus.Message", tmsg)
 		return nil, err
 	}
 

@@ -26,6 +26,7 @@ func NewBusMessage(payload Message) *BusMessage {
 	return bm
 }
 
+//NewFromAMQPHeaders creates a BusMessage from headers of an amqp message
 func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 	bm := &BusMessage{}
 	bm.SetFromAMQPHeaders(headers)
@@ -74,7 +75,7 @@ type SagaTimeoutMessage struct {
 	SagaID string
 }
 
-//Name implements gbus.Message
+//SchemaName implements gbus.Message
 func (SagaTimeoutMessage) SchemaName() string {
 	return "grabbit.timeout"
 }

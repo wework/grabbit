@@ -59,8 +59,10 @@ type DefaultBus struct {
 
 var (
 	//TODO: Replace constants with configuration
-	MAX_RETRY_COUNT uint = 3
-	rpcHeaderName        = "x-grabbit-msg-rpc-id"
+
+	//MaxRetryCount defines the max times a retry can run
+	MaxRetryCount uint = 3
+	rpcHeaderName      = "x-grabbit-msg-rpc-id"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -145,7 +147,7 @@ func (b *DefaultBus) Start() error {
 
 	var e error
 	//create amqo connection and channel
-	if b.amqpConn, e = b.connect(int(MAX_RETRY_COUNT)); e != nil {
+	if b.amqpConn, e = b.connect(int(MaxRetryCount)); e != nil {
 		return e
 	}
 
@@ -174,18 +176,19 @@ func (b *DefaultBus) Start() error {
 	*/
 	if b.IsTxnl {
 
-		if amqpChan, e := b.createAMQPChannel(b.amqpConn); e != nil {
+		var amqpChan *amqp.Channel
+		if amqpChan, e = b.createAMQPChannel(b.amqpConn); e != nil {
 			b.log("failed to create amqp channel for transactional relay\n%v", e)
 			return e
-		} else {
-			amqpChan.NotifyClose(b.amqpErrors)
-			amqpOutbox := &AMQPOutbox{}
-			amqpOutbox.init(amqpChan, b.Confirm, false)
-			if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
-				b.log("failed to start transactional relay\n%v", startErr)
-				return startErr
-			}
 		}
+		amqpChan.NotifyClose(b.amqpErrors)
+		amqpOutbox := &AMQPOutbox{}
+		amqpOutbox.init(amqpChan, b.Confirm, false)
+		if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
+			b.log("failed to start transactional relay\n%v", startErr)
+			return startErr
+		}
+
 	}
 
 	//declare queue
@@ -331,7 +334,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 	retryAction := func() error {
 		return action(activeTx)
 	}
-	actionErr := b.SafeWithRetries(retryAction, MAX_RETRY_COUNT)
+	actionErr := b.SafeWithRetries(retryAction, MaxRetryCount)
 
 	/*
 		if the bus is transactional and there is no ambient tranaction then create a new one else use the ambient tranaction.
@@ -476,7 +479,7 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 	connected := false
 	attempts := uint(0)
 	var lastErr error
-	for !connected && attempts < MAX_RETRY_COUNT {
+	for !connected && attempts < MaxRetryCount {
 		conn, e := amqp.Dial(b.AmqpConnStr)
 		if e == nil {
 			return conn, e
@@ -587,7 +590,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 	//currently only one thread can publish at a time
 	//TODO:add a publishing workers
 
-	err = b.SafeWithRetries(publish, MAX_RETRY_COUNT)
+	err = b.SafeWithRetries(publish, MaxRetryCount)
 
 	if err != nil {
 		log.Printf("failed publishing message.\n error:%v", err)

@@ -64,6 +64,8 @@ func (si *Instance) requestsTimeout() (bool, time.Duration) {
 	}
 	return canTimeout, timeoutDuration
 }
+
+//NewInstance create a new instance of a Saga
 func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Instance {
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
