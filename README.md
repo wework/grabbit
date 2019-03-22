@@ -57,7 +57,7 @@ Creating a transactional GBus instance
 gb := builder.
         New().
     Bus("connection string to RabbitMQ").
-    Txnl("pg", "connection string to PostgreSQL").
+    Txnl("mysql", "connection string to mysql").
     Build("name of your service")
 
 ```
@@ -105,11 +105,11 @@ defer gb.Shutsown()
 
 Send a command
 ```Go
-gb.Send("name of service you are sending the command to", gbus.NewBusMessage(SomeCommand{}))
+gb.Send(context.Background(), "name of service you are sending the command to", gbus.NewBusMessage(SomeCommand{}))
 ```
 Publish an event
 ```Go
-gb.Publish("name of exchange", "name of topic", gbus.NewBusMessage(SomeEvent))
+gb.Publish(context.Background(), "name of exchange", "name of topic", gbus.NewBusMessage(SomeEvent{}))
 ```
 
 RPC style call
@@ -120,7 +120,7 @@ request := gbus.NewBusMessage(SomeRPCRequest{})
 reply := gbus.NewBusMessage(SomeRPCReply{})
 timeOut := 2 * time.Second
 
-reply, e := gb.RPC("name of service you are sending the request to", cmd, reply, timeOut)
+reply, e := gb.RPC(context.Background(), "name of service you are sending the request to", request, reply, timeOut)
 
 if e != nil{
   fmt.Printf("rpc call failed with error %v", e)
