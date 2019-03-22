@@ -148,7 +148,7 @@ type Builder interface {
 		 		WorkerNum sets the number of worker go routines consuming messages from the queue
 				The default value if this option is not set is 1
 	*/
-	WorkerNum(workers uint) Builder
+	WorkerNum(workers uint, prefetchCount uint, prefetchSize uint) Builder
 
 	/*
 	   WithConfirms enables publisher confirms

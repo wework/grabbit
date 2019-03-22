@@ -16,6 +16,8 @@ import (
 
 type defaultBuilder struct {
 	handlers         []types.Type
+	PrefetchCount    uint
+	PrefetchSize     uint
 	connStr          string
 	purgeOnStartup   bool
 	sagaStoreConnStr string
@@ -35,6 +37,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
 		AmqpConnStr:          builder.connStr,
+		PrefetchCount:        1,
 		Outgoing:             &gbus.AMQPOutbox{},
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
@@ -57,6 +60,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	} else {
 		gb.WorkerNum = builder.workerNum
 	}
+	gb.PrefetchCount = builder.PrefetchCount
+	gb.PrefetchSize = builder.PrefetchSize
 	var (
 		sagaStore saga.Store
 	)
@@ -119,8 +124,14 @@ func (builder *defaultBuilder) WithDeadlettering(deadletterExchange string) gbus
 	return builder
 }
 
-func (builder *defaultBuilder) WorkerNum(workers uint) gbus.Builder {
+func (builder *defaultBuilder) WorkerNum(workers uint, prefetchCount uint, prefetchSize uint) gbus.Builder {
 	builder.workerNum = workers
+	if prefetchCount > 0 {
+		builder.PrefetchCount = prefetchCount
+	}
+	if prefetchSize > 0 {
+		builder.PrefetchSize = prefetchSize
+	}
 	return builder
 }
 
@@ -177,6 +188,8 @@ type Nu struct {
 //Bus inits a new BusBuilder
 func (Nu) Bus(brokerConnStr string) gbus.Builder {
 	return &defaultBuilder{
+		PrefetchCount:   1,
+		PrefetchSize:    0,
 		connStr:         brokerConnStr,
 		serializer:      serialization.NewGobSerializer(),
 		defaultPolicies: make([]gbus.MessagePolicy, 0)}

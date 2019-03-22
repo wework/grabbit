@@ -17,9 +17,10 @@ import (
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
-	Outgoing *AMQPOutbox
-	Outbox   TxOutbox
-
+	Outgoing             *AMQPOutbox
+	Outbox               TxOutbox
+	PrefetchCount        uint
+	PrefetchSize         uint
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
 	workers              []*worker
@@ -228,7 +229,9 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		if createChanErr != nil {
 			return nil, createChanErr
 		}
+		amqpChan.Qos(int(b.PrefetchCount), int(b.PrefetchSize), true)
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
+
 		w := &worker{
 			consumerTag:  tag,
 			channel:      amqpChan,
