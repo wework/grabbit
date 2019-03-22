@@ -17,6 +17,7 @@ type Bus interface {
 	Health
 }
 
+//Message a common interface that passes to the serializers to allow decoding and encoding of content
 type Message interface {
 	SchemaName() string
 }
@@ -78,8 +79,8 @@ type BusSwitch interface {
 type HandlerRegister interface {
 	/*
 		HandleMessage registers a handler to a specific message type
-		Use this methof to register handlers for commands and reply messages
-		Use the HandleEvent method to subscribe on events and registr a handler
+		Use this method to register handlers for commands and reply messages
+		Use the HandleEvent method to subscribe on events and register a handler
 	*/
 	HandleMessage(message Message, handler MessageHandler) error
 	/*
@@ -115,18 +116,6 @@ type RequestSagaTimeout interface {
 	Timeout(invocation Invocation, message *BusMessage) error
 }
 
-var _ Message = &SagaTimeoutMessage{}
-
-//SagaTimeoutMessage is the timeout message for Saga's
-type SagaTimeoutMessage struct {
-	SagaID string
-}
-
-//Name implements gbus.Message
-func (SagaTimeoutMessage) SchemaName() string {
-	return "grabbit.timeout"
-}
-
 //SagaRegister registers sagas to the bus
 type SagaRegister interface {
 	RegisterSaga(saga Saga) error
@@ -143,7 +132,7 @@ type Builder interface {
 	*/
 	Txnl(provider, connStr string) Builder
 	//WithSerializer provides the ability to plugin custom serializers
-	WithSerializer(serializer MessageEncoding) Builder
+	WithSerializer(serializer Serializer) Builder
 	/*
 		 		WorkerNum sets the number of worker go routines consuming messages from the queue
 				The default value if this option is not set is 1
@@ -173,11 +162,11 @@ type Invocation interface {
 	Ctx() context.Context
 }
 
-//MessageEncoding is the base interface for all message serializers
-type MessageEncoding interface {
-	EncoderID() string
+//Serializer is the base interface for all message serializers
+type Serializer interface {
+	Name() string
 	Encode(message Message) ([]byte, error)
-	Decode(buffer []byte) (Message, error)
+	Decode(buffer []byte, schemaName string) (Message, error)
 	Register(obj Message)
 }
 

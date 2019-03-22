@@ -58,47 +58,46 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 }
 
 //GetSagasByType implements interface method store.GetSagasByType
-func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) ([]*saga.Instance, error) {
+func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (instances []*saga.Instance, err error) {
 
 	tblName := store.GetSagatableName()
 	selectSQL := "SELECT saga_id, saga_type, saga_data, version FROM " + tblName + " WHERE saga_type=" + store.ParamsMarkers[0]
 
-	rows, error := tx.Query(selectSQL, sagaType.String())
+	rows, err := tx.Query(selectSQL, sagaType.String())
 	defer rows.Close()
 
-	if error != nil {
-		return nil, error
+	if err != nil {
+		return nil, err
 	}
 
-	if instances, scanError := store.scanInstances(rows); scanError == nil {
-		return instances, nil
-	} else {
-		log.Printf("SagaStore failed yo scan saga db record\nError:\n%v", error)
-		log.Println(error)
-		return nil, scanError
+	if instances, err = store.scanInstances(rows); err != nil {
+		log.Printf("SagaStore failed yo scan saga db record\nError:\n%v", err)
+		log.Println(err)
+		return nil, err
 	}
+	return instances, nil
 }
 
 //UpdateSaga implements interface method store.UpdateSaga
-func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) error {
+func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) (err error) {
 	tblName := store.GetSagatableName()
 	currentVersion := instance.ConcurrencyCtrl
 	nextVersion := instance.ConcurrencyCtrl + 1
 	instance.ConcurrencyCtrl = nextVersion
-	if buf, error := store.serilizeSaga(instance); error != nil {
-		log.Printf("SagaStore failed to encode saga with sagaID - %v\n%v", instance.ID, error)
-		return error
-	} else {
+	var buf []byte
+	if buf, err = store.serilizeSaga(instance); err != nil {
+		log.Printf("SagaStore failed to encode saga with sagaID - %v\n%v", instance.ID, err)
+		return err
+	}
 
-		updateSQL := `UPDATE ` + tblName + ` SET saga_data=` + store.ParamsMarkers[0] + `, version=` + store.ParamsMarkers[1] + `
-	WHERE saga_id=` + store.ParamsMarkers[2] + ` AND version=` + store.ParamsMarkers[3] + ``
-		result, error := tx.Exec(updateSQL, buf, nextVersion, instance.ID, currentVersion)
+	updateSQL := `UPDATE ` + tblName + ` SET saga_data=` + store.ParamsMarkers[0] + `, version=` + store.ParamsMarkers[1] + `
+WHERE saga_id=` + store.ParamsMarkers[2] + ` AND version=` + store.ParamsMarkers[3] + ``
+	result, err := tx.Exec(updateSQL, buf, nextVersion, instance.ID, currentVersion)
 
-		if error != nil {
-			return error
-		} else if rowsAffected, ee := result.RowsAffected(); ee != nil || rowsAffected == 0 {
-			return fmt.Errorf("saga with saga_id:%v had stale data when updating. :%v", instance.ID, ee)
-		}
+	if err != nil {
+		return err
+	} else if rowsAffected, ee := result.RowsAffected(); ee != nil || rowsAffected == 0 {
+		return fmt.Errorf("saga with saga_id:%v had stale data when updating. :%v", instance.ID, ee)
 	}
 	return nil
 }
@@ -139,25 +138,26 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 }
 
 //SaveNewSaga implements interface method store.SaveNewSaga
-func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) error {
+func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) (err error) {
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := store.GetSagatableName()
 	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version)
 	VALUES (` + store.ParamsMarkers[0] + `, ` + store.ParamsMarkers[1] + `, ` + store.ParamsMarkers[2] + `, ` + store.ParamsMarkers[3] + `)`
 
-	if buf, error := store.serilizeSaga(newInstance); error != nil {
-		log.Printf("failed to encode saga with sagaID - %v\n%v", newInstance.ID, error)
-		return error
-	} else {
-		_, txError := tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
-		if txError != nil {
-			log.Printf("failed saving new saga\n%v\nSQL:\n%v", txError, insertSQL)
-			return txError
-		}
+	var buf []byte
+	if buf, err = store.serilizeSaga(newInstance); err != nil {
+		log.Printf("failed to encode saga with sagaID - %v\n%v", newInstance.ID, err)
+		return err
+	}
+	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
+	if err != nil {
+		log.Printf("failed saving new saga\n%v\nSQL:\n%v", err, insertSQL)
+		return err
 	}
 	return nil
 }
 
+//Purge cleans up the saga store, to be used in tests and in extreme situations in production
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
 
@@ -192,6 +192,7 @@ func (store *SagaStore) NewTx() *sql.Tx {
 	return tx
 }
 
+//GetSagatableName returns the table name in which to store the Sagas
 func (store *SagaStore) GetSagatableName() string {
 
 	var re = regexp.MustCompile("-|;|\\|")
