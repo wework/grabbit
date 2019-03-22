@@ -20,7 +20,6 @@ type DefaultBus struct {
 	Outgoing             *AMQPOutbox
 	Outbox               TxOutbox
 	PrefetchCount        uint
-	PrefetchSize         uint
 	AmqpConnStr          string
 	amqpConn             *amqp.Connection
 	workers              []*worker
@@ -229,7 +228,12 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		if createChanErr != nil {
 			return nil, createChanErr
 		}
-		amqpChan.Qos(int(b.PrefetchCount), int(b.PrefetchSize), true)
+
+		qosErr := amqpChan.Qos(int(b.PrefetchCount), 0, false)
+		if qosErr != nil {
+			log.Printf("failed to set worker qos\n %v", qosErr)
+		}
+
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
 
 		w := &worker{
