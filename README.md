@@ -22,11 +22,11 @@ Planned:
 
 
 ## Supported transactional resources
-1) PostgreSQL
-2) MySql
+1) MySql
 ## Supported serializers
 1) gob
 2) Avro
+3) Protobuf
 
 ## Instrumentation
 
