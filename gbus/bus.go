@@ -17,20 +17,21 @@ import (
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
-	Outgoing             *AMQPOutbox
-	Outbox               TxOutbox
-	PrefetchCount        uint
-	AmqpConnStr          string
-	amqpConn             *amqp.Connection
-	workers              []*worker
-	AMQPChannel          *amqp.Channel
-	outAMQPChannel       *amqp.Channel
-	serviceQueue         amqp.Queue
-	rpcQueue             amqp.Queue
-	SvcName              string
-	amqpErrors           chan *amqp.Error
-	amqpBlocks           chan amqp.Blocking
-	MsgHandlers          map[string][]MessageHandler
+	Outgoing       *AMQPOutbox
+	Outbox         TxOutbox
+	PrefetchCount  uint
+	AmqpConnStr    string
+	amqpConn       *amqp.Connection
+	workers        []*worker
+	AMQPChannel    *amqp.Channel
+	outAMQPChannel *amqp.Channel
+	serviceQueue   amqp.Queue
+	rpcQueue       amqp.Queue
+	SvcName        string
+	amqpErrors     chan *amqp.Error
+	amqpBlocks     chan amqp.Blocking
+	Registrations  []*Registration
+
 	RPCHandlers          map[string]MessageHandler
 	msgs                 <-chan amqp.Delivery
 	rpcMsgs              <-chan amqp.Delivery
@@ -236,25 +237,24 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		if qosErr != nil {
 			log.Printf("failed to set worker qos\n %v", qosErr)
 		}
-		log.Println("kongy kong")
 
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
 
 		w := &worker{
-			consumerTag:  tag,
-			channel:      amqpChan,
-			q:            b.serviceQueue,
-			rpcq:         b.rpcQueue,
-			svcName:      b.SvcName,
-			isTxnl:       b.IsTxnl,
-			txProvider:   b.TxProvider,
-			rpcLock:      b.RPCLock,
-			rpcHandlers:  b.RPCHandlers,
-			msgHandlers:  b.MsgHandlers,
-			handlersLock: b.HandlersLock,
-			serializer:   b.Serializer,
-			b:            b,
-			amqpErrors:   b.amqpErrors}
+			consumerTag:   tag,
+			channel:       amqpChan,
+			q:             b.serviceQueue,
+			rpcq:          b.rpcQueue,
+			svcName:       b.SvcName,
+			isTxnl:        b.IsTxnl,
+			txProvider:    b.TxProvider,
+			rpcLock:       b.RPCLock,
+			rpcHandlers:   b.RPCHandlers,
+			handlersLock:  b.HandlersLock,
+			registrations: b.Registrations,
+			serializer:    b.Serializer,
+			b:             b,
+			amqpErrors:    b.amqpErrors}
 		go w.Start()
 
 		workers = append(workers, w)
@@ -435,7 +435,7 @@ func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, messag
 //HandleMessage implements GBus.HandleMessage
 func (b *DefaultBus) HandleMessage(message Message, handler MessageHandler) error {
 
-	return b.registerHandlerImpl(message, handler)
+	return b.registerHandlerImpl("", b.SvcName, message, handler)
 }
 
 //HandleEvent implements GBus.HandleEvent
@@ -456,6 +456,7 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 		and bind the queue after the bus has been started
 
 	*/
+
 	if !b.started {
 		subscription := make([]string, 0)
 		subscription = append(subscription, topic, exchange)
@@ -467,7 +468,7 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 			return err
 		}
 	}
-	return b.registerHandlerImpl(event, handler)
+	return b.registerHandlerImpl(exchange, topic, event, handler)
 }
 
 //RegisterSaga impements GBus.RegisterSaga
@@ -604,20 +605,17 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 	return err
 }
 
-func (b *DefaultBus) registerHandlerImpl(msg Message, handler MessageHandler) error {
+func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Message, handler MessageHandler) error {
 
 	b.HandlersLock.Lock()
 	defer b.HandlersLock.Unlock()
 
-	b.Serializer.Register(msg)
-	fqn := msg.SchemaName()
-
-	handlers := b.MsgHandlers[fqn]
-	if handlers == nil {
-		handlers = make([]MessageHandler, 0)
+	if msg != nil {
+		b.Serializer.Register(msg)
 	}
-	handlers = append(handlers, handler)
-	b.MsgHandlers[fqn] = handlers
+
+	registration := NewRegistration(exchange, routingKey, msg, handler)
+	b.Registrations = append(b.Registrations, registration)
 	return nil
 }
 

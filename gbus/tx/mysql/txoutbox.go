@@ -200,7 +200,6 @@ func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
 }
 
 func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
-	log.Println("sending from outbox")
 	tx, txNewErr := outbox.txProv.New()
 
 	if txNewErr != nil {

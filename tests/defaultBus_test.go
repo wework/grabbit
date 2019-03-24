@@ -58,7 +58,7 @@ func TestReply(t *testing.T) {
 	svc2 := createNamedBusForTest(testSvc2)
 
 	proceed := make(chan bool)
-	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		err := invocation.Reply(noopTraceContext(), gbus.NewBusMessage(reply))
 		if err != nil {
 			t.Errorf("could not send reply with error: %s", err.Error())
@@ -96,7 +96,7 @@ func TestPubSub(t *testing.T) {
 	b := createBusForTest()
 
 	proceed := make(chan bool)
-	eventHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
 		return nil
 	}
@@ -112,6 +112,26 @@ func TestPubSub(t *testing.T) {
 
 }
 
+func TestSubscribingOnTopic(t *testing.T) {
+	event := Event1{}
+	b := createBusForTest()
+
+	proceed := make(chan bool)
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+	b.HandleEvent("test_exchange", "a.*.c", nil, eventHandler)
+
+	b.Start()
+	defer b.Shutdown()
+	err := b.Publish(noopTraceContext(), "test_exchange", "a.b.c", gbus.NewBusMessage(event))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-proceed
+}
+
 func TestHandlerRetry(t *testing.T) {
 
 	c1 := Command1{}
@@ -122,12 +142,12 @@ func TestHandlerRetry(t *testing.T) {
 	bus := createBusForTest()
 
 	proceed := make(chan bool)
-	cmdHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		return invocation.Reply(noopTraceContext(), reply)
 	}
 
 	attempts := 0
-	replyHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		if attempts == 0 {
 			attempts++
 			return fmt.Errorf("expecting retry on errors")
@@ -157,7 +177,7 @@ func TestRPC(t *testing.T) {
 	cmd := gbus.NewBusMessage(c1)
 	reply := gbus.NewBusMessage(Reply1{})
 
-	handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 		return invocation.Reply(noopTraceContext(), reply)
 	}

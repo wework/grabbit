@@ -46,7 +46,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		SenderLock:           &sync.Mutex{},
 		ConsumerLock:         &sync.Mutex{},
 		IsTxnl:               builder.txnl,
-		MsgHandlers:          make(map[string][]gbus.MessageHandler),
+		Registrations:        make([]*gbus.Registration, 0),
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx,

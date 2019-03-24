@@ -85,12 +85,12 @@ func TestSagaToServiceConversation(t *testing.T) {
 	svc1 := createNamedBusForTest(testSvc1)
 	svc2 := createNamedBusForTest(testSvc2)
 
-	reply1Handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	reply1Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		invocation.Reply(noopTraceContext(), gbus.NewBusMessage(Command2{}))
 		return nil
 	}
 
-	reply2Handler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	reply2Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
 		return nil
 	}
@@ -177,7 +177,7 @@ func TestSagas(t *testing.T) {
 func TestSagaTimeout(t *testing.T) {
 	proceed := make(chan bool)
 	svc1 := createNamedBusForTest(testSvc1)
-	eventHandler := func(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
 		return nil
 	}
@@ -250,14 +250,14 @@ func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 	}, s.HandleEvent1)
 }
 
-func (s *SagaA) HandleCommand1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaA.HandleCommand1",
 	})
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
-func (s *SagaA) HandleCommand2(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command2 received")
 	reply := gbus.NewBusMessage(Reply2{
 		Data: "SagaA.HandleCommand2",
@@ -265,7 +265,7 @@ func (s *SagaA) HandleCommand2(invocation gbus.Invocation, _ *gbus.BusMessage) e
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
-func (s *SagaA) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply2{
 		Data: "SagaA.HandleEvent1",
 	})
@@ -273,7 +273,7 @@ func (s *SagaA) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) err
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
-func (s *SagaA) HandleEvent2(inocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("event2 received")
 	return nil
 }
@@ -296,7 +296,7 @@ func (s *SagaB) New() gbus.Saga {
 	return &SagaB{}
 }
 
-func (s *SagaB) Startup(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command1 received")
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.Startup",
@@ -304,7 +304,7 @@ func (s *SagaB) Startup(invocation gbus.Invocation, _ *gbus.BusMessage) error {
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
-func (s *SagaB) HandleEvent1(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.HandleEvent1",
 	})
@@ -320,7 +320,7 @@ func (s *SagaB) RequestTimeout() time.Duration {
 	return time.Second * 1
 }
 
-func (s *SagaB) Timeout(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
 		Data: "SagaB.Timeout",
 	}))
@@ -339,7 +339,7 @@ func (s *TimingOutSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command2{}, s.SagaStartup)
 }
 
-func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, _ *gbus.BusMessage) error {
+func (s *TimingOutSaga) SagaStartup(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	return nil
 }
 

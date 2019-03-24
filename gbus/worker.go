@@ -18,23 +18,23 @@ import (
 
 type worker struct {
 	*Safety
-	channel      *amqp.Channel
-	messages     <-chan amqp.Delivery
-	rpcMessages  <-chan amqp.Delivery
-	q            amqp.Queue
-	rpcq         amqp.Queue
-	consumerTag  string
-	svcName      string
-	rpcLock      *sync.Mutex
-	handlersLock *sync.Mutex
-	msgHandlers  map[string][]MessageHandler
-	rpcHandlers  map[string]MessageHandler
-	isTxnl       bool
-	b            *DefaultBus
-	serializer   Serializer
-	txProvider   TxProvider
-	amqpErrors   chan *amqp.Error
-	stop         chan bool
+	channel       *amqp.Channel
+	messages      <-chan amqp.Delivery
+	rpcMessages   <-chan amqp.Delivery
+	q             amqp.Queue
+	rpcq          amqp.Queue
+	consumerTag   string
+	svcName       string
+	rpcLock       *sync.Mutex
+	handlersLock  *sync.Mutex
+	registrations []*Registration
+	rpcHandlers   map[string]MessageHandler
+	isTxnl        bool
+	b             *DefaultBus
+	serializer    Serializer
+	txProvider    TxProvider
+	amqpErrors    chan *amqp.Error
+	stop          chan bool
 }
 
 func (worker *worker) Start() error {
@@ -179,7 +179,12 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	} else {
 		worker.handlersLock.Lock()
-		handlers = worker.msgHandlers[bm.PayloadFQN]
+		worker.log("length of reg %v", len(worker.registrations))
+		for _, registration := range worker.registrations {
+			if registration.Matches(delivery.Exchange, delivery.RoutingKey, bm.PayloadFQN) {
+				handlers = append(handlers, registration.Handler)
+			}
+		}
 		worker.handlersLock.Unlock()
 	}
 	if len(handlers) == 0 {
