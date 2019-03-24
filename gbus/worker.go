@@ -63,7 +63,7 @@ func (worker *worker) Start() error {
 
 func (worker *worker) Stop() error {
 	worker.log("stopping worker")
-	worker.stop <- true
+	close(worker.stop) // worker.stop <- true
 	return nil
 }
 
