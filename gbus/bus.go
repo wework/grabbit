@@ -236,6 +236,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		if qosErr != nil {
 			log.Printf("failed to set worker qos\n %v", qosErr)
 		}
+		log.Println("kongy kong")
 
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
 

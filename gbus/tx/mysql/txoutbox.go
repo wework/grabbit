@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	pending             int
-	waitingConfirm      = 1
-	confirmed           = 2
-	maxPageSize         = 100
+	pending        int
+	waitingConfirm = 1
+	confirmed      = 2
+	//TODO:get these values from configuration
+	maxPageSize         = 500
 	maxDeliveryAttempts = 50
 )
 
@@ -66,7 +67,7 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 
 //Stop forcess the transactional outbox to stop processing additional messages
 func (outbox *TxOutbox) Stop() error {
-	outbox.exit <- true
+	close(outbox.exit)
 	return nil
 }
 
@@ -117,26 +118,16 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 }
 
 func (outbox *TxOutbox) processOutbox() {
-
+	go outbox.cleanOutbox()
 	for {
 		select {
 		case <-outbox.exit:
 			return
+		//TODO:get time duration from configuration
 		case <-time.After(time.Second * 1):
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
 				log.Printf("failed to processOutbox")
-			}
-		case <-time.After(time.Second * 30):
-			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
-			if err != nil {
-				log.Printf("failed to scavenge records")
-			}
-			//scavenge
-		case <-time.After(time.Second * 60):
-			err := outbox.deleteCompletedRecords()
-			if err != nil {
-				log.Printf("failed to delete completed records")
 			}
 		case ack := <-outbox.ack:
 			outbox.updateAckedRecord(ack)
@@ -146,7 +137,30 @@ func (outbox *TxOutbox) processOutbox() {
 	}
 }
 
+func (outbox *TxOutbox) cleanOutbox() {
+
+	for {
+		select {
+		case <-outbox.exit:
+			return
+			//TODO:get time duration from configuration
+		case <-time.After(time.Second * 30):
+			err := outbox.deleteCompletedRecords()
+			if err != nil {
+				log.Printf("failed to delete completed records")
+			}
+			//TODO:get time duration from configuration
+		case <-time.After(time.Second * 20):
+			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
+			if err != nil {
+				log.Printf("failed to scavenge records")
+			}
+		}
+	}
+}
+
 func (outbox *TxOutbox) deleteCompletedRecords() error {
+
 	tx, txErr := outbox.txProv.New()
 	if txErr != nil {
 		return txErr
@@ -186,7 +200,7 @@ func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
 }
 
 func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
-
+	log.Println("sending from outbox")
 	tx, txNewErr := outbox.txProv.New()
 
 	if txNewErr != nil {
