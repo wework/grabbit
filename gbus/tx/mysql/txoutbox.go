@@ -36,6 +36,7 @@ type TxOutbox struct {
 	exit chan bool
 }
 
+//Start starts the transactional outbox that is used to send messages in sync with domain object change
 func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 
 	tx, e := outbox.txProv.New()
@@ -55,20 +56,21 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	}
 	if commitErr := tx.Commit(); commitErr != nil {
 		return commitErr
-	} else {
-		outbox.amqpOutbox = amqpOut
-		outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
-
-		go outbox.processOutbox()
-		return nil
 	}
+	outbox.amqpOutbox = amqpOut
+	outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
+
+	go outbox.processOutbox()
+	return nil
 }
 
+//Stop forcess the transactional outbox to stop processing additional messages
 func (outbox *TxOutbox) Stop() error {
 	outbox.exit <- true
 	return nil
 }
 
+//Save stores a message in a DB to ensure delivery
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
 
 	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (

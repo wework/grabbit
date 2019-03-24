@@ -88,6 +88,7 @@ func (store *InMemorySagaStore) GetSagasByType(tx *sql.Tx, t reflect.Type) ([]*s
 	return instances, nil
 }
 
+//Purge is used for nothing in this case since the store is not persisted use pgstore or mysqlstore
 func (store *InMemorySagaStore) Purge() error {
 	return nil
 }

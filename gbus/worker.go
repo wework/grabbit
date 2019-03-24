@@ -31,7 +31,7 @@ type worker struct {
 	rpcHandlers  map[string]MessageHandler
 	isTxnl       bool
 	b            *DefaultBus
-	serializer   MessageEncoding
+	serializer   Serializer
 	txProvider   TxProvider
 	amqpErrors   chan *amqp.Error
 	stop         chan bool
@@ -189,7 +189,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 	var decErr error
-	bm.Payload, decErr = worker.serializer.Decode(delivery.Body)
+	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 
 	if decErr != nil {
 		worker.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
@@ -214,10 +214,10 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if invkErr == nil {
 		ack := func() error { return delivery.Ack(false /*multiple*/) }
 
-		ackErr = worker.SafeWithRetries(ack, MAX_RETRY_COUNT)
+		ackErr = worker.SafeWithRetries(ack, MaxRetryCount)
 		if worker.isTxnl && ackErr == nil {
 
-			commitErr = worker.SafeWithRetries(tx.Commit, MAX_RETRY_COUNT)
+			commitErr = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 			if commitErr == nil {
 				worker.log("bus transaction comitted successfully ")
 
@@ -228,7 +228,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		} else if worker.isTxnl && ackErr != nil {
 			worker.log("bus rolling back transaction", ackErr)
 			//TODO:retry on error
-			rollbackErr = worker.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
+			rollbackErr = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
 			if rollbackErr != nil {
 				worker.log("failed to rollback transaction\nerror:%v", rollbackErr)
 			}
@@ -238,7 +238,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		worker.log(logMsg, bm.PayloadFQN, bm.Semantics, invkErr)
 		if worker.isTxnl {
 			worker.log("rolling back transaction")
-			rollbackErr = worker.SafeWithRetries(tx.Rollback, MAX_RETRY_COUNT)
+			rollbackErr = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
 
 			if rollbackErr != nil {
 				worker.log("failed to rollback transaction\nerror:%v", rollbackErr)
@@ -248,7 +248,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
 		// b.Publish(b.DLX, "", message)
 		reject := func() error { return delivery.Reject(false /*requeue*/) }
-		rejectErr = worker.SafeWithRetries(reject, MAX_RETRY_COUNT)
+		rejectErr = worker.SafeWithRetries(reject, MaxRetryCount)
 		if rejectErr != nil {
 
 			worker.log("failed to reject message.\nerror:%v", rejectErr)
@@ -284,9 +284,9 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		return nil
 	}
 
-	//retry for MAX_RETRY_COUNT, back off by a Fibonacci series 50, 50, 100, 150, 250 ms
+	//retry for MaxRetryCount, back off by a Fibonacci series 50, 50, 100, 150, 250 ms
 	return retry.Retry(action,
-		strategy.Limit(MAX_RETRY_COUNT),
+		strategy.Limit(MaxRetryCount),
 		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
 }
 

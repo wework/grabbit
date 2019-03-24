@@ -24,6 +24,7 @@ func (provider *Provider) Dispose() {
 	provider.Database.Close()
 }
 
+//Ping checks if the provider is available and timeouts according to the given duration
 func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
 	var ctx context.Context
 	ctx, cancel := context.WithTimeout(ctx, timeoutInSeconds*time.Second)

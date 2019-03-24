@@ -9,6 +9,8 @@ import (
 	"github.com/rhinof/grabbit/gbus"
 )
 
+var _ gbus.HandlerRegister = &Def{}
+
 //Def defines a saga type
 type Def struct {
 	glue           *Glue

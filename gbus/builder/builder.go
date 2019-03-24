@@ -24,7 +24,7 @@ type defaultBuilder struct {
 	txConnStr        string
 	txnlProvider     string
 	workerNum        uint
-	serializer       gbus.MessageEncoding
+	serializer       gbus.Serializer
 	dlx              string
 	defaultPolicies  []gbus.MessagePolicy
 	confirm          bool
@@ -160,7 +160,7 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 	return builder
 }
 
-func (builder *defaultBuilder) WithSerializer(serializer gbus.MessageEncoding) gbus.Builder {
+func (builder *defaultBuilder) WithSerializer(serializer gbus.Serializer) gbus.Builder {
 	builder.serializer = serializer
 	return builder
 }
