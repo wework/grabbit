@@ -14,6 +14,8 @@ type defaultInvocationContext struct {
 	inboundMsg  *BusMessage
 	tx          *sql.Tx
 	ctx         context.Context
+	exchange    string
+	routingKey  string
 }
 
 func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *BusMessage) error {
@@ -64,4 +66,8 @@ func (dfi *defaultInvocationContext) Tx() *sql.Tx {
 
 func (dfi *defaultInvocationContext) Ctx() context.Context {
 	return dfi.ctx
+}
+
+func (dfi *defaultInvocationContext) Routing() (exchange, routingKey string) {
+	return dfi.exchange, dfi.routingKey
 }

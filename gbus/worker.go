@@ -279,7 +279,8 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				inboundMsg:  message,
 				tx:          tx,
 				ctx:         sctx,
-			}
+				exchange:    delivery.Exchange,
+				routingKey:  delivery.RoutingKey}
 
 			e := handler(ctx, message)
 			if e != nil {

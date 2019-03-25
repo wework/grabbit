@@ -160,6 +160,7 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
+	Routing() (exchange, routingKey string)
 }
 
 //Serializer is the base interface for all message serializers

@@ -62,3 +62,7 @@ func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string, e
 func (si *sagaInvocation) RPC(ctx context.Context, service string, request, reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
 	return si.decoratedBus.RPC(ctx, service, request, reply, timeout)
 }
+
+func (si *sagaInvocation) Routing() (exchange, routingKey string) {
+	return si.decoratedInvocation.Routing()
+}
