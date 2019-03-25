@@ -15,6 +15,7 @@ var _ gbus.HandlerRegister = &Def{}
 type Def struct {
 	glue           *Glue
 	sagaType       reflect.Type
+	sagaConfFns    []gbus.SagaConfFn
 	startedBy      []string
 	lock           *sync.Mutex
 	instances      []*Instance
@@ -52,7 +53,7 @@ func (sd *Def) addMsgToHandlerMapping(message gbus.Message, handler gbus.Message
 
 func (sd *Def) newInstance() *Instance {
 	return NewInstance(sd.sagaType,
-		sd.handlersFunMap)
+		sd.handlersFunMap, sd.sagaConfFns...)
 }
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {

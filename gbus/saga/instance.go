@@ -66,7 +66,7 @@ func (si *Instance) requestsTimeout() (bool, time.Duration) {
 }
 
 //NewInstance create a new instance of a Saga
-func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Instance {
+func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string, confFns ...gbus.SagaConfFn) *Instance {
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()
@@ -76,10 +76,14 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string) *Insta
 
 	saga := newSagaPtr.(gbus.Saga)
 
+	newSaga := saga.New()
+	for _, conf := range confFns {
+		newSaga = conf(newSaga)
+	}
 	//newSagaPtr := reflect.New(sagaType).Elem()
 	newInstance := &Instance{
 		ID:                 xid.New().String(),
-		UnderlyingInstance: saga.New(),
+		UnderlyingInstance: newSaga,
 		MsgToMethodMap:     msgToMethodMap}
 	return newInstance
 }

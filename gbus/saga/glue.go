@@ -19,6 +19,8 @@ func fqnsFromMessages(objs []gbus.Message) []string {
 	return fqns
 }
 
+var _ gbus.SagaRegister = &Glue{}
+
 //Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
 	svcName              string
@@ -42,7 +44,7 @@ func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
 }
 
 //RegisterSaga registers the saga instance with the Bus
-func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
+func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 
 	sagaType := reflect.TypeOf(saga)
 
@@ -55,6 +57,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga) error {
 	def := &Def{
 		glue:           imsm,
 		sagaType:       sagaType,
+		sagaConfFns:    conf,
 		startedBy:      fqnsFromMessages(saga.StartedBy()),
 		handlersFunMap: make(map[string]string),
 		lock:           &sync.Mutex{}}

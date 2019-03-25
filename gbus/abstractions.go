@@ -116,9 +116,12 @@ type RequestSagaTimeout interface {
 	Timeout(invocation Invocation, message *BusMessage) error
 }
 
+//SagaConfFn is a function to allow configuration of a saga in the context of the gbus
+type SagaConfFn func(Saga) Saga
+
 //SagaRegister registers sagas to the bus
 type SagaRegister interface {
-	RegisterSaga(saga Saga) error
+	RegisterSaga(saga Saga, conf ...SagaConfFn) error
 }
 
 //Builder is the main interface that should be used to create an instance of a Bus
