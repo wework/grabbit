@@ -3,7 +3,7 @@
 
 # grabbit
 
-A lightweight message bus on top of RabbitMQ supporting:
+A lightweight transactional message bus on top of RabbitMQ supporting:
 
 1) Supported messaging semantics
     * One Way
