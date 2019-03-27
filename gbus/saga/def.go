@@ -18,12 +18,13 @@ type MsgToFuncPair struct {
 
 //Def defines a saga type
 type Def struct {
+
 	glue      *Glue
 	sagaType  reflect.Type
 	startedBy []string
 	lock      *sync.Mutex
 	instances []*Instance
-	// handlersFunMap map[string]string
+	sagaConfFns    []gbus.SagaConfFn
 	msgToFunc  []*MsgToFuncPair
 	msgHandler gbus.MessageHandler
 }
@@ -62,8 +63,8 @@ func (sd *Def) addMsgToHandlerMapping(exchange, routingKey string, message gbus.
 }
 
 func (sd *Def) newInstance() *Instance {
-	return NewInstance(sd.sagaType,
-		sd.msgToFunc)
+	return NewInstance(sd.sagaType, sd.msgToFunc, sd.sagaConfFns...)
+
 }
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {

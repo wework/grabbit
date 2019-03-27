@@ -14,6 +14,8 @@ import (
 	"github.com/streadway/amqp"
 )
 
+var _ SagaRegister = &DefaultBus{}
+
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
@@ -472,11 +474,11 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 }
 
 //RegisterSaga impements GBus.RegisterSaga
-func (b *DefaultBus) RegisterSaga(saga Saga) error {
+func (b *DefaultBus) RegisterSaga(saga Saga, conf ...SagaConfFn) error {
 	if b.Glue == nil {
 		return errors.New("must configure bus to work with Sagas")
 	}
-	return b.Glue.RegisterSaga(saga)
+	return b.Glue.RegisterSaga(saga, conf...)
 
 }
 

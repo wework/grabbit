@@ -97,7 +97,16 @@ func TestSagaToServiceConversation(t *testing.T) {
 
 	svc1.HandleMessage(Reply1{}, reply1Handler)
 	svc1.HandleMessage(Reply2{}, reply2Handler)
-	svc2.RegisterSaga(&SagaA{})
+	svc2.RegisterSaga(&SagaA{}, func(saga gbus.Saga) gbus.Saga {
+		s, ok := saga.(*SagaA)
+		if !ok {
+			t.Error("could not config saga")
+			t.Fail()
+			return saga
+		}
+		s.Conf = "vlad"
+		return s
+	})
 
 	svc1.Start()
 	svc2.Start()
@@ -220,6 +229,7 @@ func TestSagaTimeout(t *testing.T) {
 type SagaA struct {
 	Field1 string
 	Field2 int
+	Conf   string
 }
 
 func (*SagaA) StartedBy() []gbus.Message {
