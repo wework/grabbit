@@ -63,7 +63,7 @@ func (sd *Def) addMsgToHandlerMapping(exchange, routingKey string, message gbus.
 }
 
 func (sd *Def) newInstance() *Instance {
-	return NewInstance(sd.sagaType, sd.handlersFunMap, sd.msgToFunc, sd.sagaConfFns...)
+	return NewInstance(sd.sagaType, sd.msgToFunc, sd.sagaConfFns...)
 
 }
 
