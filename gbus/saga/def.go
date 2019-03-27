@@ -11,49 +11,60 @@ import (
 
 var _ gbus.HandlerRegister = &Def{}
 
+type MsgToFuncPair struct {
+	Filter       *gbus.MessageFilter
+	SagaFuncName string
+}
+
 //Def defines a saga type
 type Def struct {
-	glue           *Glue
-	sagaType       reflect.Type
-	sagaConfFns    []gbus.SagaConfFn
-	startedBy      []string
-	lock           *sync.Mutex
-	instances      []*Instance
-	handlersFunMap map[string]string
-	msgHandler     gbus.MessageHandler
+
+	glue      *Glue
+	sagaType  reflect.Type
+	startedBy []string
+	lock      *sync.Mutex
+	instances []*Instance
+	
+	msgToFunc  []*MsgToFuncPair
+	msgHandler gbus.MessageHandler
 }
 
 //HandleMessage implements HandlerRegister interface
 func (sd *Def) HandleMessage(message gbus.Message, handler gbus.MessageHandler) error {
-	sd.addMsgToHandlerMapping(message, handler)
+	sd.addMsgToHandlerMapping("", sd.glue.svcName, message, handler)
 	return sd.glue.registerMessage(message)
 }
 
 //HandleEvent implements HandlerRegister interface
 func (sd *Def) HandleEvent(exchange, topic string, event gbus.Message, handler gbus.MessageHandler) error {
-	sd.addMsgToHandlerMapping(event, handler)
+	sd.addMsgToHandlerMapping(exchange, topic, event, handler)
 	return sd.glue.registerEvent(exchange, topic, event)
 }
 
 func (sd *Def) getHandledMessages() []string {
 	messages := make([]string, 0)
-	for msgName := range sd.handlersFunMap {
-		messages = append(messages, msgName)
+	for _, pair := range sd.msgToFunc {
+		if pair.Filter.MsgName != "" {
+			messages = append(messages, pair.Filter.MsgName)
+		}
 	}
 	return messages
 }
 
-func (sd *Def) addMsgToHandlerMapping(message gbus.Message, handler gbus.MessageHandler) {
-	msgName := message.SchemaName()
+func (sd *Def) addMsgToHandlerMapping(exchange, routingKey string, message gbus.Message, handler gbus.MessageHandler) {
 	funName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
 	splits := strings.Split(funName, ".")
 	fn := strings.Replace(splits[len(splits)-1], "-fm", "", -1)
-	sd.handlersFunMap[msgName] = fn
+
+	msgToFunc := &MsgToFuncPair{
+		Filter:       gbus.NewMessageFilter(exchange, routingKey, message),
+		SagaFuncName: fn}
+	sd.msgToFunc = append(sd.msgToFunc, msgToFunc)
 }
 
 func (sd *Def) newInstance() *Instance {
-	return NewInstance(sd.sagaType,
-		sd.handlersFunMap, sd.sagaConfFns...)
+	return NewInstance(sd.sagaType, sd.handlersFunMap, sd.msgToFunc, sd.sagaConfFns...)
+
 }
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {

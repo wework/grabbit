@@ -1,38 +1,34 @@
 package gbus
 
 import (
-	"log"
 	"strings"
 )
 
-type Registration struct {
-	exchange   string
-	routingKey string
-	msgName    string
-	Handler    MessageHandler
+type MessageFilter struct {
+	Exchange   string
+	RoutingKey string
+	MsgName    string
 }
 
-func (sub *Registration) Matches(exchange, routingKey, msgName string) bool {
+func (filter *MessageFilter) Matches(exchange, routingKey, msgName string) bool {
 
-	log.Printf("%v %v %v", exchange, routingKey, msgName)
-	log.Printf("%v %v %v", sub.exchange, sub.routingKey, sub.msgName)
 	targetExchange := strings.ToLower(exchange)
 	targetRoutingKey := strings.ToLower(routingKey)
 	targetMsgName := strings.ToLower(msgName)
 
 	//if the registration is for a command then routingkeys must exactly match
-	if sub.exchange == "" && targetExchange == "" {
-		return (sub.routingKey == targetRoutingKey) && (sub.msgName == targetMsgName)
+	if filter.Exchange == "" && targetExchange == "" {
+		return (filter.RoutingKey == targetRoutingKey) && (filter.MsgName == targetMsgName)
 	}
 	//if the exchanges do not matche return false
-	if sub.exchange != targetExchange {
+	if filter.Exchange != targetExchange {
 		return false
 	}
 
 	//to enable subscribers to handle different message types published to a topic or only recieve message from a specific type check if the topic matches and regMsgName is empty
 	// or the topic matches and the msg types are the same
-	routingKeyMatches := wildcardMatch(targetRoutingKey, sub.routingKey)
-	return (routingKeyMatches && sub.msgName == "") || (routingKeyMatches && sub.msgName == targetMsgName)
+	routingKeyMatches := wildcardMatch(targetRoutingKey, filter.RoutingKey)
+	return (routingKeyMatches && filter.MsgName == "") || (routingKeyMatches && filter.MsgName == targetMsgName)
 }
 
 func wildcardMatch(input, pattern string) bool {
@@ -63,14 +59,28 @@ func matchWords(input, pattern []string) bool {
 	return false
 }
 
+type Registration struct {
+	info    *MessageFilter
+	Handler MessageHandler
+}
+
+func (sub *Registration) Matches(exchange, routingKey, msgName string) bool {
+	return sub.info.Matches(exchange, routingKey, msgName)
+}
+
 func NewRegistration(exchange, routingKey string, message Message, handler MessageHandler) *Registration {
 	reg := Registration{
-		exchange:   strings.ToLower(exchange),
-		routingKey: strings.ToLower(routingKey),
-		Handler:    handler}
-
-	if message != nil {
-		reg.msgName = strings.ToLower(message.SchemaName())
-	}
+		info:    NewMessageFilter(exchange, routingKey, message),
+		Handler: handler}
 	return &reg
+}
+
+func NewMessageFilter(exchange, routingKey string, message Message) *MessageFilter {
+	filter := &MessageFilter{
+		Exchange:   strings.ToLower(exchange),
+		RoutingKey: strings.ToLower(routingKey)}
+	if message != nil {
+		filter.MsgName = strings.ToLower(message.SchemaName())
+	}
+	return filter
 }

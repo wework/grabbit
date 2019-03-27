@@ -55,16 +55,19 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 	imsm.sagaStore.RegisterSagaType(saga)
 
 	def := &Def{
-		glue:           imsm,
-		sagaType:       sagaType,
-		sagaConfFns:    conf,
-		startedBy:      fqnsFromMessages(saga.StartedBy()),
-		handlersFunMap: make(map[string]string),
-		lock:           &sync.Mutex{}}
+
+		glue:      imsm,
+		sagaType:  sagaType,
+  	sagaConfFns:    conf,
+		startedBy: fqnsFromMessages(saga.StartedBy()),
+		msgToFunc: make([]*MsgToFuncPair, 0),
+		lock:      &sync.Mutex{}}
+
 
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
 	msgNames := def.getHandledMessages()
+	log.Printf("msgs !!!!!!!! %v", len(msgNames))
 
 	for _, msgName := range msgNames {
 		imsm.addMsgNameToDef(msgName, def)
@@ -76,8 +79,6 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 		timeoutMessage := gbus.SagaTimeoutMessage{}
 		timeoutMsgName := timeoutMessage.SchemaName()
 		_ = def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
-
-		// def.addMsgToHandlerMapping(timeoutMessage, timeoutEtfs.Timeout)
 		imsm.addMsgNameToDef(timeoutMsgName, def)
 
 	}

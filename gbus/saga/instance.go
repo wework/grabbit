@@ -14,14 +14,14 @@ type Instance struct {
 	ID                 string
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
-	MsgToMethodMap     map[string]string
+	MsgToMethodMap     []*MsgToFuncPair
 }
 
 func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage) {
+	exchange, routingKey := invocation.Routing()
+	methodsToInvoke := si.getSagaMethodNameToInvoke(exchange, routingKey, message)
 
-	methodName := si.getSagaMethodNameToInvoke(message)
-
-	if methodName == "" {
+	if len(methodsToInvoke) == 0 {
 		log.Printf("Saga instance called with message but no message handlers were found for message type\nSaga type:%v\nMessage type:%v\n",
 			si.String(),
 			reflect.TypeOf(message.Payload).Name())
@@ -38,17 +38,27 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 	}
 	reflectedVal := reflect.ValueOf(si.UnderlyingInstance)
 
-	params := make([]reflect.Value, 0)
-	params = append(params, reflect.ValueOf(sginv), valueOfMessage)
-	method := reflectedVal.MethodByName(methodName)
-	log.Printf(" invoking method %v on saga instance %v", methodName, si.ID)
-	method.Call(params)
-	log.Printf(" saga instance %v invoked", si.ID)
+	for _, methodName := range methodsToInvoke {
+		params := make([]reflect.Value, 0)
+		params = append(params, reflect.ValueOf(sginv), valueOfMessage)
+		method := reflectedVal.MethodByName(methodName)
+		log.Printf(" invoking method %v on saga instance %v", methodName, si.ID)
+		method.Call(params)
+		log.Printf(" saga instance %v invoked", si.ID)
+
+	}
+
 }
-func (si *Instance) getSagaMethodNameToInvoke(message *gbus.BusMessage) string {
-	fqn := message.PayloadFQN
-	methodName := si.MsgToMethodMap[fqn]
-	return methodName
+func (si *Instance) getSagaMethodNameToInvoke(exchange, routingKey string, message *gbus.BusMessage) []string {
+
+	methods := make([]string, 0)
+
+	for _, pair := range si.MsgToMethodMap {
+		if pair.Filter.Matches(exchange, routingKey, message.PayloadFQN) {
+			methods = append(methods, pair.SagaFuncName)
+		}
+	}
+	return methods
 }
 func (si *Instance) isComplete() bool {
 	saga := si.UnderlyingInstance.(gbus.Saga)
@@ -66,7 +76,9 @@ func (si *Instance) requestsTimeout() (bool, time.Duration) {
 }
 
 //NewInstance create a new instance of a Saga
-func NewInstance(sagaType reflect.Type, msgToMethodMap map[string]string, confFns ...gbus.SagaConfFn) *Instance {
+
+func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair, confFns ...gbus.SagaConfFn) *Instance {
+
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()
