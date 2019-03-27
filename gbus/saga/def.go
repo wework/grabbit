@@ -24,7 +24,7 @@ type Def struct {
 	startedBy []string
 	lock      *sync.Mutex
 	instances []*Instance
-	
+	sagaConfFns    []gbus.SagaConfFn
 	msgToFunc  []*MsgToFuncPair
 	msgHandler gbus.MessageHandler
 }
