@@ -3,7 +3,7 @@
 
 # grabbit
 
-A lightweight message bus on top of RabbitMQ supporting:
+A lightweight transactional message bus on top of RabbitMQ supporting:
 
 1) Supported messaging semantics
     * One Way
@@ -22,7 +22,7 @@ Planned:
 
 
 ## Supported transactional resources
-1) MySql
+1) MySql (InnoDB > 8.0)
 ## Supported serializers
 1) gob
 2) Avro
