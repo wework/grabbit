@@ -18,15 +18,14 @@ type MsgToFuncPair struct {
 
 //Def defines a saga type
 type Def struct {
-
-	glue      *Glue
-	sagaType  reflect.Type
-	startedBy []string
-	lock      *sync.Mutex
-	instances []*Instance
-	sagaConfFns    []gbus.SagaConfFn
-	msgToFunc  []*MsgToFuncPair
-	msgHandler gbus.MessageHandler
+	glue        *Glue
+	sagaType    reflect.Type
+	startedBy   []string
+	lock        *sync.Mutex
+	instances   []*Instance
+	sagaConfFns []gbus.SagaConfFn
+	msgToFunc   []*MsgToFuncPair
+	msgHandler  gbus.MessageHandler
 }
 
 //HandleMessage implements HandlerRegister interface

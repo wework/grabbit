@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/rhinof/grabbit/gbus"
@@ -56,13 +57,12 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 
 	def := &Def{
 
-		glue:      imsm,
-		sagaType:  sagaType,
-  	sagaConfFns:    conf,
-		startedBy: fqnsFromMessages(saga.StartedBy()),
-		msgToFunc: make([]*MsgToFuncPair, 0),
-		lock:      &sync.Mutex{}}
-
+		glue:        imsm,
+		sagaType:    sagaType,
+		sagaConfFns: conf,
+		startedBy:   fqnsFromMessages(saga.StartedBy()),
+		msgToFunc:   make([]*MsgToFuncPair, 0),
+		lock:        &sync.Mutex{}}
 
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
@@ -105,7 +105,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
 
-	defs := imsm.msgToDefMap[msgName]
+	defs := imsm.msgToDefMap[strings.ToLower(msgName)]
 
 	for _, def := range defs {
 		/*
