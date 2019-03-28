@@ -14,7 +14,7 @@ type Command1 struct {
 }
 
 func (Command1) SchemaName() string {
-	return "grabbit.tests.command1"
+	return "grabbit.tests.Command1"
 }
 
 type Command2 struct {
@@ -22,7 +22,7 @@ type Command2 struct {
 }
 
 func (Command2) SchemaName() string {
-	return "grabbit.tests.command2"
+	return "grabbit.tests.Command2"
 }
 
 type Reply1 struct {
@@ -30,7 +30,7 @@ type Reply1 struct {
 }
 
 func (Reply1) SchemaName() string {
-	return "grabbit.tests.reply1"
+	return "grabbit.tests.Reply1"
 }
 
 type Reply2 struct {
@@ -38,7 +38,7 @@ type Reply2 struct {
 }
 
 func (Reply2) SchemaName() string {
-	return "grabbit.tests.reply2"
+	return "grabbit.tests.Reply2"
 }
 
 type Event1 struct {
@@ -46,7 +46,7 @@ type Event1 struct {
 }
 
 func (Event1) SchemaName() string {
-	return "grabbit.tests.event1"
+	return "grabbit.tests.Event1"
 }
 
 type Event2 struct {
@@ -54,5 +54,5 @@ type Event2 struct {
 }
 
 func (Event2) SchemaName() string {
-	return "grabbit.tests.event2"
+	return "grabbit.tests.Event2"
 }
