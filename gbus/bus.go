@@ -118,6 +118,13 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 func (b *DefaultBus) bindServiceQueue() {
 
 	if b.deadletterHandler != nil && b.DLX != "" {
+		b.AMQPChannel.ExchangeDeclare(b.DLX, /*name*/
+			"fanout", /*kind*/
+			true,     /*durable*/
+			false,    /*autoDelete*/
+			false,    /*internal*/
+			false,    /*noWait*/
+			nil /*args amqp.Table*/)
 		b.bindQueue("", b.DLX)
 	}
 	for _, subscription := range b.DelayedSubscriptions {
