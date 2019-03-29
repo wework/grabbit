@@ -35,6 +35,7 @@ type DefaultBus struct {
 	Registrations  []*Registration
 
 	RPCHandlers          map[string]MessageHandler
+	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
 	msgs                 <-chan amqp.Delivery
 	rpcMsgs              <-chan amqp.Delivery
 	HandlersLock         *sync.Mutex
@@ -115,6 +116,10 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 }
 
 func (b *DefaultBus) bindServiceQueue() {
+
+	if b.deadletterHandler != nil && b.DLX != "" {
+		b.bindQueue("", b.DLX)
+	}
 	for _, subscription := range b.DelayedSubscriptions {
 		topic := subscription[0]
 		exchange := subscription[1]
@@ -243,20 +248,21 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
 
 		w := &worker{
-			consumerTag:   tag,
-			channel:       amqpChan,
-			q:             b.serviceQueue,
-			rpcq:          b.rpcQueue,
-			svcName:       b.SvcName,
-			isTxnl:        b.IsTxnl,
-			txProvider:    b.TxProvider,
-			rpcLock:       b.RPCLock,
-			rpcHandlers:   b.RPCHandlers,
-			handlersLock:  b.HandlersLock,
-			registrations: b.Registrations,
-			serializer:    b.Serializer,
-			b:             b,
-			amqpErrors:    b.amqpErrors}
+			consumerTag:       tag,
+			channel:           amqpChan,
+			q:                 b.serviceQueue,
+			rpcq:              b.rpcQueue,
+			svcName:           b.SvcName,
+			isTxnl:            b.IsTxnl,
+			txProvider:        b.TxProvider,
+			rpcLock:           b.RPCLock,
+			rpcHandlers:       b.RPCHandlers,
+			deadletterHandler: b.deadletterHandler,
+			handlersLock:      b.HandlersLock,
+			registrations:     b.Registrations,
+			serializer:        b.Serializer,
+			b:                 b,
+			amqpErrors:        b.amqpErrors}
 		go w.Start()
 
 		workers = append(workers, w)
@@ -471,6 +477,11 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 		}
 	}
 	return b.registerHandlerImpl(exchange, topic, event, handler)
+}
+
+//HandleDeadletter implements GBus.HandleDeadletter
+func (b *DefaultBus) HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error) {
+	b.deadletterHandler = handler
 }
 
 //RegisterSaga impements GBus.RegisterSaga

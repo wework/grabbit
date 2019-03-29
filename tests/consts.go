@@ -22,16 +22,26 @@ func createBusForTest() gbus.Bus {
 	return createNamedBusForTest(testSvc1)
 }
 
-func createNamedBusForTest(svcName string) gbus.Bus {
-	return builder.
+func createBusWithOptions(svcName string, deadletter string, txnl, pos bool) gbus.Bus {
+	busBuilder := builder.
 		New().
 		Bus(connStr).
-		PurgeOnStartUp().
 		WithPolicies(&policy.Durable{}).
-		WithDeadlettering("grabbit-dead").
-		WithConfirms().
-		// Txnl("pg", "user=rhinof password=rhinof dbname=rhinof sslmode=disable").
-		Txnl("mysql", "rhinof:rhinof@/rhinof").
-		Build(svcName)
+		WithConfirms()
 
+	if txnl {
+		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")
+	}
+	if deadletter != "" {
+		busBuilder = busBuilder.WithDeadlettering(deadletter)
+	}
+	if pos {
+		busBuilder = busBuilder.PurgeOnStartUp()
+	}
+
+	return busBuilder.Build(svcName)
+}
+
+func createNamedBusForTest(svcName string) gbus.Bus {
+	return createBusWithOptions(svcName, "dead-grabbit", true, true)
 }

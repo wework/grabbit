@@ -9,6 +9,14 @@ var _ gbus.Message = &Reply2{}
 var _ gbus.Message = &Event1{}
 var _ gbus.Message = &Event2{}
 
+type PoisionMessage struct {
+}
+
+func (PoisionMessage) SchemaName() string {
+	//an empty schema name will result in a message being treated as poision
+	return ""
+}
+
 type Command1 struct {
 	Data string
 }

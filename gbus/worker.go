@@ -18,23 +18,24 @@ import (
 
 type worker struct {
 	*Safety
-	channel       *amqp.Channel
-	messages      <-chan amqp.Delivery
-	rpcMessages   <-chan amqp.Delivery
-	q             amqp.Queue
-	rpcq          amqp.Queue
-	consumerTag   string
-	svcName       string
-	rpcLock       *sync.Mutex
-	handlersLock  *sync.Mutex
-	registrations []*Registration
-	rpcHandlers   map[string]MessageHandler
-	isTxnl        bool
-	b             *DefaultBus
-	serializer    Serializer
-	txProvider    TxProvider
-	amqpErrors    chan *amqp.Error
-	stop          chan bool
+	channel           *amqp.Channel
+	messages          <-chan amqp.Delivery
+	rpcMessages       <-chan amqp.Delivery
+	q                 amqp.Queue
+	rpcq              amqp.Queue
+	consumerTag       string
+	svcName           string
+	rpcLock           *sync.Mutex
+	handlersLock      *sync.Mutex
+	registrations     []*Registration
+	rpcHandlers       map[string]MessageHandler
+	deadletterHandler func(tx *sql.Tx, poision amqp.Delivery) error
+	isTxnl            bool
+	b                 *DefaultBus
+	serializer        Serializer
+	txProvider        TxProvider
+	amqpErrors        chan *amqp.Error
+	stop              chan bool
 }
 
 func (worker *worker) Start() error {
@@ -125,20 +126,7 @@ func (worker *worker) consumeMessages() {
 
 }
 
-func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
-
-	worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
-	/*TODO:FIX Opentracing
-	spCtx, _ := amqptracer.Extract(delivery.Headers)
-	sp := opentracing.StartSpan(
-		"processMessage",
-		opentracing.FollowsFrom(spCtx),
-	)
-	if sp != nil {
-		defer sp.Finish()
-	}
-	*/
-	// Update the context with the span for the subsequent reference.
+func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, error) {
 	bm := NewFromAMQPHeaders(delivery.Headers)
 	bm.ID = delivery.MessageId
 	bm.CorrelationID = delivery.CorrelationId
@@ -152,18 +140,26 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		//TODO: Log poision pill message
 		worker.log("message received but no headers found...rejecting message")
 		worker.log("received message fqn %v, received message semantics %v", bm.PayloadFQN, bm.Semantics)
-		delivery.Reject(false /*requeue*/)
-		return
+
+		return nil, errors.New("missing critical headers")
 	}
 
-	//TODO:Dedup message
+	var decErr error
+	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
+	if decErr != nil {
+		worker.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
+		return nil, decErr
+	}
+	return bm, nil
+}
+
+func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery amqp.Delivery) []MessageHandler {
 	handlers := make([]MessageHandler, 0)
 	if isRPCreply {
 		rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
 		if !rpcHeaderFound {
 			worker.log("rpc message received but no rpc header found...rejecting message")
-			delivery.Reject(false /*requeue*/)
-			return
+			return handlers
 		}
 		worker.rpcLock.Lock()
 		rpcHandler := worker.rpcHandlers[rpcID]
@@ -171,8 +167,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 		if rpcHandler == nil {
 			worker.log("rpc message received but no rpc header found...rejecting message")
-			delivery.Reject(false /*requeue*/)
-			return
+			return handlers
 		}
 
 		handlers = append(handlers, rpcHandler)
@@ -187,19 +182,77 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		}
 		worker.handlersLock.Unlock()
 	}
+
+	return handlers
+}
+
+func (worker *worker) Ack(delivery amqp.Delivery) error {
+	ack := func() error { return delivery.Ack(false /*multiple*/) }
+	return worker.SafeWithRetries(ack, MaxRetryCount)
+}
+
+func (worker *worker) Reject(requeue bool, delivery amqp.Delivery) error {
+	reject := func() error { return delivery.Reject(requeue /*multiple*/) }
+	return worker.SafeWithRetries(reject, MaxRetryCount)
+}
+
+func (worker *worker) isDead(delivery amqp.Delivery) bool {
+
+	if xDeath := delivery.Headers["x-death"]; xDeath != nil {
+		return true
+	}
+	return false
+}
+
+func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
+	tx, txCreateErr := worker.txProvider.New()
+	if txCreateErr != nil {
+		worker.Ack(delivery)
+		return
+	}
+	deadErr := worker.deadletterHandler(tx, delivery)
+	if deadErr != nil {
+		worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
+
+	} else {
+		worker.SafeWithRetries(tx.Commit, MaxRetryCount)
+	}
+}
+
+func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
+
+	worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
+	/*TODO:FIX Opentracing
+	spCtx, _ := amqptracer.Extract(delivery.Headers)
+	sp := opentracing.StartSpan(
+		"processMessage",
+		opentracing.FollowsFrom(spCtx),
+	)
+	if sp != nil {
+		defer sp.Finish()
+	}
+	*/
+	// Update the context with the span for the subsequent reference.
+
+	//handle a message that originated from a deadletter exchange
+	if worker.isDead(delivery) {
+		worker.log("invoking deadletter handler")
+		worker.invokeDeadletterHandler(delivery)
+		return
+	}
+
+	bm, err := worker.extractBusMessage(delivery)
+	if err != nil {
+		//reject poison message
+		worker.Reject(false, delivery)
+		return
+	}
+	//TODO:Dedup message
+	handlers := worker.resolveHandlers(isRPCreply, bm, delivery)
 	if len(handlers) == 0 {
 		worker.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
 		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
-		delivery.Ack(true)
-		return
-	}
-	var decErr error
-	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
-
-	if decErr != nil {
-		worker.log("failed to decode message. rejected as poison\nError:\n%v\nMessage:\n%v", decErr, delivery)
-
-		delivery.Reject(false /*requeue*/)
+		worker.Ack(delivery)
 		return
 	}
 
@@ -217,11 +270,8 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	invkErr := worker.invokeHandlers(context.Background(), handlers, bm, &delivery, tx)
 	worker.log("invoked")
 	if invkErr == nil {
-		ack := func() error { return delivery.Ack(false /*multiple*/) }
-
-		ackErr = worker.SafeWithRetries(ack, MaxRetryCount)
+		ackErr = worker.Ack(delivery)
 		if worker.isTxnl && ackErr == nil {
-
 			commitErr = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 			if commitErr == nil {
 				worker.log("bus transaction comitted successfully ")
@@ -252,8 +302,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		// //add the error to the delivery so if it will be available in the deadletter
 		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
 		// b.Publish(b.DLX, "", message)
-		reject := func() error { return delivery.Reject(false /*requeue*/) }
-		rejectErr = worker.SafeWithRetries(reject, MaxRetryCount)
+		rejectErr = worker.Reject(false, delivery)
 		if rejectErr != nil {
 
 			worker.log("failed to reject message.\nerror:%v", rejectErr)

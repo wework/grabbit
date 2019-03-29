@@ -11,6 +11,7 @@ import (
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
+	RegisterDeadletterHandler
 	BusSwitch
 	Messaging
 	SagaRegister
@@ -108,6 +109,11 @@ type Saga interface {
 
 	//New is a factory method used by the bus to crerate new instances of a saga
 	New() Saga
+}
+
+//RegisterDeadletterHandler provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
+type RegisterDeadletterHandler interface {
+	HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error)
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess

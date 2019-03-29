@@ -2,12 +2,15 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/rhinof/grabbit/gbus"
+	"github.com/streadway/amqp"
 )
 
 func TestSendCommand(t *testing.T) {
@@ -196,6 +199,31 @@ func TestRPC(t *testing.T) {
 		t.Fail()
 	}
 
+}
+
+func TestDeadlettering(t *testing.T) {
+	poision := gbus.NewBusMessage(PoisionMessage{})
+	service1 := createBusWithOptions(testSvc1, "grabbit-dead", true, true)
+	deadletterSvc := createBusWithOptions("deadletterSvc", "grabbit-dead", true, true)
+	proceed := make(chan bool)
+	handler := func(tx *sql.Tx, poision amqp.Delivery) error {
+		proceed <- true
+		return nil
+	}
+
+	deadletterSvc.HandleDeadletter(handler)
+
+	deadletterSvc.Start()
+	defer deadletterSvc.Shutdown()
+	service1.Start()
+	defer service1.Shutdown()
+
+	e := service1.Send(context.Background(), testSvc1, poision)
+	if e != nil {
+		log.Printf("send error: %v", e)
+	}
+
+	<-proceed
 }
 
 func noopTraceContext() context.Context {
