@@ -189,8 +189,8 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 	if len(handlers) == 0 {
 		worker.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
-
-		delivery.Reject(false /*requeue*/)
+		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
+		delivery.Ack(true)
 		return
 	}
 	var decErr error
