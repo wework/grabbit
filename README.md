@@ -34,6 +34,10 @@ Planned:
 
 ## Usage
 
+The following outlines the basic usage of grabbit.
+For a complete view of how you would use grabbit including how to write saga's and handle deadlettering refer to grabbit/tests package
+
+
 ```Go
 import (
   "github.com/rhinof/grabbit/gbus"
