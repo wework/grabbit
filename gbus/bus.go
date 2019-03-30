@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/rs/xid"
+	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -517,8 +518,7 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 }
 
 func (b *DefaultBus) log(format string, v ...interface{}) {
-
-	log.Printf(b.SvcName+":"+format, v...)
+	log.WithField("Service", b.SvcName).Infof(format, v...)
 }
 func (b *DefaultBus) monitorAMQPErrors() {
 

@@ -4,14 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/rhinof/grabbit/gbus"
+	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
+
+func init() {
+	log.SetFormatter(&log.TextFormatter{ForceColors: true})
+}
 
 func TestSendCommand(t *testing.T) {
 	cmd := Command1{
