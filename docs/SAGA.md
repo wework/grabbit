@@ -1,10 +1,10 @@
-#Saga
+# Saga
 
 grabbit makes it easier to implement orchistration based saga's by allowing to couple message exchange with a specific instance of persistant state.
 
-##Defining a Saga
+## Defining a Saga
 
-###Step 1 - Declare a struct that will hold the state of the saga
+### Step 1 - Declare a struct that will hold the state of the saga
 ```go
 import (
 	"github.com/rhinof/grabbit/gbus"
@@ -16,7 +16,7 @@ type MySaga struct {
 }
 
 ```
-###Step 2 - Implement the gbus.Saga interface
+### Step 2 - Implement the gbus.Saga interface
 
 In order to use your defined struct as a saga  you will need to implement the gbus.Saga interface inorder to let grabbit know the following things
 
@@ -45,7 +45,7 @@ type Saga interface {
 	New() Saga
 }
 ```
-###Step 3 - Register the saga with bus
+### Step 3 - Register the saga with bus
 ```go
 
 gb := getBus()
