@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"log"
 	"reflect"
 	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rhinof/grabbit/gbus/saga"
@@ -35,7 +36,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		if error == sql.ErrNoRows {
 			return nil, error
 		} else if error != nil {
-			log.Printf("failed to scan saga row\n%v", error)
+			log.Errorf("%v failed to scan saga row\n%v", store.SvcName, error)
 			return nil, error
 		}
 
@@ -46,7 +47,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		instance.ConcurrencyCtrl = version
 		decErr := dec.Decode(&instance)
 		if decErr != nil {
-			log.Printf("failed to decode saga instance\n%v", decErr)
+			log.Errorf("%v failed to decode saga instance\n%v", store.SvcName, decErr)
 			return nil, decErr
 		}
 
@@ -71,8 +72,8 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (insta
 	}
 
 	if instances, err = store.scanInstances(rows); err != nil {
-		log.Printf("SagaStore failed yo scan saga db record\nError:\n%v", err)
-		log.Println(err)
+		log.Errorf("%v SagaStore failed yo scan saga db record\nError:\n%v", store.SvcName, err)
+
 		return nil, err
 	}
 	return instances, nil
@@ -86,7 +87,7 @@ func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) (err err
 	instance.ConcurrencyCtrl = nextVersion
 	var buf []byte
 	if buf, err = store.serilizeSaga(instance); err != nil {
-		log.Printf("SagaStore failed to encode saga with sagaID - %v\n%v", instance.ID, err)
+		log.Errorf("%v SagaStore failed to encode saga with sagaID - %v\n%v", store.SvcName, instance.ID, err)
 		return err
 	}
 
@@ -124,7 +125,7 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 	rows, error := tx.Query(selectSQL, sagaID)
 	defer rows.Close()
 	if error != nil {
-		log.Printf("%v Failed to fetch saga with id %s\n%s", store.GetSagatableName(), sagaID, error)
+		log.Errorf("%v Failed to fetch saga with id %s\n%s", store.GetSagatableName(), sagaID, error)
 		return nil, error
 	}
 	instances, error := store.scanInstances(rows)
@@ -146,12 +147,12 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
-		log.Printf("failed to encode saga with sagaID - %v\n%v", newInstance.ID, err)
+		log.Errorf("%v failed to encode saga with sagaID - %v\n%v", store.SvcName, newInstance.ID, err)
 		return err
 	}
 	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
 	if err != nil {
-		log.Printf("failed saving new saga\n%v\nSQL:\n%v", err, insertSQL)
+		log.Errorf("%v failed saving new saga\n%v\nSQL:\n%v", store.SvcName, err, insertSQL)
 		return err
 	}
 	return nil
@@ -166,9 +167,9 @@ func (store *SagaStore) Purge() error {
 	tx.Commit()
 	rowsEffected, err := results.RowsAffected()
 	if err != nil {
-		log.Printf("Failed to purge saga table %s", err)
+		log.Errorf("%v Failed to purge saga table %s", store.SvcName, err)
 	} else {
-		log.Printf("Purged %d saga instances", rowsEffected)
+		log.Printf("%v Purged %d saga instances", store.SvcName, rowsEffected)
 	}
 
 	return nil

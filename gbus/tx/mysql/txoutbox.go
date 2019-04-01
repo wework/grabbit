@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/rhinof/grabbit/gbus"
 	"github.com/rs/xid"
@@ -50,7 +51,7 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	}
 	if outbox.purgeOnStartup {
 		if purgeErr := outbox.purge(tx); purgeErr != nil {
-			log.Printf("failed to purge transactional outbox %v", purgeErr)
+			log.Errorf("%v failed to purge transactional outbox %v", outbox.svcName, purgeErr)
 			tx.Rollback()
 			return purgeErr
 		}
@@ -127,12 +128,12 @@ func (outbox *TxOutbox) processOutbox() {
 		case <-time.After(time.Second * 1):
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
-				log.Printf("failed to processOutbox")
+				log.Errorf("%v failed to processOutbox %v", outbox.svcName, err)
 			}
 		case ack := <-outbox.ack:
 			outbox.updateAckedRecord(ack)
 		case nack := <-outbox.nack:
-			log.Printf("nack received for delivery tag %v", nack)
+			log.Printf("%v nack received for delivery tag %v", outbox.svcName, nack)
 		}
 	}
 }
@@ -147,13 +148,13 @@ func (outbox *TxOutbox) cleanOutbox() {
 		case <-time.After(time.Second * 30):
 			err := outbox.deleteCompletedRecords()
 			if err != nil {
-				log.Printf("failed to delete completed records")
+				log.Errorf("%v failed to delete completed records %v", outbox.svcName, err)
 			}
 			//TODO:get time duration from configuration
 		case <-time.After(time.Second * 20):
 			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
 			if err != nil {
-				log.Printf("failed to scavenge records")
+				log.Errorf("%v failed to scavenge records %v", outbox.svcName, err)
 			}
 		}
 	}
@@ -168,7 +169,7 @@ func (outbox *TxOutbox) deleteCompletedRecords() error {
 	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + " WHERE status=?"
 	_, execErr := tx.Exec(deleteSQL, confirmed)
 	if execErr != nil {
-		log.Printf("failed to delete processed records")
+		log.Errorf("%v failed to delete processed records %v", outbox.svcName, execErr)
 		tx.Rollback()
 	}
 	return tx.Commit()
@@ -183,7 +184,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE relay_id=? AND delivery_tag=?"
 	_, execErr := tx.Exec(updateSQL, confirmed, outbox.ID, deliveryTag)
 	if execErr != nil {
-		log.Printf("failed to update delivery tag %v for relay_id %v", deliveryTag, outbox.ID)
+		log.Errorf("%v failed to update delivery tag %v for relay_id %v error:%v", outbox.svcName, deliveryTag, outbox.ID, execErr)
 		tx.Rollback()
 	}
 	return tx.Commit()
@@ -203,14 +204,14 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	tx, txNewErr := outbox.txProv.New()
 
 	if txNewErr != nil {
-		log.Printf("failed creating transaction for outbox.\n%s", txNewErr)
+		log.Errorf("%v failed creating transaction for outbox.\n%s", outbox.svcName, txNewErr)
 		return txNewErr
 	}
 
 	rows, selectErr := recordSelector(tx)
 
 	if selectErr != nil {
-		log.Printf("failed fetching messages from outbox.\n%s", selectErr)
+		log.Errorf("%v failed fetching messages from outbox.\n%s", outbox.svcName, selectErr)
 		return selectErr
 	}
 
@@ -224,7 +225,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 			publishingBytes      []byte
 		)
 		if err := rows.Scan(&recID, &exchange, &routingKey, &publishingBytes); err != nil {
-			log.Printf("failed to scan outbox record\n%s", err)
+			log.Errorf("%v failed to scan outbox record\n%s", outbox.svcName, err)
 
 		}
 
@@ -235,14 +236,14 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		decErr := dec.Decode(&publishing)
 
 		if decErr != nil {
-			log.Printf("failed to decode amqp message from outbox record \n%v", decErr)
+			log.Errorf("%v failed to decode amqp message from outbox record \n%v", outbox.svcName, decErr)
 			continue
 		}
 		log.Printf("%v relay message %v", outbox.svcName, publishing.MessageId)
 
 		//send the amqp message to rabbitmq
 		if deliveryTag, postErr := outbox.amqpOutbox.Post(exchange, routingKey, publishing); postErr != nil {
-			log.Printf("failed to send amqp message %v with id %v.\n%v", publishing.Headers["x-msg-name"], publishing.MessageId, postErr)
+			log.Warnf("%v failed to send amqp message %v with id %v.\n%v", outbox.svcName, publishing.Headers["x-msg-name"], publishing.MessageId, postErr)
 			failedDeliveries = append(failedDeliveries, recID)
 		} else {
 			successfulDeliveries[deliveryTag] = recID
