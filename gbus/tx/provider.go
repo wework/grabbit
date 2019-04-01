@@ -26,8 +26,8 @@ func (provider *Provider) Dispose() {
 
 //Ping checks if the provider is available and timeouts according to the given duration
 func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
-	var ctx context.Context
-	ctx, cancel := context.WithTimeout(ctx, timeoutInSeconds*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutInSeconds*time.Second)
 
 	defer cancel()
 
