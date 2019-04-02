@@ -81,7 +81,7 @@ func (s *BookVacationSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
 
 ```
 
-Implement the business logic of the handlers:
+### Step3 - Implement the business logic of the handlers:
 
 Handle the startup command and send commands to the flight and hotel booking services
 
@@ -140,7 +140,7 @@ func (s *BookVacationSaga) HandleBookFlightResponse(invocation gbus.Invocation, 
 }
 ```
 
-### Step 3 - Register the saga with bus
+### Step 4 - Register the saga with bus
 ```go
 
 gb := getBus("vacationSvc")
