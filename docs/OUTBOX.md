@@ -36,7 +36,9 @@ The following is an example of how to configure grabbit to make use of all of th
     Txnl("mysql", "connection string to mysql").
     Build("your_service_name")
 
-
-  }
+  someEvent := gbus.NewBusMessage(SomeEvent{})
+  //this event will be sent via the transactional outbox
+  gb.Publish(context.Background(), "some_exchange", "some.topic" someEvent)
+}
 
 ```
