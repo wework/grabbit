@@ -171,8 +171,34 @@ func (s *BookVacationSaga) HandleBookFlightResponse(invocation gbus.Invocation, 
 
 }
 ```
+### Step 4 - Handling the  timeout requirement
 
-### Step 4 - Register the saga with bus
+In order to define a timeout for the saga and have grabbit call the saga instance once that timeout is reached (assuming the saga hasn't completed yet) the saga needs to implement the gbus.RequestSagaTimeout interface
+
+```go
+type RequestSagaTimeout interface {
+	TimeoutDuration() time.Duration
+	Timeout(invocation Invocation, message *BusMessage) error
+}
+```
+
+So in order to fulfill our requerment we will need to add the following to our saga
+
+```go
+
+func (s *BookVacationSaga) RequestTimeout() time.Duration {
+	//request to timeout if after 15 minutes the saga is not complete
+	return time.Minute * 15
+}
+
+func (s *BookVacationSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	return invocation.Bus().Publish(invocation.Ctx(), "some_exchange", "some.topic.1", gbus.NewBusMessage(VacationBookingTimedOut{}))
+}
+
+```
+
+
+### Step 5 - Register the saga with bus
 ```go
 
 gb := getBus("vacationSvc")
