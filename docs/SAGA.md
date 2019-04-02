@@ -126,10 +126,10 @@ func (s *BookVacationSaga) HandleBookHotelResponse(invocation gbus.Invocation, m
 }
 ```
 
-handle the response of the hotel booking service
+handle the response of the flight booking service
 
 ```go
-func (s *BookVacationSaga) HandleBookHotelResponse(invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (s *BookVacationSaga) HandleBookFlightResponse(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	
 	responseMsg := message.Payload.(BookFlightResponse)
 	
