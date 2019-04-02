@@ -71,7 +71,7 @@ func (as *Avro) Encode(obj gbus.Message) (msg []byte, err error) {
 	name := obj.SchemaName()
 	rel, ok := as.registeredSchemas[name]
 	if !ok {
-		err := fmt.Errorf("not a registered obbject :(")
+		err := fmt.Errorf("not a registered object :(")
 		logrus.WithError(err).WithField("name", name).Error("not a registered type")
 		return nil, err
 	}
