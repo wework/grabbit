@@ -97,9 +97,9 @@ func (s *BookVacationSaga) HandleBookVacationCommand(invocation gbus.Invocation,
 	  return bookFlightErr
 	}
 	
-	//send a command to the flight service to book a flight
-	bookFlightCmd := gbus.NewBusMessage(BookFlight{})
-	bookHotelErr := invocation.Bus().Send(invocation.Ctx(), "flightSvc", bookFlightCmd)
+	//send a command to the hotel service to book a flight
+	bookHotelCmd := gbus.NewBusMessage(BookFlight{})
+	bookHotelErr := invocation.Bus().Send(invocation.Ctx(), "hotelSvc", bookHotelCmd)
 	
 	if bookHotelErr != nil{
 	  return bookHotelErr
