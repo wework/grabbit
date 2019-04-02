@@ -5,7 +5,7 @@ grabbit makes it easier implementing orchestration based saga's by allowing to c
 Let's assume we were tasked to implement a business process of booking a vacation which consists of coordinating between the flight reservation service and hotel booking service.
 
 Reacting to a BookVacation command our service will issue a BookFlight command to the flight reservation service and a BookHotel command to the hotel booking service.
-We will then wait for replies from these services confirming or declining the booking requests and issue a VacationBooked event if all parties accepted our booking or issue compensating commands if either the hotel or flight service declined our command.
+We will then wait for replies from these services confirming or declining the booking requests and issue a VacationBookingComplete event if all parties accepted our booking or issue compensating commands if either the hotel or flight service declined our command.
 
 Finally we would like to set a timeout for the entire process ensuring that if the process is not complete by a given timeframe a VacationBookingTimedout event is raised
 
@@ -117,11 +117,28 @@ handle the response of the hotel booking service
 ```go
 func (s *BookVacationSaga) HandleBookHotelResponse(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	
-	responseMsg := message.Payload.(BookHotelResponse)
+	hotelBookingResponse := message.Payload.(BookHotelResponse)
+	if !hotelBookingResponse.Booked{
+	 cancleFlightBooking := gbus.NewBusMessage(CancleFlightBooking{
+	 	BookingRef : s.BookingId
+	 })
+	 
+	 return invocation.Bus().Send(invocation.Ctx(), "flightSvc", cancleFlightBooking)
+	
+	}
 	
 	log.Printf("do some business logic %v", responseMsg)
 	
 	s.GotHotelSvcResponse = true
+	
+	//publish event if saga is complete
+	if s.IsComplete(){
+	 event :=  gbus.NewBusMessage(VacationBookingComplete{})
+	 invocation.Bus().Publish(invocation.Ctx(), "some_exchange", "some.topic", event )
+	
+	}
+	
+	return nil
 
 }
 ```
@@ -131,11 +148,26 @@ handle the response of the flight booking service
 ```go
 func (s *BookVacationSaga) HandleBookFlightResponse(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	
-	responseMsg := message.Payload.(BookFlightResponse)
+	flightBookingResponse := message.Payload.(BookHotelResponse)
+	if !flightBookingResponse.Booked{
+	 cancleHoteltBooking := gbus.NewBusMessage(CancleHotelBooking{
+	 	BookingRef : s.BookingId
+	 })
+	 
+	 return invocation.Bus().Send(invocation.Ctx(), "hotelSvc", cancleHoteltBooking)
 	
-	log.Printf("do some business logic %v", responseMsg)
+	}
 	
 	s.GotFlightSvcResponse = true
+	
+	//publish event if saga is complete
+	if s.IsComplete(){
+	 event :=  gbus.NewBusMessage(VacationBookingComplete{})
+	 invocation.Bus().Publish(invocation.Ctx(), "some_exchange", "some.topic", event )
+	
+	}
+	
+	return nil
 
 }
 ```
