@@ -50,7 +50,7 @@ Define a message
 ```Go
 type SomeMessage struct {}
 
-func(SomeMessage) Name() string{
+func(SomeMessage) SchemaName() string{
    return "some.unique.namespace.somemessage"
 }
 
