@@ -191,7 +191,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 AND delivery_attemtps < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
@@ -259,7 +259,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	}
 
 	for recid := range failedDeliveries {
-		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attemtps=delivery_attemtps+1  WHERE rec_id=?", recid)
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attempts=delivery_attempts+1  WHERE rec_id=?", recid)
 		if updateErr != nil {
 			log.Printf("failed to update transactional outbox with failed deivery attempt for record %v\n%v", recid, updateErr)
 		}
@@ -288,7 +288,7 @@ func ensureSchema(tx *sql.Tx, svcName string) error {
 	status	int(11) NOT NULL,
 	relay_id varchar(50)  NULL,
 	delivery_tag	bigint(20) NOT NULL,
-	delivery_attemtps int NOT NULL DEFAULT 0,
+	delivery_attempts int NOT NULL DEFAULT 0,
 	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(rec_id))`
 

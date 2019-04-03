@@ -25,7 +25,7 @@ func (filter *MessageFilter) Matches(exchange, routingKey, msgName string) bool 
 		return false
 	}
 
-	//to enable subscribers to handle different message types published to a topic or only recieve message from a specific type check if the topic matches and regMsgName is empty
+	//to enable subscribers to handle different message types published to a topic or only receive message from a specific type check if the topic matches and regMsgName is empty
 	// or the topic matches and the msg types are the same
 	routingKeyMatches := wildcardMatch(targetRoutingKey, filter.RoutingKey)
 	return (routingKeyMatches && filter.MsgName == "") || (routingKeyMatches && filter.MsgName == targetMsgName)

@@ -276,14 +276,14 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	invkErr := worker.invokeHandlers(context.Background(), handlers, bm, &delivery, tx)
 
 	// if all handlers executed with out errors then commit the transactional if the bus is transactional
-	// if the tranaction commited successfully then ack the message.
+	// if the tranaction committed successfully then ack the message.
 	// if the bus is not transactional then just ack the message
 	if invkErr == nil {
 
 		if worker.isTxnl {
 			commitErr = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 			if commitErr == nil {
-				worker.log().Info("bus transaction comitted successfully ")
+				worker.log().Info("bus transaction committed successfully ")
 				//ack the message
 				ackErr = worker.Ack(delivery)
 				if ackErr != nil {
