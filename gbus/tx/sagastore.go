@@ -164,10 +164,16 @@ func (store *SagaStore) Purge() error {
 
 	log.Printf("Purging saga table %v", store.GetSagatableName())
 	results, err := tx.Exec("DELETE FROM  " + store.GetSagatableName())
-	tx.Commit()
-	rowsEffected, err := results.RowsAffected()
 	if err != nil {
 		log.Errorf("%v Failed to purge saga table %s", store.SvcName, err)
+		return err
+	}
+	if txErr := tx.Commit(); txErr != nil {
+		return txErr
+	}
+	rowsEffected, resultsErr := results.RowsAffected()
+	if resultsErr != nil {
+		log.Warnf("%v Failed to fect number of deleted saga records %s", store.SvcName, err)
 	} else {
 		log.Printf("%v Purged %d saga instances", store.SvcName, rowsEffected)
 	}
