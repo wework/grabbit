@@ -274,28 +274,37 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 	var ackErr, commitErr, rollbackErr, rejectErr error
 	invkErr := worker.invokeHandlers(context.Background(), handlers, bm, &delivery, tx)
-	worker.log().Info("invoked")
+
+	// if all handlers executed with out errors then commit the transactional if the bus is transactional
+	// if the tranaction commited successfully then ack the message.
+	// if the bus is not transactional then just ack the message
 	if invkErr == nil {
-		ackErr = worker.Ack(delivery)
-		if worker.isTxnl && ackErr == nil {
+
+		if worker.isTxnl {
 			commitErr = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 			if commitErr == nil {
 				worker.log().Info("bus transaction comitted successfully ")
+				//ack the message
+				ackErr = worker.Ack(delivery)
+				if ackErr != nil {
+					// if this fails then the message will be eventually redeilvered by RabbitMQ
+					//sp handlers should be idempotent.
+					worker.log().Info("failed to send ack to the broker ")
+				}
 
 			} else {
-				worker.log().WithError(commitErr).Error("failed to commit transaction")
+				worker.log().WithError(commitErr).Error("failed committing transaction")
+				//if the commit failed we will reject the message
+				worker.Reject(false, delivery)
 			}
-
-		} else if worker.isTxnl && ackErr != nil {
-			worker.log().WithError(ackErr).Error("bus rolling back transaction")
-			//TODO:retry on error
-			rollbackErr = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
-			if rollbackErr != nil {
-				worker.log().WithError(rollbackErr).Error("failed to rollback transaction")
+		} else { /*if the bus in not transactional just try acking the message*/
+			ackErr = worker.Ack(delivery)
+			if ackErr != nil {
+				worker.log().Info("failed to send ack to the broker ")
 			}
 		}
+		//else there was an error in the invokation then try rollingback the transaction and reject the message
 	} else {
-
 		worker.log().WithError(invkErr).WithFields(log.Fields{"message name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
 
 		if worker.isTxnl {
@@ -306,12 +315,9 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				worker.log().WithError(rollbackErr).Error("failed to rollback transaction")
 			}
 		}
-		// //add the error to the delivery so if it will be available in the deadletter
-		// delivery.Headers["x-grabbit-last-error"] = invkErr.Error()
-		// b.Publish(b.DLX, "", message)
+
 		rejectErr = worker.Reject(false, delivery)
 		if rejectErr != nil {
-
 			worker.log().WithError(rejectErr).Error("failed to reject message")
 		}
 	}
