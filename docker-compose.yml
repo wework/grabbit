@@ -32,11 +32,7 @@ services:
         MYSQL_PASSWORD:  rhinof
     ports:
       - 3306:3306
-    volumes:
-      - datavolume:/var/lib/mysql
   adminer:
     image: adminer
     ports:
       - 8080:8080
-volumes:
-  datavolume:

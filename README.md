@@ -136,5 +136,5 @@ if e != nil{
 
 ## Testing
 
-1) make sure to first: `docker-compose up -d`
+1) make sure to first: `docker-compose up -V -d`
 2) then to run the tests: `go test ./...`
