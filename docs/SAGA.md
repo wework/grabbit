@@ -205,3 +205,16 @@ gb := getBus("vacationSvc")
 gb.RegisterSaga(BookVacationSaga{})
 
 ```
+
+## Saga Persistence
+
+Saga instances get persited to the transactional database as part of the bounding transaction ensuring that Saga's together with their state gets preserved between the asynchronous processing of the messages that they handle.
+
+grabbit serializes and deserializes each saga instance when it is being saved or fetched from the database. grabbit currently uses gob as the serialization format.
+This means that changes done to the struct definition of the saga should be done in a backward compatible manner as introducing any breaking changes will break the serialization of the saga instance and grabbit will not be able to fetch currently active instances from the database.
+It is recommended to follow [semantic versioning](https://semver.org/) of the go package that contains your saga definitions.
+
+### Concurrency
+
+grabbit automatically implements an optimistic concurrency model when processing a message and persisting saga instances, detecting when the saga state turns stale due to processing concurrently a different message.
+When the above is detected grabbit will rollback the bounded transaction and retry the execution of the saga.
