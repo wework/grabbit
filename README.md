@@ -11,10 +11,10 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
     * Duplex
     * Publish/Subscribe
     * Request/Reply (RPC)
-2) Long running processes via the [Saga](https://github.com/rhinof/grabbit/blob/master/docs/SAGA.md) pattern
+2) Long running processes via the [Saga](https://github.com/wework/grabbit/blob/master/docs/SAGA.md) pattern
 3) Retry and backoffs
 4) Publisher confirms
-5) [Reliable messaging](https://github.com/rhinof/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
+5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
 
 Planned:
