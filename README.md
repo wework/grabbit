@@ -1,5 +1,5 @@
 
-[![CircleCI](https://circleci.com/gh/rhinof/grabbit/tree/master.svg?style=shield)](https://circleci.com/gh/rhinof/grabbit/tree/master)
+[![CircleCI](https://circleci.com/gh/wework/grabbit.svg?style=svg)](https://circleci.com/gh/wework/grabbit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/wework/grabbit)](https://goreportcard.com/report/github.com/wework/grabbit)
 
 # grabbit
