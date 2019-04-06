@@ -221,6 +221,20 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
+	//catch all error handling so goroutine will not crash
+	defer func() {
+		if r := recover(); r != nil {
+			logEntry := worker.log().WithField("Worker", worker.consumerTag)
+			if err, ok := r.(error); ok {
+				logEntry = logEntry.WithError(err)
+			} else {
+				logEntry = logEntry.WithField("Panic", r)
+			}
+
+			logEntry.Error("failed to process message")
+		}
+	}()
+
 	worker.log().WithFields(log.Fields{"Worker": worker.consumerTag, "MessageId": delivery.MessageId}).Info("GOT MSG")
 	// worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
 	/*TODO:FIX Opentracing
