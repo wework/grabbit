@@ -61,8 +61,9 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	}
 	outbox.amqpOutbox = amqpOut
 	outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
-
+	go outbox.cleanOutbox()
 	go outbox.processOutbox()
+	go outbox.scavenge()
 	return nil
 }
 
@@ -119,7 +120,7 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 }
 
 func (outbox *TxOutbox) processOutbox() {
-	go outbox.cleanOutbox()
+
 	for {
 		select {
 		case <-outbox.exit:
@@ -139,7 +140,6 @@ func (outbox *TxOutbox) processOutbox() {
 }
 
 func (outbox *TxOutbox) cleanOutbox() {
-
 	for {
 		select {
 		case <-outbox.exit:
@@ -150,6 +150,16 @@ func (outbox *TxOutbox) cleanOutbox() {
 			if err != nil {
 				log.Errorf("%v failed to delete completed records %v", outbox.svcName, err)
 			}
+		}
+	}
+}
+
+func (outbox *TxOutbox) scavenge() {
+
+	for {
+		select {
+		case <-outbox.exit:
+			return
 			//TODO:get time duration from configuration
 		case <-time.After(time.Second * 20):
 			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
@@ -167,12 +177,20 @@ func (outbox *TxOutbox) deleteCompletedRecords() error {
 		return txErr
 	}
 	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + " WHERE status=?"
-	_, execErr := tx.Exec(deleteSQL, confirmed)
+	result, execErr := tx.Exec(deleteSQL, confirmed)
 	if execErr != nil {
 		log.Errorf("%v failed to delete processed records %v", outbox.svcName, execErr)
 		tx.Rollback()
+		return execErr
 	}
-	return tx.Commit()
+
+	commitErr := tx.Commit()
+	records, ree := result.RowsAffected()
+	if commitErr == nil && ree == nil && records > 0 {
+		log.Printf("%v cleaned %v records from outbox", outbox.svcName, records)
+	}
+
+	return commitErr
 }
 
 func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
