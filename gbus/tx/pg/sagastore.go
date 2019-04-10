@@ -5,9 +5,9 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/saga"
-	"github.com/rhinof/grabbit/gbus/tx"
+	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/saga"
+	"github.com/wework/grabbit/gbus/tx"
 )
 
 //SagaStore implements the saga/store interface on top of PostgreSQL

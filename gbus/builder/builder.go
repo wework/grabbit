@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/saga"
-	"github.com/rhinof/grabbit/gbus/saga/stores"
-	"github.com/rhinof/grabbit/gbus/serialization"
-	"github.com/rhinof/grabbit/gbus/tx/mysql"
-	"github.com/rhinof/grabbit/gbus/tx/pg"
+	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/saga"
+	"github.com/wework/grabbit/gbus/saga/stores"
+	"github.com/wework/grabbit/gbus/serialization"
+	"github.com/wework/grabbit/gbus/tx/mysql"
+	"github.com/wework/grabbit/gbus/tx/pg"
 )
 
 type defaultBuilder struct {

@@ -4,8 +4,8 @@ import (
 	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql" //blank import
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/tx"
+	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/tx"
 )
 
 //NewTxProvider returns a new PgProvider
