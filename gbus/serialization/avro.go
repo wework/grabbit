@@ -12,7 +12,7 @@ import (
 
 	kafka "github.com/dangkaka/go-kafka-avro"
 	"github.com/linkedin/goavro"
-	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus"
 	"github.com/sirupsen/logrus"
 )
 

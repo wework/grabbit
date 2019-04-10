@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus"
 )
 
 /*

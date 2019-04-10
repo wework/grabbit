@@ -11,7 +11,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 
-	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus"
 )
 
 var _ gbus.Serializer = &Proto{}

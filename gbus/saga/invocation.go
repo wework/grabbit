@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus"
 )
 
 type sagaInvocation struct {

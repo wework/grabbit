@@ -1,9 +1,9 @@
 package tests
 
 import (
-	"github.com/rhinof/grabbit/gbus"
-	"github.com/rhinof/grabbit/gbus/builder"
-	"github.com/rhinof/grabbit/gbus/policy"
+	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus/builder"
+	"github.com/rhinof/wework/grabbit/gbus/policy"
 )
 
 var connStr string

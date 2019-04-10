@@ -1,6 +1,6 @@
 package tests
 
-import "github.com/rhinof/grabbit/gbus"
+import "github.com/rhinof/wework/grabbit/gbus"
 
 var _ gbus.Message = &Command1{}
 var _ gbus.Message = &Command2{}

@@ -15,7 +15,7 @@ Finally we would like to set a timeout for the entire process ensuring that if t
 ### Step 1 - Declare a struct that will hold the state of the saga
 ```go
 import (
-	"github.com/rhinof/grabbit/gbus"
+	"github.com/rhinof/wework/grabbit/gbus"
 )
 
 type BookVacationSaga struct {

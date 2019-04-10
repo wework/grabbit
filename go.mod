@@ -1,4 +1,4 @@
-module github.com/rhinof/grabbit
+module github.com/rhinof/wework/grabbit
 
 require (
 	github.com/Rican7/retry v0.1.0
