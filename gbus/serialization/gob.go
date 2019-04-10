@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 	"github.com/sirupsen/logrus"
 )
 

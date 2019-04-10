@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 )
 
 var _ gbus.HandlerRegister = &Def{}

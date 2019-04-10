@@ -11,7 +11,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )

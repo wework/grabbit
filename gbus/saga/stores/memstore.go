@@ -5,8 +5,8 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/rhinof/wework/grabbit/gbus"
-	"github.com/rhinof/wework/grabbit/gbus/saga"
+	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/saga"
 )
 
 //InMemorySagaStore stores the saga instances in-memory, not intended for production use

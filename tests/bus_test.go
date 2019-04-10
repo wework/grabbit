@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )

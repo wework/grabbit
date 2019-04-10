@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 	log "github.com/sirupsen/logrus"
 )
 

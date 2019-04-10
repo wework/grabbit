@@ -11,8 +11,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/rhinof/wework/grabbit/gbus"
-	"github.com/rhinof/wework/grabbit/gbus/saga"
+	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/saga"
 )
 
 //SagaStore base type for embedding for new transactional saga stores

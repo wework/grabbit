@@ -19,9 +19,9 @@ The following is an example of how to configure grabbit to make use of all of th
 ```go
 
   import (
-  	"github.com/rhinof/wework/grabbit/gbus"
-  	"github.com/rhinof/wework/grabbit/gbus/builder"
-  	"github.com/rhinof/wework/grabbit/gbus/policy"
+  	"github.com/wework/grabbit/gbus"
+  	"github.com/wework/grabbit/gbus/builder"
+  	"github.com/wework/grabbit/gbus/policy"
   )
 
 

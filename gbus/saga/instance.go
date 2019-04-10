@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/rhinof/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus"
 	"github.com/rs/xid"
 )
 
