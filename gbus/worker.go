@@ -279,10 +279,11 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	var tx *sql.Tx
 	var txErr error
 	if worker.isTxnl {
-		//TODO:Add retries, and reject message with requeue=true
 		tx, txErr = worker.txProvider.New()
 		if txErr != nil {
 			worker.log().WithError(txErr).Error("failed to create transaction")
+			//reject the message but requeue it so it gets redelivered until we can create transactions
+			worker.Reject(true, delivery)
 			return
 		}
 	}
