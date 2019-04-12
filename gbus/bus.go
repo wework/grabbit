@@ -286,6 +286,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		if p := recover(); p != nil {
 			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 			shutdwonErr = errors.New(pncMsg)
+			b.log("error when shutting down bus %v", shutdwonErr)
 		}
 	}()
 
@@ -295,7 +296,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 
 	b.Outgoing.shutdown()
 	b.started = false
-	b.amqpConn.Close()
+
 	if b.IsTxnl {
 		b.TxProvider.Dispose()
 		b.Outbox.Stop()
