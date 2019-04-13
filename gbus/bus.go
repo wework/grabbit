@@ -94,7 +94,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	if b.PurgeOnStartup {
 		msgsPurged, purgeError := b.AMQPChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
 		if purgeError != nil {
-			b.log("failed to purge queue: %v.\ndeleted number of messages:%v\nError:%v", b.SvcName, msgsPurged, purgeError)
+			b.log().WithError(purgeError).WithField("deleted_messages", msgsPurged).Error("failed to purge queue")
 			return q, purgeError
 		}
 	}
@@ -110,7 +110,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 		false, /*noWait*/
 		args /*args*/)
 	if e != nil {
-		b.log("failed to declare queue.\nerror:%v", e)
+		b.log().WithError(e).Error("failed to declare queue")
 	}
 	b.serviceQueue = q
 	return q, e
@@ -139,11 +139,11 @@ func (b *DefaultBus) bindServiceQueue() {
 			false,   /*noWait*/
 			nil /*args amqp.Table*/)
 		if e != nil {
-			b.log("failed to declare exchange %v\n%v", exchange, e)
+			b.log().WithError(e).WithField("exchange", exchange).Error("failed to declare exchange")
 		} else {
 			e = b.bindQueue(topic, exchange)
 			if e != nil {
-				b.log("failed to bind to the following\n topic:%v\n exchange:%v\n%v", topic, exchange, e)
+				b.log().WithError(e).WithFields(log.Fields{"topic": topic, "exchange": exchange}).Error("failed to bind topic to exchange")
 			}
 		}
 	}
@@ -193,14 +193,14 @@ func (b *DefaultBus) Start() error {
 
 		var amqpChan *amqp.Channel
 		if amqpChan, e = b.createAMQPChannel(b.amqpConn); e != nil {
-			b.log("failed to create amqp channel for transactional relay\n%v", e)
+			b.log().WithError(e).Error("failed to create amqp channel for transactional outbox")
 			return e
 		}
 		amqpChan.NotifyClose(b.amqpErrors)
 		amqpOutbox := &AMQPOutbox{}
 		amqpOutbox.init(amqpChan, b.Confirm, false)
 		if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
-			b.log("failed to start transactional relay\n%v", startErr)
+			b.log().WithError(startErr).Error("failed to start transactional outbox")
 			return startErr
 		}
 
@@ -222,11 +222,11 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 
-	b.log("initiating %v workers", b.WorkerNum)
+	b.log().WithField("number_of_workers", b.WorkerNum).Info("initiating workers")
 	workers, createWorkersErr := b.createBusWorkers(b.WorkerNum)
 	if createWorkersErr != nil {
 
-		b.log("error creating channel for worker\n%s", createWorkersErr)
+		b.log().WithError(createWorkersErr).Error("error creating channel for worker")
 
 		return createWorkersErr
 	}
@@ -281,12 +281,12 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 //Shutdown implements GBus.Start()
 func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 
-	b.log("Shuting down %v ", b.SvcName)
+	b.log().Info("Bus shuting down")
 	defer func() {
 		if p := recover(); p != nil {
 			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 			shutdwonErr = errors.New(pncMsg)
-			b.log("error when shutting down bus %v", shutdwonErr)
+			b.log().WithError(shutdwonErr).Error("error when shutting down bus")
 		}
 	}()
 
@@ -345,7 +345,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 
 		newTx, newTxErr := b.TxProvider.New()
 		if newTxErr != nil {
-			b.log("failed to create transaction when sending a transactional message\n%s", newTxErr)
+			b.log().WithError(newTxErr).Error("failed to create transaction when sending a transactional message")
 			return newTxErr
 		}
 		activeTx = newTx
@@ -518,8 +518,13 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 	return nil, lastErr
 }
 
-func (b *DefaultBus) log(format string, v ...interface{}) {
-	log.WithField("Service", b.SvcName).Infof(format, v...)
+//
+// func (b *DefaultBus) log(format string, v ...interface{}) {
+// 	log.WithField("Service", b.SvcName).Infof(format, v...)
+// }
+
+func (b *DefaultBus) log() *log.Entry {
+	return log.WithField("service", b.SvcName)
 }
 func (b *DefaultBus) monitorAMQPErrors() {
 
@@ -527,14 +532,14 @@ func (b *DefaultBus) monitorAMQPErrors() {
 		select {
 		case blocked := <-b.amqpBlocks:
 			if blocked.Active {
-				b.log("amqp connection blocked. reason:%v", blocked.Reason)
+				b.log().WithField("reason", blocked.Reason).Warn("amqp connection blocked")
 			} else {
-				b.log("amqp connection unblocked, reason:%v", blocked.Reason)
+				b.log().WithField("reason", blocked.Reason).Info("amqp connection unblocked")
 			}
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
 			b.rabbitFailure = true
-			b.log("amqp error: %v", amqpErr)
+			b.log().WithField("amqp_error", amqpErr).Error("amqp error")
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr
 			}
@@ -561,7 +566,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 
 	buffer, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
-		b.log("failed to send message, encoding of message failed with the following error:\n%v\nmessage details:\n%v", err, message)
+		b.log().WithError(err).WithField("message", message).Error("failed to send message, encoding of message failed")
 		return err
 	}
 
@@ -604,7 +609,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		//send to the transactional outbox if the bus is transactional
 		//otherwise send directly to amqp
 		if b.IsTxnl && tx != nil {
-			b.log("sending message %v to outbox", msg.MessageId)
+			b.log().WithField("message_id", msg.MessageId).Info("sending message to outbox")
 			saveErr := b.Outbox.Save(tx, exchange, key, msg)
 			if saveErr != nil {
 				log.Printf("fialed to save to transactional outbox\n%v", saveErr)
