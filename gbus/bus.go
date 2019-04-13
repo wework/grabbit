@@ -94,7 +94,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	if b.PurgeOnStartup {
 		msgsPurged, purgeError := b.AMQPChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
 		if purgeError != nil {
-			b.log().WithError(purgeError).WithField("deleted-messages", msgsPurged).Error("failed to purge queue")
+			b.log().WithError(purgeError).WithField("deleted_messages", msgsPurged).Error("failed to purge queue")
 			return q, purgeError
 		}
 	}
@@ -222,7 +222,7 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 
-	b.log().WithField("number-of-workers", b.WorkerNum).Info("initiating workers")
+	b.log().WithField("number_of_workers", b.WorkerNum).Info("initiating workers")
 	workers, createWorkersErr := b.createBusWorkers(b.WorkerNum)
 	if createWorkersErr != nil {
 
@@ -539,7 +539,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
 			b.rabbitFailure = true
-			b.log().WithField("amqp-error", amqpErr).Error("amqp error")
+			b.log().WithField("amqp_error", amqpErr).Error("amqp error")
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr
 			}
@@ -609,7 +609,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		//send to the transactional outbox if the bus is transactional
 		//otherwise send directly to amqp
 		if b.IsTxnl && tx != nil {
-			b.log().WithField("message-id", msg.MessageId).Info("sending message to outbox")
+			b.log().WithField("message_id", msg.MessageId).Info("sending message to outbox")
 			saveErr := b.Outbox.Save(tx, exchange, key, msg)
 			if saveErr != nil {
 				log.Printf("fialed to save to transactional outbox\n%v", saveErr)

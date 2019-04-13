@@ -74,7 +74,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 	}
 
 	imsm.log().
-		WithFields(log.Fields{"saga-type": def.sagaType.String(), "handles-messages": len(msgNames)}).
+		WithFields(log.Fields{"saga_type": def.sagaType.String(), "handles_messages": len(msgNames)}).
 		Info("registered saga with messages")
 
 	//register on timeout messages
@@ -124,20 +124,20 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		if startNew {
 			newInstance := def.newInstance()
 			imsm.log().
-				WithFields(log.Fields{"saga-def": def.String(), "saga-id": newInstance.ID}).
+				WithFields(log.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
 			newInstance.invoke(invocation, message)
 
 			if !newInstance.isComplete() {
-				imsm.log().WithField("saga-id", newInstance.ID).Info("saving new saga")
+				imsm.log().WithField("saga_id", newInstance.ID).Info("saving new saga")
 
 				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
-					imsm.log().WithError(e).WithField("saga-id", newInstance.ID).Error("saving new saga failed")
+					imsm.log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
 					return e
 				}
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout == true {
-					imsm.log().WithFields(log.Fields{"saga-id": newInstance.ID, "timeout-duration": duration}).Info("new saga requested timeout")
+					imsm.log().WithFields(log.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
 					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
 			}
@@ -146,7 +146,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 
 			if getErr != nil {
-				imsm.log().WithError(getErr).WithField("saga-id", message.SagaCorrelationID).Error("failed to fetch saga by id")
+				imsm.log().WithError(getErr).WithField("saga_id", message.SagaCorrelationID).Error("failed to fetch saga by id")
 				return getErr
 			}
 			if instance == nil {
@@ -161,13 +161,13 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return e
 		} else {
 
-			imsm.log().WithFields(log.Fields{"saga-type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
+			imsm.log().WithFields(log.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				return e
 			}
-			imsm.log().WithFields(log.Fields{"message": msgName, "instances-fetched": len(instances)}).Info("fetched saga instances")
+			imsm.log().WithFields(log.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
 
 			for _, instance := range instances {
 
@@ -188,7 +188,7 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessa
 	_, timedOut := lastMessage.Payload.(gbus.SagaTimeoutMessage)
 
 	if instance.isComplete() || timedOut {
-		imsm.log().WithField("saga-id", instance.ID).Info("saga has completed and will be deleted")
+		imsm.log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
 
 		return imsm.sagaStore.DeleteSaga(tx, instance)
 

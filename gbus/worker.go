@@ -120,7 +120,7 @@ func (worker *worker) consumeMessages() {
 
 			worker.processMessage(delivery, isRPCreply)
 		} else {
-			worker.log().WithField("message-id", delivery.MessageId).Warn("no proceed")
+			worker.log().WithField("message_id", delivery.MessageId).Warn("no proceed")
 		}
 
 	}
@@ -173,7 +173,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 
 	} else {
 		worker.handlersLock.Lock()
-		worker.log().WithFields(log.Fields{"number-of-handlers": len(worker.registrations)}).Info("found message handlers")
+		worker.log().WithFields(log.Fields{"number_of_handlers": len(worker.registrations)}).Info("found message handlers")
 		for _, registration := range worker.registrations {
 			if registration.Matches(delivery.Exchange, delivery.RoutingKey, bm.PayloadFQN) {
 				handlers = append(handlers, registration.Handler)
@@ -234,7 +234,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		}
 	}()
 
-	worker.log().WithFields(log.Fields{"worker": worker.consumerTag, "message-id": delivery.MessageId}).Info("GOT MSG")
+	worker.log().WithFields(log.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
 	// worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
 	/*TODO:FIX Opentracing
 	spCtx, _ := amqptracer.Extract(delivery.Headers)
@@ -303,7 +303,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				if ackErr != nil {
 					// if this fails then the message will be eventually redeilvered by RabbitMQ
 					//sp handlers should be idempotent.
-					worker.log().WithField("ack-error", ackErr).Warn("failed to send ack to the broker")
+					worker.log().WithField("ack_error", ackErr).Warn("failed to send ack to the broker")
 				}
 
 			} else {
@@ -314,12 +314,12 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		} else { /*if the bus in not transactional just try acking the message*/
 			ackErr = worker.Ack(delivery)
 			if ackErr != nil {
-				worker.log().WithField("ack-error", ackErr).Warn("failed to send ack to the broker")
+				worker.log().WithField("ack_error", ackErr).Warn("failed to send ack to the broker")
 			}
 		}
 		//else there was an error in the invokation then try rollingback the transaction and reject the message
 	} else {
-		worker.log().WithError(invkErr).WithFields(log.Fields{"message-name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
+		worker.log().WithError(invkErr).WithFields(log.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
 
 		if worker.isTxnl {
 			worker.log().Warn("rolling back transaction")
