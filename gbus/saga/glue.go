@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wework/grabbit/gbus"
 	log "github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus"
 )
 
 func fqnsFromMessages(objs []gbus.Message) []string {
@@ -68,11 +68,14 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
 	msgNames := def.getHandledMessages()
-	log.Infof(imsm.logPrefix()+"Saga %v handles %v number of messages", def.sagaType.String(), len(msgNames))
 
 	for _, msgName := range msgNames {
 		imsm.addMsgNameToDef(msgName, def)
 	}
+
+	imsm.log().
+		WithFields(log.Fields{"saga-type": def.sagaType.String(), "handles-messages": len(msgNames)}).
+		Info("registered saga with messages")
 
 	//register on timeout messages
 	timeoutEtfs, requestsTimeout := saga.(gbus.RequestSagaTimeout)
@@ -120,18 +123,21 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
 			newInstance := def.newInstance()
-			log.Infof(imsm.logPrefix()+"created new saga.\nSaga Def:%v\nSagaID:%v", def.String(), newInstance.ID)
+			imsm.log().
+				WithFields(log.Fields{"saga-def": def.String(), "saga-id": newInstance.ID}).
+				Info("created new saga")
 			newInstance.invoke(invocation, message)
 
 			if !newInstance.isComplete() {
-				log.Infof(imsm.logPrefix()+"saving new saga with sagaID %v", newInstance.ID)
+				imsm.log().WithField("saga-id", newInstance.ID).Info("saving new saga")
+
 				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
-					log.Errorf(imsm.logPrefix()+"saving new saga failed\nSagaID:%v", newInstance.ID)
+					imsm.log().WithError(e).WithField("saga-id", newInstance.ID).Error("saving new saga failed")
 					return e
 				}
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout == true {
-					log.Infof(imsm.logPrefix()+"new saga requested timeout\nTimeout duration:%v", duration)
+					imsm.log().WithFields(log.Fields{"saga-id": newInstance.ID, "timeout-duration": duration}).Info("new saga requested timeout")
 					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
 			}
@@ -140,7 +146,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 
 			if getErr != nil {
-				log.Errorf(imsm.logPrefix()+"failed to fetch saga by id (%v)\n%s", message.SagaCorrelationID, getErr)
+				imsm.log().WithError(getErr).WithField("saga-id", message.SagaCorrelationID).Error("failed to fetch saga by id")
 				return getErr
 			}
 			if instance == nil {
@@ -155,13 +161,14 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return e
 		} else {
 
-			log.Infof(imsm.logPrefix()+"feteching for:\nSaga type:%v\nMessage:%v", def.sagaType, msgName)
+			imsm.log().WithFields(log.Fields{"saga-type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				return e
 			}
-			log.Infof(imsm.logPrefix()+"fetched %v saga instances for message of type %v", len(instances), msgName)
+			imsm.log().WithFields(log.Fields{"message": msgName, "instances-fetched": len(instances)}).Info("fetched saga instances")
+
 			for _, instance := range instances {
 
 				instance.invoke(invocation, message)
@@ -181,7 +188,8 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessa
 	_, timedOut := lastMessage.Payload.(gbus.SagaTimeoutMessage)
 
 	if instance.isComplete() || timedOut {
-		log.Infof(imsm.logPrefix()+"sage %v has completed and will be deleted", instance.ID)
+		imsm.log().WithField("saga-id", instance.ID).Info("saga has completed and will be deleted")
+
 		return imsm.sagaStore.DeleteSaga(tx, instance)
 
 	}
@@ -206,8 +214,8 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
 }
 
-func (imsm *Glue) logPrefix() string {
-	return imsm.svcName + ": "
+func (imsm *Glue) log() *log.Entry {
+	return log.WithField("service", imsm.svcName)
 }
 
 //NewGlue creates a new Sagamanager
