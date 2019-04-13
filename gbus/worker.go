@@ -375,5 +375,5 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 func (worker *worker) log() *log.Entry {
 
 	return log.WithFields(log.Fields{
-		"service": worker.svcName})
+		"_service": worker.svcName})
 }

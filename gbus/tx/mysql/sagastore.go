@@ -3,7 +3,8 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
 
@@ -16,10 +17,16 @@ type SagaStore struct {
 	*tx.SagaStore
 }
 
+func (store *SagaStore) log() *log.Entry {
+	return log.WithField("_service", store.SvcName)
+}
+
 func (store *SagaStore) ensureSchema() {
-	log.Println("ensuring saga schema exists")
+	store.log().Info("ensuring saga schema exists")
 	if tablesExists := store.sagaTablesExist(); tablesExists == false {
-		log.Println("could not find saga schema, attempting to creat schema")
+
+		store.log().Info("could not find saga schema, attempting to creat schema")
+
 		store.createSagaTables()
 	}
 }
@@ -32,7 +39,7 @@ func (store *SagaStore) sagaTablesExist() bool {
 
 	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 
-	log.Println(selectSQL)
+	store.log().Info(selectSQL)
 
 	row := tx.QueryRow(selectSQL)
 	var exists int
@@ -64,11 +71,13 @@ func (store *SagaStore) createSagaTables() {
 
 	for i, sql := range sqls {
 		_, error := tx.Exec(sql)
-		log.Printf("creating saga tables - step %v\n%s", i, sql)
+
+		store.log().WithFields(log.Fields{"step": i, "sql": sql}).Info("creating saga tables")
+
 		if error != nil {
 			txErr := fmt.Errorf("failed to create saga tables.\n%v", error)
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				log.Printf("Could not roll back: %v\n", rollbackErr)
+				log.WithError(rollbackErr).Error("could not rollback transaction")
 			}
 			panic(txErr)
 		}

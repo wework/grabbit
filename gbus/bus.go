@@ -524,7 +524,7 @@ func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
 // }
 
 func (b *DefaultBus) log() *log.Entry {
-	return log.WithField("service", b.SvcName)
+	return log.WithField("_service", b.SvcName)
 }
 func (b *DefaultBus) monitorAMQPErrors() {
 

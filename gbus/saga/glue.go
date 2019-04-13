@@ -227,7 +227,7 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 }
 
 func (imsm *Glue) log() *log.Entry {
-	return log.WithField("service", imsm.svcName)
+	return log.WithField("_service", imsm.svcName)
 }
 
 //NewGlue creates a new Sagamanager
