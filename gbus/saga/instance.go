@@ -1,12 +1,13 @@
 package saga
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"time"
 
-	"github.com/wework/grabbit/gbus"
 	"github.com/rs/xid"
+	"github.com/wework/grabbit/gbus"
 )
 
 //Instance represent a living instance of a saga of a particular definition
@@ -17,15 +18,15 @@ type Instance struct {
 	MsgToMethodMap     []*MsgToFuncPair
 }
 
-func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage) {
-	exchange, routingKey := invocation.Routing()
+func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {
+
 	methodsToInvoke := si.getSagaMethodNameToInvoke(exchange, routingKey, message)
 
 	if len(methodsToInvoke) == 0 {
-		log.Printf("Saga instance called with message but no message handlers were found for message type\nSaga type:%v\nMessage type:%v\n",
+		err := fmt.Errorf("saga instance called with message but no message handlers were found for message type\nSaga type:%v\nMessage type:%v",
 			si.String(),
 			reflect.TypeOf(message.Payload).Name())
-		return
+		return err
 	}
 
 	valueOfMessage := reflect.ValueOf(message)
@@ -43,11 +44,18 @@ func (si *Instance) invoke(invocation gbus.Invocation, message *gbus.BusMessage)
 		params = append(params, reflect.ValueOf(sginv), valueOfMessage)
 		method := reflectedVal.MethodByName(methodName)
 		log.Printf(" invoking method %v on saga instance %v", methodName, si.ID)
-		method.Call(params)
+		returns := method.Call(params)
+
+		val := returns[0]
+		if val.IsNil() == false {
+			return val.Interface().(error)
+		}
+
 		log.Printf(" saga instance %v invoked", si.ID)
 
 	}
 
+	return nil
 }
 func (si *Instance) getSagaMethodNameToInvoke(exchange, routingKey string, message *gbus.BusMessage) []string {
 
