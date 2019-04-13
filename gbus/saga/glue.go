@@ -108,6 +108,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
+	exchange, routingKey := invocation.Routing()
 
 	defs := imsm.msgToDefMap[strings.ToLower(msgName)]
 
@@ -126,7 +127,10 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			imsm.log().
 				WithFields(log.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
-			newInstance.invoke(invocation, message)
+			if invkErr := newInstance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+				imsm.log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
+				return invkErr
+			}
 
 			if !newInstance.isComplete() {
 				imsm.log().WithField("saga_id", newInstance.ID).Info("saving new saga")
@@ -153,7 +157,12 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
 				return e
 			}
-			instance.invoke(invocation, message)
+
+			if invkErr := instance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+				imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+				return invkErr
+			}
+
 			return imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 
 		} else if message.Semantics == "cmd" {
@@ -171,7 +180,10 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 			for _, instance := range instances {
 
-				instance.invoke(invocation, message)
+				if invkErr := instance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+					imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+					return invkErr
+				}
 				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 				if e != nil {
 					return e
