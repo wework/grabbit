@@ -308,7 +308,14 @@ func (outbox *TxOutbox) ensureSchema(tx *sql.Tx, svcName string) error {
 	schemaExists := outbox.outBoxTablesExists(tx, svcName)
 
 	if schemaExists {
-		return nil
+		/*
+			The follwoing  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
+			so that earlier consumers of grabbit will not break once the upgrade to the 1.0.0 release.
+			Once a proper DB migration stratagy will be in place and implemented (post 1.0.0) the following code
+			will be deleted.
+		*/
+
+		return outbox.migrate0_9To1_0(tx, svcName)
 	}
 
 	createTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
@@ -347,6 +354,16 @@ func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx, svcName string) bool {
 	}
 
 	return true
+}
+
+func (outbox *TxOutbox) migrate0_9To1_0(tx *sql.Tx, svcName string) error {
+	tblName := getOutboxName(svcName)
+	alter := `ALTER TABLE ` + tblName + ` CHANGE COLUMN delivery_attemtps delivery_attempts int NOT NULL DEFAULT 0;`
+	_, execErr := tx.Exec(alter)
+	if execErr != nil {
+		outbox.log().WithField("sql_err", execErr).Info("renaming column")
+	}
+	return nil
 }
 
 func getOutboxName(svcName string) string {
