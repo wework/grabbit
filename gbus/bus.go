@@ -266,7 +266,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			rpcLock:           b.RPCLock,
 			rpcHandlers:       b.RPCHandlers,
 			deadletterHandler: b.deadletterHandler,
-			handlersLock:      b.HandlersLock,
+			handlersLock:      &sync.Mutex{},
 			registrations:     b.Registrations,
 			serializer:        b.Serializer,
 			b:                 b,
@@ -642,6 +642,9 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 
 	registration := NewRegistration(exchange, routingKey, msg, handler)
 	b.Registrations = append(b.Registrations, registration)
+	for _, worker := range b.workers {
+		worker.AddRegistration(registration)
+	}
 	return nil
 }
 

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wework/grabbit/gbus"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"github.com/wework/grabbit/gbus"
 )
 
 func init() {
@@ -229,6 +229,27 @@ func TestDeadlettering(t *testing.T) {
 	}
 
 	<-proceed
+}
+
+func TestRegistrationAfterBusStarts(t *testing.T) {
+	event := Event1{}
+	b := createBusForTest()
+
+	proceed := make(chan bool)
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+	b.Start()
+	defer b.Shutdown()
+
+	b.HandleEvent("test_exchange", "test_topic", event, eventHandler)
+	err := b.Publish(noopTraceContext(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-proceed
+
 }
 
 func noopTraceContext() context.Context {
