@@ -12,8 +12,8 @@ import (
 
 	kafka "github.com/dangkaka/go-kafka-avro"
 	"github.com/linkedin/goavro"
-	"github.com/wework/grabbit/gbus"
 	"github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus"
 )
 
 var _ gbus.Serializer = &Avro{}
