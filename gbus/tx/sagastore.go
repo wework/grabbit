@@ -36,7 +36,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		if error == sql.ErrNoRows {
 			return nil, error
 		} else if error != nil {
-			log.Errorf("%v failed to scan saga row\n%v", store.SvcName, error)
+			store.log().WithError(error).Error("failed to scan saga row")
 			return nil, error
 		}
 
@@ -47,7 +47,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		instance.ConcurrencyCtrl = version
 		decErr := dec.Decode(&instance)
 		if decErr != nil {
-			log.Errorf("%v failed to decode saga instance\n%v", store.SvcName, decErr)
+			store.log().WithError(decErr).Error("failed to decode saga instance")
 			return nil, decErr
 		}
 
@@ -72,8 +72,7 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (insta
 	}
 
 	if instances, err = store.scanInstances(rows); err != nil {
-		log.Errorf("%v SagaStore failed yo scan saga db record\nError:\n%v", store.SvcName, err)
-
+		store.log().WithError(err).Error("SagaStore failed to scan saga db record")
 		return nil, err
 	}
 	return instances, nil
@@ -87,7 +86,7 @@ func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) (err err
 	instance.ConcurrencyCtrl = nextVersion
 	var buf []byte
 	if buf, err = store.serilizeSaga(instance); err != nil {
-		log.Errorf("%v SagaStore failed to encode saga with sagaID - %v\n%v", store.SvcName, instance.ID, err)
+		store.log().WithError(err).WithField("saga_id", instance.ID).Error("SagaStore failed to encode saga")
 		return err
 	}
 
@@ -125,7 +124,10 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 	rows, error := tx.Query(selectSQL, sagaID)
 	defer rows.Close()
 	if error != nil {
-		log.Errorf("%v Failed to fetch saga with id %s\n%s", store.GetSagatableName(), sagaID, error)
+		store.log().WithError(error).
+			WithFields(log.Fields{"saga_id": sagaID, "table_name": store.GetSagatableName()}).
+			Error("Failed to fetch saga")
+
 		return nil, error
 	}
 	instances, error := store.scanInstances(rows)
@@ -147,12 +149,12 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
-		log.Errorf("%v failed to encode saga with sagaID - %v\n%v", store.SvcName, newInstance.ID, err)
+		store.log().WithError(err).WithField("saga_id", newInstance.ID).Error("failed to encode saga with sagaID")
 		return err
 	}
 	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
 	if err != nil {
-		log.Errorf("%v failed saving new saga\n%v\nSQL:\n%v", store.SvcName, err, insertSQL)
+		store.log().WithError(err).Error("failed saving new saga")
 		return err
 	}
 	return nil
@@ -161,11 +163,10 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 //Purge cleans up the saga store, to be used in tests and in extreme situations in production
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
-
-	log.Printf("Purging saga table %v", store.GetSagatableName())
+	store.log().WithField("saga_table", store.GetSagatableName()).Info("Purging saga table")
 	results, err := tx.Exec("DELETE FROM  " + store.GetSagatableName())
 	if err != nil {
-		log.Errorf("%v Failed to purge saga table %s", store.SvcName, err)
+		store.log().WithError(err).Error("failed to purge saga table")
 		return err
 	}
 	if txErr := tx.Commit(); txErr != nil {
@@ -173,9 +174,9 @@ func (store *SagaStore) Purge() error {
 	}
 	rowsEffected, resultsErr := results.RowsAffected()
 	if resultsErr != nil {
-		log.Warnf("%v Failed to fect number of deleted saga records %s", store.SvcName, err)
+		store.log().WithError(err).Warn("failed to fetch number of deleted saga records")
 	} else {
-		log.Printf("%v Purged %d saga instances", store.SvcName, rowsEffected)
+		store.log().WithField("deleted_instances", rowsEffected).Info("purged saga store")
 	}
 
 	return nil
@@ -206,4 +207,8 @@ func (store *SagaStore) GetSagatableName() string {
 	sanitized := re.ReplaceAllString(store.SvcName, "")
 
 	return strings.ToLower("grabbit_" + sanitized + "_sagas")
+}
+
+func (store *SagaStore) log() *log.Entry {
+	return log.WithField("_service", store.SvcName)
 }
