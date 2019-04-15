@@ -550,10 +550,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
-	//do not attempt to contact the borker if backpreasure is being applied
-	if b.backpreasure {
-		return errors.New("can't send message due to backpreasure from amqp broker")
-	}
+
 	defer func() {
 		if err := recover(); err != nil {
 
@@ -615,6 +612,10 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 				log.Printf("fialed to save to transactional outbox\n%v", saveErr)
 			}
 			return saveErr
+		}
+		//do not attempt to contact the borker if backpreasure is being applied
+		if b.backpreasure {
+			return errors.New("can't send message due to backpreasure from amqp broker")
 		}
 		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
 		return outgoingErr
