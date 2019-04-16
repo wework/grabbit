@@ -210,6 +210,7 @@ func (outbox *TxOutbox) deleteCompletedRecords() error {
 func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	tx, txErr := outbox.txProv.New()
 	if txErr != nil {
+		outbox.log().WithError(txErr).WithField("delivery_tag", deliveryTag).Error("failed to create transaction for updating acked delivery tag")
 		return txErr
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
