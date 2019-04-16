@@ -68,6 +68,7 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	go outbox.cleanOutbox()
 	go outbox.processOutbox()
 	go outbox.scavenge()
+	go outbox.processConfirms()
 	return nil
 }
 
@@ -135,6 +136,15 @@ func (outbox *TxOutbox) processOutbox() {
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to send messages from outbox")
 			}
+		}
+	}
+}
+
+func (outbox *TxOutbox) processConfirms() {
+	for {
+		select {
+		case <-outbox.exit:
+			return
 		case ack := <-outbox.ack:
 			outbox.updateAckedRecord(ack)
 		case nack := <-outbox.nack:
@@ -142,7 +152,6 @@ func (outbox *TxOutbox) processOutbox() {
 		}
 	}
 }
-
 func (outbox *TxOutbox) cleanOutbox() {
 	for {
 		select {
