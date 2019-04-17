@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"database/sql"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql" //blank import
 	"github.com/wework/grabbit/gbus"
@@ -11,7 +12,7 @@ import (
 //NewTxProvider returns a new PgProvider
 func NewTxProvider(connStr string) (gbus.TxProvider, error) {
 	db, err := sql.Open("mysql", connStr)
-
+	db.SetConnMaxLifetime(time.Second)
 	if err != nil {
 		return nil, err
 	}
