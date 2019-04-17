@@ -146,7 +146,9 @@ func (outbox *TxOutbox) processConfirms() {
 		case <-outbox.exit:
 			return
 		case ack := <-outbox.ack:
-			outbox.updateAckedRecord(ack)
+			if err := outbox.updateAckedRecord(ack); err != nil {
+				outbox.log().WithError(err).WithField("delivery_tag", ack).Error("failed to update delivery tag")
+			}
 		case nack := <-outbox.nack:
 			outbox.log().WithField("deliver_tag", nack).Info("nack received for delivery tag")
 		}
@@ -215,8 +217,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
 
-	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE relay_id=? AND delivery_tag=?"
-	_, execErr := tx.Exec(updateSQL, confirmed, outbox.ID, deliveryTag)
+	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=?"
+	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
