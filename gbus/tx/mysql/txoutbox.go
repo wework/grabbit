@@ -146,7 +146,9 @@ func (outbox *TxOutbox) processConfirms() {
 		case <-outbox.exit:
 			return
 		case ack := <-outbox.ack:
-			outbox.updateAckedRecord(ack)
+			if err := outbox.updateAckedRecord(ack); err != nil {
+				outbox.log().WithError(err).WithField("delivery_tag", ack).Error("failed to update delivery tag")
+			}
 		case nack := <-outbox.nack:
 			outbox.log().WithField("deliver_tag", nack).Info("nack received for delivery tag")
 		}
