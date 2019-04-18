@@ -37,5 +37,14 @@ jobs:
       - run:
           name: Wait for rabbitmq
           command: dockerize -wait tcp://localhost:5672 -timeout 1m
-      - run: go get -v -t -d ./...
-      - run: go test -timeout 30s -v ./...
+      - run:
+          name: Get dependancies
+          command: go get -v -t -d ./...
+      - run:
+          name: Run tests
+          command: go test -v -covermode=count -coverprofile=coverage.out -timeout 30s ./...
+      - run:
+          name: Report Coverage
+          command: |
+            go get github.com/mattn/goveralls
+            goveralls -coverprofile=coverage.out -service=circle-ci -repotoken=$COVERALLS_TOKEN
