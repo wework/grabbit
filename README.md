@@ -24,7 +24,7 @@ Planned:
 
 
 ## Supported transactional resources
-1) MySql (InnoDB > 8.0)
+1) MySql > 8.0 (InnoDB)
 ## Supported serializers
 1) gob
 2) Avro
