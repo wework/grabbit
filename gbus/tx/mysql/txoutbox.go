@@ -23,6 +23,9 @@ var (
 	//TODO:get these values from configuration
 	maxPageSize         = 500
 	maxDeliveryAttempts = 50
+	sendInterval        = time.Second
+	cleanupInterval     = time.Second * 30
+	scavengeInterval    = time.Second * 60
 )
 
 //TxOutbox is a mysql based transactional outbox
@@ -65,16 +68,14 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	}
 	outbox.amqpOutbox = amqpOut
 	outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
-	go outbox.cleanOutbox()
+
 	go outbox.processOutbox()
-	go outbox.scavenge()
-	go outbox.processConfirms()
 	return nil
 }
 
 //Stop forcess the transactional outbox to stop processing additional messages
 func (outbox *TxOutbox) Stop() error {
-	close(outbox.exit)
+	outbox.exit <- true
 	return nil
 }
 
@@ -126,61 +127,36 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 
 func (outbox *TxOutbox) processOutbox() {
 
+	send := time.NewTicker(sendInterval).C
+	cleanUp := time.NewTicker(cleanupInterval).C
+	scavenge := time.NewTicker(scavengeInterval).C
+
 	for {
 		select {
 		case <-outbox.exit:
 			return
 		//TODO:get time duration from configuration
-		case <-time.After(time.Second * 1):
+		case <-send:
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to send messages from outbox")
 			}
-		}
-	}
-}
-
-func (outbox *TxOutbox) processConfirms() {
-	for {
-		select {
-		case <-outbox.exit:
-			return
+		case <-cleanUp:
+			err := outbox.deleteCompletedRecords()
+			if err != nil {
+				outbox.log().WithError(err).Error("failed to delete completed records")
+			}
+		case <-scavenge:
+			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
+			if err != nil {
+				outbox.log().WithError(err).Error("failed to scavenge records")
+			}
 		case ack := <-outbox.ack:
 			if err := outbox.updateAckedRecord(ack); err != nil {
 				outbox.log().WithError(err).WithField("delivery_tag", ack).Error("failed to update delivery tag")
 			}
 		case nack := <-outbox.nack:
 			outbox.log().WithField("deliver_tag", nack).Info("nack received for delivery tag")
-		}
-	}
-}
-func (outbox *TxOutbox) cleanOutbox() {
-	for {
-		select {
-		case <-outbox.exit:
-			return
-			//TODO:get time duration from configuration
-		case <-time.After(time.Second * 30):
-			err := outbox.deleteCompletedRecords()
-			if err != nil {
-				outbox.log().WithError(err).Error("failed to delete completed records")
-			}
-		}
-	}
-}
-
-func (outbox *TxOutbox) scavenge() {
-
-	for {
-		select {
-		case <-outbox.exit:
-			return
-			//TODO:get time duration from configuration
-		case <-time.After(time.Second * 20):
-			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
-			if err != nil {
-				outbox.log().WithError(err).Error("failed to scavenge records")
-			}
 		}
 	}
 }
@@ -217,8 +193,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
 
-	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=?"
-	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag)
+	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
+	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag, outbox.ID)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
