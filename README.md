@@ -64,6 +64,7 @@ gb := builder.
         New().
     Bus("connection string to RabbitMQ").
     Txnl("mysql", "connection string to mysql").
+    WithConfirms().
     Build("name of your service")
 
 ```
