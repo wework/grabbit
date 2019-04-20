@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/opentracing/opentracing-go"
+	olog "github.com/opentracing/opentracing-go/log"
+	"github.com/opentracing/opentracing-go/mocktracer"
 
 	"reflect"
 	"testing"
@@ -250,6 +253,51 @@ func TestRegistrationAfterBusStarts(t *testing.T) {
 	}
 	<-proceed
 
+}
+
+func TestOpenTracingReporting(t *testing.T) {
+	event := Event1{}
+	b := createBusForTest()
+	mockTracer := mocktracer.New()
+	opentracing.SetGlobalTracer(mockTracer)
+
+	span, ctx := opentracing.StartSpanFromContext(context.Background(), "test_trace")
+
+	span.LogFields(olog.String("event", "TestOpenTracingReporting"))
+
+	proceed := make(chan bool)
+	eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+
+	err := b.HandleEvent("test_exchange", "test_topic", event, eventHandler)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := b.Shutdown()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+	err = b.Publish(ctx, "test_exchange", "test_topic", gbus.NewBusMessage(event))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-proceed
+	time.Sleep(2 * time.Second)
+	span.Finish()
+	spans := mockTracer.FinishedSpans()
+	if len(spans) < 2 {
+		t.Fatal("didn't send any traces in the code")
+	}
 }
 
 func noopTraceContext() context.Context {

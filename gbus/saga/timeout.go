@@ -25,12 +25,6 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 			SagaID: sagaID}
 		msg := gbus.NewBusMessage(reuqestTimeout)
 		msg.SagaCorrelationID = sagaID
-		/* TODO:FIX Opentracing
-		span := opentracing.GlobalTracer().StartSpan("timeout")
-		if span != nil {
-			defer span.Finish()
-		}
-		*/
 		if err := tm.bus.Send(context.Background(), svcName, msg); err != nil {
 			//TODO: add logger
 			logrus.WithError(err).Error("could not send timeout to bus")
