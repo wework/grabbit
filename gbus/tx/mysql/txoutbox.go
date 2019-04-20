@@ -353,16 +353,6 @@ func (outbox *TxOutbox) migrate0_9To1_0(tx *sql.Tx, svcName string) error {
 	return nil
 }
 
-func (outbox *TxOutbox) migrate1_0To1_1(tx *sql.Tx, svcName string) error {
-	tblName := getOutboxName(svcName)
-	alter := `ALTER TABLE ` + tblName + ` ADD COLUMN ctx ;`
-	_, execErr := tx.Exec(alter)
-	if execErr != nil {
-		outbox.log().WithField("sql_err", execErr).Info("renaming column")
-	}
-	return nil
-}
-
 func getOutboxName(svcName string) string {
 
 	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
