@@ -268,6 +268,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		err = worker.Reject(false, delivery)
 		if err != nil {
 			span.LogFields(slog.Error(err))
+			worker.log().WithError(err).Error("could not reject message")
 		}
 		return
 	}
@@ -293,6 +294,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
 		err = worker.Ack(delivery)
 		if err != nil {
+			worker.log().WithError(err).Error("could not ack the message")
 			span.LogFields(slog.Error(err))
 		}
 		return
@@ -308,6 +310,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 			//reject the message but requeue it so it gets redelivered until we can create transactions
 			err = worker.Reject(true, delivery)
 			if err != nil {
+				worker.log().WithError(err).Error("failed to reject message")
 				span.LogFields(slog.Error(err))
 			}
 			return
