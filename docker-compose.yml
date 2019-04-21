@@ -14,13 +14,7 @@ services:
       - "5672:5672"
     labels:
       NAME: "rabbitmq1"
-  pgdb:
-    image: postgres
-    environment:
-      POSTGRES_PASSWORD: rhinof
-      POSTGRES_USER: rhinof
-    ports:
-      - 5432:5432
+
   mysqldb:
     image: mysql
     command: --default-authentication-plugin=mysql_native_password

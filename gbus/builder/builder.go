@@ -11,7 +11,6 @@ import (
 	"github.com/wework/grabbit/gbus/saga/stores"
 	"github.com/wework/grabbit/gbus/serialization"
 	"github.com/wework/grabbit/gbus/tx/mysql"
-	"github.com/wework/grabbit/gbus/tx/pg"
 )
 
 type defaultBuilder struct {
@@ -66,13 +65,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	if builder.txnl {
 		gb.IsTxnl = true
 		switch builder.txnlProvider {
-		case "pg":
-			pgtx, err := pg.NewTxProvider(builder.txConnStr)
-			if err != nil {
-				panic(err)
-			}
-			gb.TxProvider = pgtx
-			sagaStore = pg.NewSagaStore(gb.SvcName, pgtx)
+
 		case "mysql":
 			mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
 			if err != nil {
