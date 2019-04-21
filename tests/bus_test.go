@@ -299,10 +299,41 @@ func TestOpenTracingReporting(t *testing.T) {
 	}
 }
 
+func TestSendingPanic(t *testing.T) {
+	event := Event1{}
+	b := createBusForTest()
+	err := b.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := b.Shutdown()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+	defer func() {
+		if p := recover(); p != nil {
+			t.Fatal("expected not to have to recover this should be handled in grabbit", p)
+		}
+	}()
+	err = b.Publish(context.Background(), "test_exchange", "test_topic", gbus.NewBusMessage(event), &panicPolicy{})
+	if err == nil {
+		t.Fatal("Expected to panic and return an error but not crash")
+	}
+}
+
 func noopTraceContext() context.Context {
 	return context.Background()
 	// tracer := opentracing.NoopTracer{}
 	// span := tracer.StartSpan("test")
 	// ctx := opentracing.ContextWithSpan(context.Background(), span)
 	// return ctx
+}
+
+type panicPolicy struct {
+}
+
+func (p panicPolicy) Apply(publishing *amqp.Publishing) {
+	panic("vlad")
 }
