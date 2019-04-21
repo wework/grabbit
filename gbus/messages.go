@@ -1,6 +1,7 @@
 package gbus
 
 import (
+	"github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
 )
@@ -58,6 +59,18 @@ func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
 func (bm *BusMessage) SetPayload(payload Message) {
 	bm.PayloadFQN = payload.SchemaName()
 	bm.Payload = payload
+}
+
+func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
+	return []log.Field{
+		log.String("message", bm.PayloadFQN),
+		log.String("ID", bm.ID),
+		log.String("SagaID", bm.SagaID),
+		log.String("CorrelationID", bm.CorrelationID),
+		log.String("SagaCorrelationID", bm.SagaCorrelationID),
+		log.String("Semantics", bm.Semantics),
+		log.String("RPCID", bm.RPCID),
+	}
 }
 
 func castToString(i interface{}) string {

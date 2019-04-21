@@ -583,15 +583,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		ContentEncoding: b.Serializer.Name(),
 		Headers:         headers,
 	}
-	span.LogFields(
-		slog.String("message", message.PayloadFQN),
-		slog.String("ID", message.ID),
-		slog.String("SagaID", message.SagaID),
-		slog.String("CorrelationID", message.CorrelationID),
-		slog.String("SagaCorrelationID", message.SagaCorrelationID),
-		slog.String("Semantics", message.Semantics),
-		slog.String("replyTo", replyTo),
-	)
+	span.LogFields(message.GetTraceLog()...)
 
 	for _, defaultPolicy := range b.DefaultPolicies {
 		defaultPolicy.Apply(&msg)
