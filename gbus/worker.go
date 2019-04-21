@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
+	"reflect"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
+	"github.com/opentracing-contrib/go-amqp/amqptracer"
+	"github.com/opentracing/opentracing-go"
+	slog "github.com/opentracing/opentracing-go/log"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -37,6 +41,7 @@ type worker struct {
 	txProvider        TxProvider
 	amqpErrors        chan *amqp.Error
 	stop              chan bool
+	span              opentracing.Span
 }
 
 func (worker *worker) Start() error {
@@ -185,14 +190,24 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 	return handlers
 }
 
-func (worker *worker) Ack(delivery amqp.Delivery) error {
+func (worker *worker) ack(delivery amqp.Delivery) error {
 	ack := func() error { return delivery.Ack(false /*multiple*/) }
-	return worker.SafeWithRetries(ack, MaxRetryCount)
+	err := worker.SafeWithRetries(ack, MaxRetryCount)
+	if err != nil {
+		worker.log().WithError(err).Error("could not ack the message")
+		worker.span.LogFields(slog.Error(err))
+	}
+	return err
 }
 
-func (worker *worker) Reject(requeue bool, delivery amqp.Delivery) error {
+func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
 	reject := func() error { return delivery.Reject(requeue /*multiple*/) }
-	return worker.SafeWithRetries(reject, MaxRetryCount)
+	err := worker.SafeWithRetries(reject, MaxRetryCount)
+	if err != nil {
+		worker.log().WithError(err).Error("could not reject the message")
+		worker.span.LogFields(slog.Error(err))
+	}
+	return err
 }
 
 func (worker *worker) isDead(delivery amqp.Delivery) bool {
@@ -206,50 +221,60 @@ func (worker *worker) isDead(delivery amqp.Delivery) bool {
 func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	tx, txCreateErr := worker.txProvider.New()
 	if txCreateErr != nil {
-		worker.Ack(delivery)
+		worker.log().WithError(txCreateErr).Error("failed creating new tx")
+		worker.span.LogFields(slog.Error(txCreateErr))
+		_ = worker.ack(delivery)
 		return
 	}
-	deadErr := worker.deadletterHandler(tx, delivery)
-	if deadErr != nil {
-		worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
-
+	var fn func() error
+	err := worker.deadletterHandler(tx, delivery)
+	if err != nil {
+		worker.log().WithError(err).Error("failed handling deadletter")
+		worker.span.LogFields(slog.Error(err))
+		fn = tx.Rollback
 	} else {
-		worker.SafeWithRetries(tx.Commit, MaxRetryCount)
+		fn = tx.Commit
+	}
+	err = worker.SafeWithRetries(fn, MaxRetryCount)
+	if err != nil {
+		worker.log().WithError(err).Error("Rollback/Commit deadletter handler message")
+		worker.span.LogFields(slog.Error(err))
 	}
 }
 
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
+	var ctx context.Context
+	var spanOptions []opentracing.StartSpanOption
+
+	spCtx, err := amqptracer.Extract(delivery.Headers)
+	if err != nil {
+		worker.log().WithError(err).Error("could not extract SpanContext from headers")
+	} else {
+		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
+	}
+	worker.span, ctx = opentracing.StartSpanFromContext(context.Background(), "processMessage", spanOptions...)
 
 	//catch all error handling so goroutine will not crash
 	defer func() {
 		if r := recover(); r != nil {
 			logEntry := worker.log().WithField("worker", worker.consumerTag)
 			if err, ok := r.(error); ok {
+				worker.span.LogFields(slog.Error(err))
 				logEntry = logEntry.WithError(err)
 			} else {
 				logEntry = logEntry.WithField("panic", r)
 			}
-
+			worker.span.LogFields(slog.String("panic", "failed to process message"))
 			logEntry.Error("failed to process message")
 		}
+		worker.span.Finish()
 	}()
 
 	worker.log().WithFields(log.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
-	// worker.log("%v GOT MSG - Worker %v - MessageId %v", worker.svcName, worker.consumerTag, delivery.MessageId)
-	/*TODO:FIX Opentracing
-	spCtx, _ := amqptracer.Extract(delivery.Headers)
-	sp := opentracing.StartSpan(
-		"processMessage",
-		opentracing.FollowsFrom(spCtx),
-	)
-	if sp != nil {
-		defer sp.Finish()
-	}
-	*/
-	// Update the context with the span for the subsequent reference.
 
 	//handle a message that originated from a deadletter exchange
 	if worker.isDead(delivery) {
+		worker.span.LogFields(slog.Error(errors.New("handling dead-letter delivery")))
 		worker.log().Info("invoking deadletter handler")
 		worker.invokeDeadletterHandler(delivery)
 		return
@@ -257,10 +282,13 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	bm, err := worker.extractBusMessage(delivery)
 	if err != nil {
+		worker.span.LogFields(slog.Error(err), slog.String("grabbit", "message is poison"))
 		//reject poison message
-		worker.Reject(false, delivery)
+		_ = worker.reject(false, delivery)
 		return
 	}
+	worker.span.LogFields(bm.GetTraceLog()...)
+
 	//TODO:Dedup message
 	handlers := worker.resolveHandlers(isRPCreply, bm, delivery)
 	if len(handlers) == 0 {
@@ -269,9 +297,10 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 				log.Fields{"message-name": bm.PayloadFQN,
 					"message-type": bm.Semantics}).
 			Warn("Message received but no handlers found")
+		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
 		// worker.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
 		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
-		worker.Ack(delivery)
+		_ = worker.ack(delivery)
 		return
 	}
 
@@ -281,85 +310,81 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		tx, txErr = worker.txProvider.New()
 		if txErr != nil {
 			worker.log().WithError(txErr).Error("failed to create transaction")
+			worker.span.LogFields(slog.Error(txErr))
 			//reject the message but requeue it so it gets redelivered until we can create transactions
-			worker.Reject(true, delivery)
+			_ = worker.reject(true, delivery)
 			return
 		}
 	}
-	var ackErr, commitErr, rollbackErr, rejectErr error
-	invkErr := worker.invokeHandlers(context.Background(), handlers, bm, &delivery, tx)
+	err = worker.invokeHandlers(ctx, handlers, bm, &delivery, tx)
 
 	// if all handlers executed with out errors then commit the transactional if the bus is transactional
 	// if the tranaction committed successfully then ack the message.
 	// if the bus is not transactional then just ack the message
-	if invkErr == nil {
-
+	if err == nil {
 		if worker.isTxnl {
-			commitErr = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
-			if commitErr == nil {
+			err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
+			if err == nil {
 				worker.log().Info("bus transaction committed successfully ")
 				//ack the message
-				ackErr = worker.Ack(delivery)
-				if ackErr != nil {
-					// if this fails then the message will be eventually redeilvered by RabbitMQ
-					//sp handlers should be idempotent.
-					worker.log().WithField("ack_error", ackErr).Warn("failed to send ack to the broker")
-				}
-
+				_ = worker.ack(delivery)
 			} else {
-				worker.log().WithError(commitErr).Error("failed committing transaction")
+				worker.span.LogFields(slog.Error(err))
+				worker.log().WithError(err).Error("failed committing transaction")
 				//if the commit failed we will reject the message
-				worker.Reject(false, delivery)
+				_ = worker.reject(false, delivery)
 			}
 		} else { /*if the bus in not transactional just try acking the message*/
-			ackErr = worker.Ack(delivery)
-			if ackErr != nil {
-				worker.log().WithField("ack_error", ackErr).Warn("failed to send ack to the broker")
-			}
+			_ = worker.ack(delivery)
 		}
 		//else there was an error in the invokation then try rollingback the transaction and reject the message
 	} else {
-		worker.log().WithError(invkErr).WithFields(log.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
+		worker.span.LogFields(slog.Error(err))
+		worker.log().WithError(err).WithFields(log.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
 
 		if worker.isTxnl {
 			worker.log().Warn("rolling back transaction")
-			rollbackErr = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
+			err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
 
-			if rollbackErr != nil {
-				worker.log().WithError(rollbackErr).Error("failed to rollback transaction")
+			if err != nil {
+				worker.span.LogFields(slog.Error(err))
+				worker.log().WithError(err).Error("failed to rollback transaction")
 			}
 		}
 
-		rejectErr = worker.Reject(false, delivery)
-		if rejectErr != nil {
-			worker.log().WithError(rejectErr).Error("failed to reject message")
-		}
+		_ = worker.reject(false, delivery)
 	}
 }
 
 func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery, tx *sql.Tx) (err error) {
 
 	action := func(attempts uint) (actionErr error) {
+		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
+		worker.span.LogFields(slog.Uint64("attempt", uint64(attempts+1)))
 		defer func() {
 			if p := recover(); p != nil {
-
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 				actionErr = errors.New(pncMsg)
+				worker.span.LogFields(slog.Error(actionErr))
 			}
+			worker.span.Finish()
 		}()
 		for _, handler := range handlers {
+			hspan, hsctx := opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
+			hspan.Finish()
+
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
 				bus:         worker.b,
 				inboundMsg:  message,
 				tx:          tx,
-				ctx:         sctx,
+				ctx:         hsctx,
 				exchange:    delivery.Exchange,
 				routingKey:  delivery.RoutingKey}
-
 			e := handler(ctx, message)
 			if e != nil {
+				hspan.LogFields(slog.Error(e))
 				return e
 			}
 		}

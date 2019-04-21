@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/opentracing-contrib/go-amqp/amqptracer"
+	"github.com/opentracing/opentracing-go"
+	slog "github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -550,16 +552,21 @@ func (b *DefaultBus) monitorAMQPErrors() {
 func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
-
+	span, ctx := opentracing.StartSpanFromContext(ctx, "sendImpl")
 	defer func() {
 		if err := recover(); err != nil {
-
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%s", err, debug.Stack())
 			er = errors.New(errMsg)
+			span.LogFields(slog.Error(er))
 		}
+		span.Finish()
 	}()
 
 	headers := message.GetAMQPHeaders()
+	err := amqptracer.Inject(span, headers)
+	if err != nil {
+		b.log().WithError(err).Error("could not inject headers")
+	}
 
 	buffer, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
@@ -575,17 +582,8 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 		ContentEncoding: b.Serializer.Name(),
 		Headers:         headers,
 	}
+	span.LogFields(message.GetTraceLog()...)
 
-	/* TODO:FIX Opentracing context
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil {
-		defer sp.Finish()
-	}
-	// Inject the span context into the AMQP header.
-	if err := amqptracer.Inject(sp, msg.Headers); err != nil {
-		return err
-	}
-	*/
 	for _, defaultPolicy := range b.DefaultPolicies {
 		defaultPolicy.Apply(&msg)
 	}
@@ -609,7 +607,7 @@ func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyT
 			b.log().WithField("message_id", msg.MessageId).Info("sending message to outbox")
 			saveErr := b.Outbox.Save(tx, exchange, key, msg)
 			if saveErr != nil {
-				log.Printf("fialed to save to transactional outbox\n%v", saveErr)
+				log.WithError(saveErr).Error("failed to save to transactional outbox")
 			}
 			return saveErr
 		}

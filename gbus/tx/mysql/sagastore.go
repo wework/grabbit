@@ -5,9 +5,7 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
-
 	"github.com/wework/grabbit/gbus"
-
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/tx"
 )

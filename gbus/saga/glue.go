@@ -3,7 +3,6 @@ package saga
 import (
 	"database/sql"
 	"fmt"
-
 	"reflect"
 	"strings"
 	"sync"
