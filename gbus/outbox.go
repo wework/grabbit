@@ -1,9 +1,9 @@
 package gbus
 
 import (
-	"log"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -19,6 +19,7 @@ type AMQPOutbox struct {
 	locker       *sync.Mutex
 	pending      map[uint64]pendingConfirmation
 	stop         chan bool
+	SvcName      string
 }
 
 func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm, resendOnNack bool) error {
@@ -96,7 +97,7 @@ func (out *AMQPOutbox) confirmationLoop() {
 			out.locker.Lock()
 			pending := out.pending[ack]
 			if pending.deliveryTag > 0 {
-				log.Printf("ack received for a pending delivery with tag %v", ack)
+				out.log().WithField("tag", ack).Debug("ack received for a pending delivery with tag")
 			}
 			delete(out.pending, ack)
 			out.locker.Unlock()
@@ -104,7 +105,7 @@ func (out *AMQPOutbox) confirmationLoop() {
 			if nack <= 0 {
 				continue
 			}
-			log.Printf("nack received for delivery tag %v", nack)
+			out.log().WithField("tag", nack).Debug("nack received for a pending delivery with tag")
 			out.locker.Lock()
 			pending := out.pending[nack]
 			pending.deliveryTag = nack
@@ -112,7 +113,10 @@ func (out *AMQPOutbox) confirmationLoop() {
 			delete(out.pending, nack)
 			out.locker.Unlock()
 		case resend := <-out.resends:
-			out.Post(resend.exchange, resend.routingKey, resend.amqpMessage)
+			_, err := out.Post(resend.exchange, resend.routingKey, resend.amqpMessage)
+			if err != nil {
+				out.log().WithError(err).Error("could not post message to exchange")
+			}
 		}
 	}
 }
@@ -129,6 +133,10 @@ func (out *AMQPOutbox) sendToChannel(exchange, routingKey string, amqpMessage am
 //NotifyConfirm send an amqp notification
 func (out *AMQPOutbox) NotifyConfirm(ack, nack chan uint64) {
 	out.channel.NotifyConfirm(ack, nack)
+}
+
+func (out *AMQPOutbox) log() *log.Entry {
+	return log.WithField("_service", out.SvcName)
 }
 
 type pendingConfirmation struct {

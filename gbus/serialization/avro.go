@@ -193,15 +193,6 @@ func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj Av
 	return
 }
 
-//getSchema get schema id from schema-registry service
-func (as *Avro) getSchema(id int) (codec *goavro.Codec, err error) {
-	codec, err = as.schemaRegistryClient.GetSchema(id)
-	if err != nil {
-		return nil, err
-	}
-	return codec, nil
-}
-
 //registerOrGetSchemaID get schema id from schema-registry service
 func (as *Avro) registerOrGetSchemaID(topic string, avroCodec *goavro.Codec) (schemaID int, err error) {
 	schemaID = 0

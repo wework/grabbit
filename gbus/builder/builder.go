@@ -2,7 +2,6 @@ package builder
 
 import (
 	"fmt"
-	"go/types"
 	"sync"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 )
 
 type defaultBuilder struct {
-	handlers         []types.Type
 	PrefetchCount    uint
 	connStr          string
 	purgeOnStartup   bool
@@ -34,9 +32,11 @@ type defaultBuilder struct {
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
-		AmqpConnStr:          builder.connStr,
-		PrefetchCount:        1,
-		Outgoing:             &gbus.AMQPOutbox{},
+		AmqpConnStr:   builder.connStr,
+		PrefetchCount: 1,
+		Outgoing: &gbus.AMQPOutbox{
+			SvcName: svcName,
+		},
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
 		DelayedSubscriptions: [][]string{},
@@ -74,7 +74,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			gb.TxProvider = mysqltx
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 			if builder.purgeOnStartup {
-				sagaStore.Purge()
+				err := sagaStore.Purge()
+				if err != nil {
+					panic(err)
+				}
 			}
 			gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
 
@@ -91,7 +94,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 
 	if builder.purgeOnStartup {
-		sagaStore.Purge()
+		err := sagaStore.Purge()
+		if err != nil {
+			panic(err)
+		}
 	}
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
 	return gb

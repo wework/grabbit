@@ -47,7 +47,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 		returns := method.Call(params)
 
 		val := returns[0]
-		if val.IsNil() == false {
+		if !val.IsNil() {
 			return val.Interface().(error)
 		}
 

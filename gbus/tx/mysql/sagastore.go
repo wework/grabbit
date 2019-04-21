@@ -21,7 +21,7 @@ func (store *SagaStore) log() *log.Entry {
 
 func (store *SagaStore) ensureSchema() {
 	store.log().Info("ensuring saga schema exists")
-	if tablesExists := store.sagaTablesExist(); tablesExists == false {
+	if tablesExists := store.sagaTablesExist(); !tablesExists {
 
 		store.log().Info("could not find saga schema, attempting to creat schema")
 
@@ -33,7 +33,12 @@ func (store *SagaStore) sagaTablesExist() bool {
 
 	tblName := store.GetSagatableName()
 	tx := store.NewTx()
-	defer tx.Commit()
+	defer func() {
+		err := tx.Commit()
+		if err != nil {
+			store.log().WithError(err).Error("could not commit sagaTablesExist")
+		}
+	}()
 
 	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 

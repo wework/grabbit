@@ -22,10 +22,8 @@ type Def struct {
 	sagaType    reflect.Type
 	startedBy   []string
 	lock        *sync.Mutex
-	instances   []*Instance
 	sagaConfFns []gbus.SagaConfFn
 	msgToFunc   []*MsgToFuncPair
-	msgHandler  gbus.MessageHandler
 }
 
 //HandleMessage implements HandlerRegister interface
