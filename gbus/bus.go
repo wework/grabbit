@@ -551,15 +551,14 @@ func (b *DefaultBus) monitorAMQPErrors() {
 
 func (b *DefaultBus) sendImpl(ctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
+	defer b.SenderLock.Unlock()
 	span, ctx := opentracing.StartSpanFromContext(ctx, "sendImpl")
 	defer func() {
 		if err := recover(); err != nil {
-
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%s", err, debug.Stack())
 			er = errors.New(errMsg)
 			span.LogFields(slog.Error(er))
 		}
-		b.SenderLock.Unlock()
 		span.Finish()
 	}()
 
