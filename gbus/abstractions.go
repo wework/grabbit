@@ -136,7 +136,7 @@ type Builder interface {
 	WithDeadlettering(deadletterExchange string) Builder
 	/*
 		Txnl sets the bus to be transactional using a persisted saga store
-		provider: pg for PostgreSQL
+		provider: mysql for mysql database
 		connStr: connection string in the format of the passed in provider
 	*/
 	Txnl(provider, connStr string) Builder
