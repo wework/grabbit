@@ -12,7 +12,7 @@ type BusMessage struct {
 	CorrelationID     string
 	SagaID            string
 	SagaCorrelationID string
-	Semantics         string /*cmd or evt*/
+	Semantics         Semantics /*cmd or evt*/
 	Payload           Message
 	PayloadFQN        string
 	RPCID             string
@@ -68,7 +68,7 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 		log.String("SagaID", bm.SagaID),
 		log.String("CorrelationID", bm.CorrelationID),
 		log.String("SagaCorrelationID", bm.SagaCorrelationID),
-		log.String("Semantics", bm.Semantics),
+		log.String("Semantics", string(bm.Semantics)),
 		log.String("RPCID", bm.RPCID),
 	}
 }

@@ -8,6 +8,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
+type Semantics string
+
+const (
+	CMD Semantics = "cmd"
+	EVT Semantics = "evt"
+)
+
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister

@@ -40,11 +40,11 @@ func (store *SagaStore) sagaTablesExist() bool {
 		}
 	}()
 
-	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
+	selectSQL := `SELECT 1 FROM ? LIMIT 1;`
 
 	store.log().Info(selectSQL)
 
-	row := tx.QueryRow(selectSQL)
+	row := tx.QueryRow(selectSQL, tblName)
 	var exists int
 	err := row.Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {

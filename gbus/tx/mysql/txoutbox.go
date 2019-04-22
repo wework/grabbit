@@ -87,7 +87,7 @@ func (outbox *TxOutbox) Stop() error {
 //Save stores a message in a DB to ensure delivery
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
 
-	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (
+	insertSQL := `INSERT INTO ? (
 							 message_id,
 							 message_type,
 							 delivery_tag,
@@ -104,15 +104,15 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 		return err
 	}
 	unknownDeliverTag := -1
-	_, insertErr := tx.Exec(insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
+	_, insertErr := tx.Exec(getOutboxName(outbox.svcName), insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
 
 	return insertErr
 }
 
 func (outbox *TxOutbox) purge(tx *sql.Tx) error {
 
-	purgeSQL := `DELETE FROM  ` + getOutboxName(outbox.svcName)
-	_, err := tx.Exec(purgeSQL)
+	purgeSQL := `DELETE FROM  ?`
+	_, err := tx.Exec(purgeSQL, getOutboxName(outbox.svcName))
 	return err
 }
 
@@ -172,8 +172,8 @@ func (outbox *TxOutbox) deleteCompletedRecords() error {
 	if txErr != nil {
 		return txErr
 	}
-	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + " WHERE status=?"
-	result, execErr := tx.Exec(deleteSQL, confirmed)
+	deleteSQL := "DELETE FROM ? WHERE status=?"
+	result, execErr := tx.Exec(deleteSQL, getOutboxName(outbox.svcName), confirmed)
 	if execErr != nil {
 		outbox.log().WithError(execErr).Error("failed to delete processed records")
 
@@ -201,8 +201,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
 
-	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
-	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag, outbox.ID)
+	updateSQL := "UPDATE ? SET status=? WHERE delivery_tag=? AND relay_id=?"
+	_, execErr := tx.Exec(updateSQL, getOutboxName(outbox.svcName), confirmed, deliveryTag, outbox.ID)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
@@ -216,13 +216,13 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
-	return tx.Query(selectSQL)
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM ? WHERE status = 0 AND delivery_attempts < ? ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL, getOutboxName(outbox.svcName), strconv.Itoa(maxDeliveryAttempts), strconv.Itoa(maxPageSize))
 }
 
 func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
-	return tx.Query(selectSQL)
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM ? WHERE status = 1  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL, getOutboxName(outbox.svcName), strconv.Itoa(maxPageSize))
 }
 
 func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
@@ -311,7 +311,7 @@ func (outbox *TxOutbox) ensureSchema(tx *sql.Tx, svcName string) error {
 
 	if schemaExists {
 		/*
-			The follwoing  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
+			The following  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
 			so that earlier consumers of grabbit will not break once the upgrade to the 1.0.0 release.
 			Once a proper DB migration stratagy will be in place and implemented (post 1.0.0) the following code
 			will be deleted.
@@ -344,11 +344,11 @@ func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx, svcName string) bool {
 
 	tblName := getOutboxName(svcName)
 
-	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
+	selectSQL := `SELECT 1 FROM ? LIMIT 1;`
 
-	outbox.log().Info(selectSQL)
+	outbox.log().Info(selectSQL, tblName)
 
-	row := tx.QueryRow(selectSQL)
+	row := tx.QueryRow(selectSQL, tblName)
 	var exists int
 	err := row.Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
