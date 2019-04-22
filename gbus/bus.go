@@ -405,6 +405,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 			commitErr := activeTx.Commit()
 			if commitErr != nil {
 				b.log().WithError(commitErr).Error("could not commit transaction")
+				return commitErr
 			}
 		}
 	}
