@@ -191,8 +191,11 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 }
 
 func (worker *worker) ack(delivery amqp.Delivery) error {
-	ack := func() error { return delivery.Ack(false /*multiple*/) }
-	err := worker.SafeWithRetries(ack, MaxRetryCount)
+	ack := func(attempts uint) error { return delivery.Ack(false /*multiple*/) }
+
+	err := retry.Retry(ack,
+		strategy.Wait(100*time.Millisecond))
+
 	if err != nil {
 		worker.log().WithError(err).Error("could not ack the message")
 		worker.span.LogFields(slog.Error(err))
@@ -201,8 +204,9 @@ func (worker *worker) ack(delivery amqp.Delivery) error {
 }
 
 func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
-	reject := func() error { return delivery.Reject(requeue /*multiple*/) }
-	err := worker.SafeWithRetries(reject, MaxRetryCount)
+	reject := func(attempts uint) error { return delivery.Reject(requeue /*multiple*/) }
+	err := retry.Retry(reject,
+		strategy.Wait(100*time.Millisecond))
 	if err != nil {
 		worker.log().WithError(err).Error("could not reject the message")
 		worker.span.LogFields(slog.Error(err))
