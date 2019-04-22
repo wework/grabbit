@@ -173,8 +173,8 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
 	store.log().WithField("saga_table", store.GetSagatableName()).Info("Purging saga table")
-	delteSQL := "DELETE FROM  ?"
-	results, err := tx.Exec(delteSQL, store.GetSagatableName())
+	delteSQL := fmt.Sprintf("DELETE FROM %s", store.GetSagatableName())
+	results, err := tx.Exec(delteSQL)
 	if err != nil {
 		store.log().WithError(err).Error("failed to purge saga table")
 		return err
