@@ -9,10 +9,6 @@ jobs:
           RABBITMQ_DEFAULT_USER: rabbitmq
           RABBITMQ_DEFAULT_PASS: rabbitmq
           RABBITMQ_DEFAULT_VHOST: /
-      - image: postgres
-        environment:
-          POSTGRES_PASSWORD: rhinof
-          POSTGRES_USER: rhinof
       - image: mysql
         command: --default-authentication-plugin=mysql_native_password
         environment:
@@ -28,9 +24,6 @@ jobs:
           command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
           environment:
             DOCKERIZE_VERSION: v0.6.1
-      - run:
-          name: Wait for pg
-          command: dockerize -wait tcp://localhost:5432 -timeout 1m
       - run:
           name: Wait for mysql
           command: dockerize -wait tcp://localhost:3306 -timeout 1m
@@ -48,3 +41,8 @@ jobs:
           command: |
             go get github.com/mattn/goveralls
             goveralls -coverprofile=coverage.out -service=circle-ci -repotoken=$COVERALLS_TOKEN
+      - run:
+          name: Run linter
+          command: |
+            curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.16.0
+            golangci-lint run --skip-dirs=tests

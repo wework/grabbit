@@ -65,7 +65,12 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (insta
 	selectSQL := "SELECT saga_id, saga_type, saga_data, version FROM " + tblName + " WHERE saga_type=" + store.ParamsMarkers[0]
 
 	rows, err := tx.Query(selectSQL, sagaType.String())
-	defer rows.Close()
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			store.log().WithError(err).Error("could not close rows")
+		}
+	}()
 
 	if err != nil {
 		return nil, err
@@ -121,18 +126,23 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 	tblName := store.GetSagatableName()
 	selectSQL := `SELECT saga_id, saga_type, saga_data, version FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
 
-	rows, error := tx.Query(selectSQL, sagaID)
-	defer rows.Close()
-	if error != nil {
-		store.log().WithError(error).
+	rows, err := tx.Query(selectSQL, sagaID)
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			store.log().WithError(err).Error("could not close rows")
+		}
+	}()
+	if err != nil {
+		store.log().WithError(err).
 			WithFields(log.Fields{"saga_id": sagaID, "table_name": store.GetSagatableName()}).
 			Error("Failed to fetch saga")
 
-		return nil, error
+		return nil, err
 	}
-	instances, error := store.scanInstances(rows)
-	if error != nil {
-		return nil, error
+	instances, err := store.scanInstances(rows)
+	if err != nil {
+		return nil, err
 	}
 	if len(instances) == 0 {
 		return nil, fmt.Errorf("no saga found for saga with saga_id:%v", sagaID)
@@ -191,9 +201,9 @@ func (store *SagaStore) serilizeSaga(instance *saga.Instance) ([]byte, error) {
 
 //NewTx creates a new transaction from the underlying TxProvider
 func (store *SagaStore) NewTx() *sql.Tx {
-	tx, error := store.Tx.New()
-	if error != nil {
-		e := fmt.Errorf("can't initialize sage store.\nerror:\n%s", error)
+	tx, err := store.Tx.New()
+	if err != nil {
+		e := fmt.Errorf("can't initialize sage store.\nerror:\n%s", err)
 		panic(e)
 	}
 
@@ -203,7 +213,7 @@ func (store *SagaStore) NewTx() *sql.Tx {
 //GetSagatableName returns the table name in which to store the Sagas
 func (store *SagaStore) GetSagatableName() string {
 
-	var re = regexp.MustCompile("-|;|\\|")
+	var re = regexp.MustCompile(`-|;|\\|`)
 	sanitized := re.ReplaceAllString(store.SvcName, "")
 
 	return strings.ToLower("grabbit_" + sanitized + "_sagas")

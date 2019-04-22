@@ -20,7 +20,7 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bo
 
 	message.CorrelationID = si.inboundMsg.ID
 
-	if isEvent == false {
+	if !isEvent {
 		//support saga-to-saga communication
 		if si.inboundMsg.SagaID != "" {
 			message.SagaCorrelationID = message.SagaID

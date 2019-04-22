@@ -24,15 +24,14 @@ var _ gbus.SagaRegister = &Glue{}
 
 //Glue ties the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
-	svcName              string
-	bus                  gbus.Bus
-	sagaDefs             []*Def
-	lock                 *sync.Mutex
-	alreadyRegistred     map[string]bool
-	msgToDefMap          map[string][]*Def
-	sagaStore            Store
-	timeoutManger        TimeoutManager
-	subscribedOnTimeouts bool
+	svcName          string
+	bus              gbus.Bus
+	sagaDefs         []*Def
+	lock             *sync.Mutex
+	alreadyRegistred map[string]bool
+	msgToDefMap      map[string][]*Def
+	sagaStore        Store
+	timeoutManger    TimeoutManager
 }
 
 func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
@@ -139,7 +138,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 					return e
 				}
 
-				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout == true {
+				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
 					imsm.log().WithFields(log.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
 					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
