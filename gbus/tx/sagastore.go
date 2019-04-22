@@ -115,8 +115,8 @@ func (store *SagaStore) RegisterSagaType(saga gbus.Saga) {
 //DeleteSaga implements interface method store.DeleteSaga
 func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.GetSagatableName()
-	deleteSQL := `DELETE FROM ? WHERE saga_id= ?`
-	_, err := tx.Exec(deleteSQL, tblName, instance.ID)
+	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id= ?`
+	_, err := tx.Exec(deleteSQL, instance.ID)
 	return err
 }
 
@@ -154,14 +154,14 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) (err error) {
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := store.GetSagatableName()
-	insertSQL := `INSERT INTO ? (saga_id, saga_type, saga_data, version) VALUES (?, ?, ?, ?)`
+	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version) VALUES (?, ?, ?, ?)`
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
 		store.log().WithError(err).WithField("saga_id", newInstance.ID).Error("failed to encode saga with sagaID")
 		return err
 	}
-	_, err = tx.Exec(insertSQL, tblName, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
+	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.ConcurrencyCtrl)
 	if err != nil {
 		store.log().WithError(err).Error("failed saving new saga")
 		return err
@@ -173,8 +173,8 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
 	store.log().WithField("saga_table", store.GetSagatableName()).Info("Purging saga table")
-	delteSQL := fmt.Sprintf("DELETE FROM %s", store.GetSagatableName())
-	results, err := tx.Exec(delteSQL)
+	deleteSQL := fmt.Sprintf("DELETE FROM %s", store.GetSagatableName())
+	results, err := tx.Exec(deleteSQL)
 	if err != nil {
 		store.log().WithError(err).Error("failed to purge saga table")
 		return err

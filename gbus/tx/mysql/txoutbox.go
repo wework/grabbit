@@ -87,7 +87,7 @@ func (outbox *TxOutbox) Stop() error {
 //Save stores a message in a DB to ensure delivery
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
 
-	insertSQL := `INSERT INTO ? (
+	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (
 							 message_id,
 							 message_type,
 							 delivery_tag,
@@ -104,15 +104,15 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 		return err
 	}
 	unknownDeliverTag := -1
-	_, insertErr := tx.Exec(getOutboxName(outbox.svcName), insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
+	_, insertErr := tx.Exec(insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
 
 	return insertErr
 }
 
 func (outbox *TxOutbox) purge(tx *sql.Tx) error {
 
-	purgeSQL := `DELETE FROM  ?`
-	_, err := tx.Exec(purgeSQL, getOutboxName(outbox.svcName))
+	purgeSQL := fmt.Sprintf("DELETE FROM %s", getOutboxName(outbox.svcName))
+	_, err := tx.Exec(purgeSQL)
 	return err
 }
 
@@ -201,8 +201,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
 
-	updateSQL := "UPDATE ? SET status=? WHERE delivery_tag=? AND relay_id=?"
-	_, execErr := tx.Exec(updateSQL, getOutboxName(outbox.svcName), confirmed, deliveryTag, outbox.ID)
+	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
+	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag, outbox.ID)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
@@ -216,13 +216,13 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM ? WHERE status = 0 AND delivery_attempts < ? ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
-	return tx.Query(selectSQL, getOutboxName(outbox.svcName), strconv.Itoa(maxDeliveryAttempts), strconv.Itoa(maxPageSize))
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 0 AND delivery_attempts < ? ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL, strconv.Itoa(maxDeliveryAttempts), strconv.Itoa(maxPageSize))
 }
 
 func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM ? WHERE status = 1  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
-	return tx.Query(selectSQL, getOutboxName(outbox.svcName), strconv.Itoa(maxPageSize))
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL, strconv.Itoa(maxPageSize))
 }
 
 func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
@@ -344,11 +344,11 @@ func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx, svcName string) bool {
 
 	tblName := getOutboxName(svcName)
 
-	selectSQL := `SELECT 1 FROM ? LIMIT 1;`
+	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
 
-	outbox.log().Info(selectSQL, tblName)
+	outbox.log().Info(selectSQL)
 
-	row := tx.QueryRow(selectSQL, tblName)
+	row := tx.QueryRow(selectSQL)
 	var exists int
 	err := row.Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
