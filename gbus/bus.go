@@ -300,8 +300,8 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 	b.started = false
 
 	if b.IsTxnl {
-		b.TxProvider.Dispose()
 		b.Outbox.Stop()
+		b.TxProvider.Dispose()
 	}
 	return nil
 }
