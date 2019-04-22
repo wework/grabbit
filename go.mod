@@ -10,7 +10,6 @@ require (
 	github.com/golang/protobuf v1.3.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
-	github.com/lib/pq v1.1.0
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect

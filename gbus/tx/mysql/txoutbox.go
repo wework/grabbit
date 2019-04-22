@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	pending        int
-	waitingConfirm = 1
-	confirmed      = 2
+	pending int
+	//waitingConfirm = 1
+	confirmed = 2
 	//TODO:get these values from configuration
 	maxPageSize         = 500
 	maxDeliveryAttempts = 50
@@ -52,13 +52,19 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
 	}
 	if ensureErr := outbox.ensureSchema(tx, outbox.svcName); ensureErr != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			outbox.log().WithError(err).Error("could not rollback the transaction for creation of schemas")
+		}
 		return ensureErr
 	}
 	if outbox.purgeOnStartup {
 		if purgeErr := outbox.purge(tx); purgeErr != nil {
 			outbox.log().WithError(purgeErr).Error("failed to purge transactional outbox")
-			tx.Rollback()
+			err := tx.Rollback()
+			if err != nil {
+				outbox.log().WithError(err).Error("could not rollback the transaction for purge")
+			}
 			return purgeErr
 		}
 	}
@@ -171,7 +177,10 @@ func (outbox *TxOutbox) deleteCompletedRecords() error {
 	if execErr != nil {
 		outbox.log().WithError(execErr).Error("failed to delete processed records")
 
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			outbox.log().WithError(err).Error("could not rollback the transaction for deleting completed records")
+		}
 		return execErr
 	}
 
@@ -198,7 +207,10 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
 			Error("failed to update delivery tag")
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			outbox.log().WithError(err).Error("could not rollback update in outbox")
+		}
 	}
 	return tx.Commit()
 }
@@ -230,7 +242,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		return selectErr
 	}
 
-	successfulDeliveries := make(map[uint64]int, 0)
+	successfulDeliveries := make(map[uint64]int)
 	failedDeliveries := make([]int, 0)
 
 	for rows.Next() {
@@ -266,7 +278,10 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 			successfulDeliveries[deliveryTag] = recID
 		}
 	}
-	rows.Close()
+	err := rows.Close()
+	if err != nil {
+		outbox.log().WithError(err).Error("could not close Rows")
+	}
 
 	for deliveryTag, id := range successfulDeliveries {
 		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
