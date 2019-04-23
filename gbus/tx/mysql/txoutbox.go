@@ -165,7 +165,6 @@ func (outbox *TxOutbox) processOutbox() {
 	for {
 		select {
 		case <-outbox.exit:
-			outbox.log().Info("on the moo again...")
 			return
 		//TODO:get time duration from configuration
 		case <-send:
@@ -195,14 +194,18 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	outbox.gl.Lock()
 	recID := outbox.recordsPendingConfirms[deliveryTag]
 	outbox.gl.Unlock()
-	//since the message gets sent to rabbitmq and then the tx completes we may get an ack for a record that is
-	//
+	/*
+			since the messages get sent to rabbitmq and then the outbox table gets updated with the deilvery tag for teh record
+			it may be that we recived a acked deliveryTag that is not yet registered in the outbox table.
+		  in that case we just place the deliveryTag back in the ack channel so it can be picked up and re processed later
+		  we place it in the channel using a new goroutine so to not deadlock if there is only a single goroutine draining the ack channel
+	*/
 	if recID == 0 {
 		go func() { outbox.ack <- deliveryTag }()
 	}
-	// updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
-	updateSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + "  WHERE rec_id=?"
-	_, execErr := tx.Exec(updateSQL, recID)
+
+	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + "  WHERE rec_id=?"
+	_, execErr := tx.Exec(deleteSQL, recID)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
