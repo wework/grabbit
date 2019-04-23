@@ -19,13 +19,13 @@ import (
 var (
 	pending int
 	//waitingConfirm = 1
-	confirmed = 2
+
 	//TODO:get these values from configuration
 	maxPageSize         = 500
 	maxDeliveryAttempts = 50
 	sendInterval        = time.Second
-	cleanupInterval     = time.Second * 30
-	scavengeInterval    = time.Second * 60
+
+	scavengeInterval = time.Second * 60
 )
 
 //TxOutbox is a mysql based transactional outbox
@@ -164,33 +164,6 @@ func (outbox *TxOutbox) processOutbox() {
 	}
 }
 
-func (outbox *TxOutbox) deleteCompletedRecords() error {
-
-	tx, txErr := outbox.txProv.New()
-	if txErr != nil {
-		return txErr
-	}
-	deleteSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + " WHERE status=?"
-	result, execErr := tx.Exec(deleteSQL, confirmed)
-	if execErr != nil {
-		outbox.log().WithError(execErr).Error("failed to delete processed records")
-
-		err := tx.Rollback()
-		if err != nil {
-			outbox.log().WithError(err).Error("could not rollback the transaction for deleting completed records")
-		}
-		return execErr
-	}
-
-	commitErr := tx.Commit()
-	records, ree := result.RowsAffected()
-	if commitErr == nil && ree == nil && records > 0 {
-		outbox.log().WithField("records", records).Info("cleaned records from outbox")
-	}
-
-	return commitErr
-}
-
 func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	tx, txErr := outbox.txProv.New()
 	if txErr != nil {
@@ -202,6 +175,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	outbox.gl.Lock()
 	recID := outbox.recordsPendingConfirms[deliveryTag]
 	outbox.gl.Unlock()
+	//since the message gets sent to rabbitmq and then the tx completes we may get an ack for a record that is
+	//
 	if recID == 0 {
 		go func() { outbox.ack <- deliveryTag }()
 	}
