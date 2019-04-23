@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/xid"
@@ -29,15 +30,16 @@ var (
 
 //TxOutbox is a mysql based transactional outbox
 type TxOutbox struct {
-	svcName        string
-	txProv         gbus.TxProvider
-	purgeOnStartup bool
-	ID             string
-	amqpOutbox     *gbus.AMQPOutbox
-
-	ack  chan uint64
-	nack chan uint64
-	exit chan bool
+	svcName                string
+	txProv                 gbus.TxProvider
+	purgeOnStartup         bool
+	ID                     string
+	amqpOutbox             *gbus.AMQPOutbox
+	recordsPendingConfirms map[uint64]int
+	ack                    chan uint64
+	nack                   chan uint64
+	exit                   chan bool
+	gl                     *sync.Mutex
 }
 
 func (outbox *TxOutbox) log() *log.Entry {
@@ -46,7 +48,8 @@ func (outbox *TxOutbox) log() *log.Entry {
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change
 func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
-
+	outbox.gl = &sync.Mutex{}
+	outbox.recordsPendingConfirms = make(map[uint64]int)
 	tx, e := outbox.txProv.New()
 	if e != nil {
 		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
@@ -133,7 +136,7 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 func (outbox *TxOutbox) processOutbox() {
 
 	send := time.NewTicker(sendInterval).C
-	cleanUp := time.NewTicker(cleanupInterval).C
+	// cleanUp := time.NewTicker(cleanupInterval).C
 	scavenge := time.NewTicker(scavengeInterval).C
 
 	for {
@@ -145,11 +148,6 @@ func (outbox *TxOutbox) processOutbox() {
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to send messages from outbox")
-			}
-		case <-cleanUp:
-			err := outbox.deleteCompletedRecords()
-			if err != nil {
-				outbox.log().WithError(err).Error("failed to delete completed records")
 			}
 		case <-scavenge:
 			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
@@ -201,8 +199,15 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	}
 	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
 
-	updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
-	_, execErr := tx.Exec(updateSQL, confirmed, deliveryTag, outbox.ID)
+	outbox.gl.Lock()
+	recID := outbox.recordsPendingConfirms[deliveryTag]
+	outbox.gl.Unlock()
+	if recID == 0 {
+		go func() { outbox.ack <- deliveryTag }()
+	}
+	// updateSQL := "UPDATE " + getOutboxName(outbox.svcName) + " SET status=? WHERE delivery_tag=? AND relay_id=?"
+	updateSQL := "DELETE FROM " + getOutboxName(outbox.svcName) + "  WHERE rec_id=?"
+	_, execErr := tx.Exec(updateSQL, recID)
 	if execErr != nil {
 		outbox.log().WithError(execErr).
 			WithFields(log.Fields{"delivery_tag": deliveryTag, "relay_id": outbox.ID}).
@@ -244,7 +249,8 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 
 	successfulDeliveries := make(map[uint64]int)
 	failedDeliveries := make([]int, 0)
-
+	outbox.gl.Lock()
+	defer outbox.gl.Unlock()
 	for rows.Next() {
 		var (
 			recID                int
@@ -276,6 +282,8 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 			failedDeliveries = append(failedDeliveries, recID)
 		} else {
 			successfulDeliveries[deliveryTag] = recID
+			outbox.recordsPendingConfirms[deliveryTag] = recID
+
 		}
 	}
 	err := rows.Close()
