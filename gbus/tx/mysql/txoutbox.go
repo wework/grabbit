@@ -26,6 +26,7 @@ var (
 	sendInterval        = time.Second
 
 	scavengeInterval = time.Second * 60
+	ackers           = 10
 )
 
 //TxOutbox is a mysql based transactional outbox
@@ -78,6 +79,10 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	outbox.amqpOutbox.NotifyConfirm(outbox.ack, outbox.nack)
 
 	go outbox.processOutbox()
+	for i := 0; i < ackers; i++ {
+		go outbox.ackRec()
+	}
+
 	return nil
 }
 
@@ -127,10 +132,28 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 		txProv:         txProv,
 		purgeOnStartup: purgeOnStartup,
 		ID:             xid.New().String(),
-		ack:            make(chan uint64, 10000),
-		nack:           make(chan uint64, 10000),
+		ack:            make(chan uint64, 1000000),
+		nack:           make(chan uint64, 1000000),
 		exit:           make(chan bool)}
 	return txo
+}
+
+func (outbox *TxOutbox) ackRec() {
+	for {
+		select {
+		case <-outbox.exit:
+			return
+		case ack := <-outbox.ack:
+			outbox.log().WithField("channel_len", len(outbox.ack)).Debug("length of ack channel")
+			if err := outbox.updateAckedRecord(ack); err != nil {
+				outbox.log().WithError(err).WithField("delivery_tag", ack).Error("failed to update delivery tag")
+			}
+		case nack := <-outbox.nack:
+			outbox.log().WithField("deliver_tag", nack).Info("nack received for delivery tag")
+			outbox.log().WithField("channel_len", len(outbox.nack)).Debug("length of nack channel")
+
+		}
+	}
 }
 
 func (outbox *TxOutbox) processOutbox() {
@@ -142,24 +165,21 @@ func (outbox *TxOutbox) processOutbox() {
 	for {
 		select {
 		case <-outbox.exit:
+			outbox.log().Info("on the moo again...")
 			return
 		//TODO:get time duration from configuration
 		case <-send:
+
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to send messages from outbox")
 			}
+
 		case <-scavenge:
 			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to scavenge records")
 			}
-		case ack := <-outbox.ack:
-			if err := outbox.updateAckedRecord(ack); err != nil {
-				outbox.log().WithError(err).WithField("delivery_tag", ack).Error("failed to update delivery tag")
-			}
-		case nack := <-outbox.nack:
-			outbox.log().WithField("deliver_tag", nack).Info("nack received for delivery tag")
 		}
 	}
 }
@@ -196,7 +216,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " USE INDEX (status_delivery) WHERE status = 0 AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + "   WHERE status = 0 AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
@@ -315,7 +335,8 @@ func (outbox *TxOutbox) ensureSchema(tx *sql.Tx, svcName string) error {
 	delivery_tag	bigint(20) NOT NULL,
 	delivery_attempts int NOT NULL DEFAULT 0,
 	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(rec_id))`
+	PRIMARY KEY(rec_id),
+	INDEX status_delivery (rec_id, status, delivery_attempts))`
 
 	_, createErr := tx.Exec(createTablesSQL)
 
@@ -346,7 +367,12 @@ func (outbox *TxOutbox) migrate0_9To1_0(tx *sql.Tx, svcName string) error {
 	alter := `ALTER TABLE ` + tblName + ` CHANGE COLUMN delivery_attemtps delivery_attempts int NOT NULL DEFAULT 0;`
 	_, execErr := tx.Exec(alter)
 	if execErr != nil {
-		outbox.log().WithField("sql_err", execErr).Info("renaming column")
+		outbox.log().WithField("sql_err", execErr).Info("migration:renaming column")
+	}
+	addIndex := `ALTER TABLE ` + tblName + ` ADD INDEX status_delivery (rec_id, status, delivery_attempts);`
+	_, indexErr := tx.Exec(addIndex)
+	if indexErr != nil {
+		outbox.log().WithField("sql_err", execErr).Info("migration:adding index column")
 	}
 	return nil
 }
