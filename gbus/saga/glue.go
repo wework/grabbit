@@ -163,7 +163,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 			return imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
 
-		} else if message.Semantics == "cmd" {
+		} else if message.Semantics == gbus.CMD {
 			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
 			return e
 		} else {
@@ -207,7 +207,7 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessa
 }
 
 func (imsm *Glue) registerMessage(message gbus.Message) error {
-	//only register once on each message so we will not duplicate invokations
+	//only register once on each message so we will not duplicate invocations
 	if _, exists := imsm.alreadyRegistred[message.SchemaName()]; exists {
 		return nil
 	}

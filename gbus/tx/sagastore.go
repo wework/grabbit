@@ -115,7 +115,7 @@ func (store *SagaStore) RegisterSagaType(saga gbus.Saga) {
 //DeleteSaga implements interface method store.DeleteSaga
 func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.GetSagatableName()
-	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
+	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id= ?`
 	_, err := tx.Exec(deleteSQL, instance.ID)
 	return err
 }
@@ -154,8 +154,7 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) (err error) {
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := store.GetSagatableName()
-	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version)
-	VALUES (` + store.ParamsMarkers[0] + `, ` + store.ParamsMarkers[1] + `, ` + store.ParamsMarkers[2] + `, ` + store.ParamsMarkers[3] + `)`
+	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, version) VALUES (?, ?, ?, ?)`
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
@@ -174,7 +173,8 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
 	store.log().WithField("saga_table", store.GetSagatableName()).Info("Purging saga table")
-	results, err := tx.Exec("DELETE FROM  " + store.GetSagatableName())
+	deleteSQL := fmt.Sprintf("DELETE FROM %s", store.GetSagatableName())
+	results, err := tx.Exec(deleteSQL)
 	if err != nil {
 		store.log().WithError(err).Error("failed to purge saga table")
 		return err

@@ -66,7 +66,8 @@ var (
 
 	//MaxRetryCount defines the max times a retry can run
 	MaxRetryCount uint = 3
-	rpcHeaderName      = "x-grabbit-msg-rpc-id"
+	//RpcHeaderName used to define the header in grabbit for RPC
+	RpcHeaderName = "x-grabbit-msg-rpc-id"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -149,13 +150,13 @@ func (b *DefaultBus) bindServiceQueue() error {
 		if e != nil {
 			b.log().WithError(e).WithField("exchange", exchange).Error("failed to declare exchange")
 			return e
-		} else {
-			e = b.bindQueue(topic, exchange)
-			if e != nil {
-				b.log().WithError(e).WithFields(log.Fields{"topic": topic, "exchange": exchange}).Error("failed to bind topic to exchange")
-				return e
-			}
 		}
+		e = b.bindQueue(topic, exchange)
+		if e != nil {
+			b.log().WithError(e).WithFields(log.Fields{"topic": topic, "exchange": exchange}).Error("failed to bind topic to exchange")
+			return e
+		}
+
 	}
 	return nil
 }
@@ -173,7 +174,7 @@ func (b *DefaultBus) Start() error {
 
 	var e error
 	//create amqo connection and channel
-	if b.amqpConn, e = b.connect(int(MaxRetryCount)); e != nil {
+	if b.amqpConn, e = b.connect(MaxRetryCount); e != nil {
 		return e
 	}
 
@@ -436,7 +437,7 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 	b.RPCHandlers[rpcID] = handler
 	//we do not defer this as we do not want b.RPCHandlers to be locked until a reply returns
 	b.RPCLock.Unlock()
-	request.Semantics = "cmd"
+	request.Semantics = CMD
 	rpc := rpcPolicy{
 		rpcID: rpcID}
 
@@ -467,7 +468,7 @@ func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, excha
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	message.Semantics = "evt"
+	message.Semantics = EVT
 	publish := func(tx *sql.Tx) error {
 		return b.sendImpl(ctx, tx, "", b.SvcName, exchange, topic, message, policies...)
 	}
@@ -478,7 +479,7 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	message.Semantics = "cmd"
+	message.Semantics = CMD
 	send := func(tx *sql.Tx) error {
 		return b.sendImpl(ctx, tx, toService, b.SvcName, "", "", message, policies...)
 	}
@@ -543,20 +544,15 @@ func (b *DefaultBus) RegisterSaga(saga Saga, conf ...SagaConfFn) error {
 
 }
 
-func (b *DefaultBus) connect(retryCount int) (*amqp.Connection, error) {
+func (b *DefaultBus) connect(retryCount uint) (*amqp.Connection, error) {
+	var conn *amqp.Connection
+	err := b.SafeWithRetries(func() error {
+		var err error
+		conn, err = amqp.Dial(b.AmqpConnStr)
+		return err
+	}, retryCount)
+	return conn, err
 
-	connected := false
-	attempts := uint(0)
-	var lastErr error
-	for !connected && attempts < MaxRetryCount {
-		conn, e := amqp.Dial(b.AmqpConnStr)
-		if e == nil {
-			return conn, e
-		}
-		lastErr = e
-		attempts++
-	}
-	return nil, lastErr
 }
 
 //
@@ -633,7 +629,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 
 	key := ""
 
-	if message.Semantics == "cmd" {
+	if message.Semantics == CMD {
 		key = toService
 	} else {
 		key = topic
@@ -695,5 +691,5 @@ type rpcPolicy struct {
 }
 
 func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
-	publishing.Headers[rpcHeaderName] = p.rpcID
+	publishing.Headers[RpcHeaderName] = p.rpcID
 }

@@ -137,9 +137,9 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	bm.ID = delivery.MessageId
 	bm.CorrelationID = delivery.CorrelationId
 	if delivery.Exchange != "" {
-		bm.Semantics = "evt"
+		bm.Semantics = EVT
 	} else {
-		bm.Semantics = "cmd"
+		bm.Semantics = CMD
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poision pill message
@@ -160,7 +160,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery amqp.Delivery) []MessageHandler {
 	handlers := make([]MessageHandler, 0)
 	if isRPCreply {
-		rpcID, rpcHeaderFound := delivery.Headers[rpcHeaderName].(string)
+		rpcID, rpcHeaderFound := delivery.Headers[RpcHeaderName].(string)
 		if !rpcHeaderFound {
 			worker.log().Warn("rpc message received but no rpc header found...rejecting message")
 			return handlers

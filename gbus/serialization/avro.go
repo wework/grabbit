@@ -167,7 +167,7 @@ func (as *Avro) RegisterAvroMessageFromFile(schemaName, schemaPath, namespace st
 }
 
 //RegisterAvroMessage registers a schema to a topic and binds it to an object (obj)
-func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj AvroMessageGenerated, deserializer avroDeserializer) (err error) {
+func (as *Avro) RegisterAvroMessage(schemaName, namespace, schema string, obj gbus.Message, deserializer avroDeserializer) (err error) {
 	as.lock.Lock()
 	defer as.lock.Unlock()
 	if _, ok := as.registeredSchemas[obj.SchemaName()]; !ok {

@@ -119,7 +119,7 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 
 func (outbox *TxOutbox) purge(tx *sql.Tx) error {
 
-	purgeSQL := `DELETE FROM  ` + getOutboxName(outbox.svcName)
+	purgeSQL := fmt.Sprintf("DELETE FROM %s", getOutboxName(outbox.svcName))
 	_, err := tx.Exec(purgeSQL)
 	return err
 }
@@ -224,8 +224,8 @@ func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
 }
 
 func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
-	return tx.Query(selectSQL)
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	return tx.Query(selectSQL, strconv.Itoa(maxPageSize))
 }
 
 func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows, error)) error {
@@ -322,7 +322,7 @@ func (outbox *TxOutbox) ensureSchema(tx *sql.Tx, svcName string) error {
 
 	if schemaExists {
 		/*
-			The follwoing  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
+			The following  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
 			so that earlier consumers of grabbit will not break once the upgrade to the 1.0.0 release.
 			Once a proper DB migration stratagy will be in place and implemented (post 1.0.0) the following code
 			will be deleted.

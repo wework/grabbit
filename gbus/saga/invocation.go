@@ -49,17 +49,20 @@ func (si *sagaInvocation) Ctx() context.Context {
 	return si.ctx
 }
 
-func (si *sagaInvocation) Send(ctx context.Context, toService string, command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
+func (si *sagaInvocation) Send(ctx context.Context, toService string,
+	command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(command, false)
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
-func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string, event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
+func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string,
+	event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(event, true)
 	return si.decoratedBus.Publish(ctx, exchange, topic, event, policies...)
 }
 
-func (si *sagaInvocation) RPC(ctx context.Context, service string, request, reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
+func (si *sagaInvocation) RPC(ctx context.Context, service string, request,
+	reply *gbus.BusMessage, timeout time.Duration) (*gbus.BusMessage, error) {
 	return si.decoratedBus.RPC(ctx, service, request, reply, timeout)
 }
 
