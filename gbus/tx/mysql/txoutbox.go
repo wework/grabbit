@@ -247,8 +247,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 
 	successfulDeliveries := make(map[uint64]int)
 	failedDeliveries := make([]int, 0)
-	outbox.gl.Lock()
-	defer outbox.gl.Unlock()
+
 	for rows.Next() {
 		var (
 			recID                int
@@ -280,8 +279,6 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 			failedDeliveries = append(failedDeliveries, recID)
 		} else {
 			successfulDeliveries[deliveryTag] = recID
-			outbox.recordsPendingConfirms[deliveryTag] = recID
-
 		}
 	}
 	err := rows.Close()
@@ -307,7 +304,15 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	}
 	if cmtErr := tx.Commit(); cmtErr != nil {
 		outbox.log().WithError(cmtErr).Error("Error committing outbox transaction")
+	} else {
+		//only after the tx has commited successfully add the recordids so they can be picked up by confirms
+		outbox.gl.Lock()
+		defer outbox.gl.Unlock()
+		for deliveryTag, recID := range successfulDeliveries {
+			outbox.recordsPendingConfirms[deliveryTag] = recID
+		}
 	}
+
 	return nil
 }
 
