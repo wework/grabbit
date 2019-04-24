@@ -328,12 +328,12 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 	b.started = false
 
 	if b.IsTxnl {
-		b.TxProvider.Dispose()
 		err := b.Outbox.Stop()
 		if err != nil {
 			b.log().WithError(err).Error("could not shutdown outbox")
 			return err
 		}
+    b.TxProvider.Dispose()
 	}
 	return nil
 }

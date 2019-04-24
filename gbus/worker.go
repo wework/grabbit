@@ -191,22 +191,31 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 }
 
 func (worker *worker) ack(delivery amqp.Delivery) error {
-	ack := func() error { return delivery.Ack(false /*multiple*/) }
-	err := worker.SafeWithRetries(ack, MaxRetryCount)
+	ack := func(attempts uint) error { return delivery.Ack(false /*multiple*/) }
+	worker.log().WithField("message_id", delivery.MessageId).Info("acking message")
+	err := retry.Retry(ack,
+		strategy.Wait(100*time.Millisecond))
+
 	if err != nil {
 		worker.log().WithError(err).Error("could not ack the message")
 		worker.span.LogFields(slog.Error(err))
+	} else {
+		worker.log().WithField("message_id", delivery.MessageId).Info("message acked")
 	}
+
 	return err
 }
 
 func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
-	reject := func() error { return delivery.Reject(requeue /*multiple*/) }
-	err := worker.SafeWithRetries(reject, MaxRetryCount)
+	reject := func(attempts uint) error { return delivery.Reject(requeue /*multiple*/) }
+	worker.log().WithFields(log.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("rejecting message")
+	err := retry.Retry(reject,
+		strategy.Wait(100*time.Millisecond))
 	if err != nil {
 		worker.log().WithError(err).Error("could not reject the message")
 		worker.span.LogFields(slog.Error(err))
 	}
+	worker.log().WithFields(log.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("message rejected")
 	return err
 }
 
@@ -248,7 +257,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	spCtx, err := amqptracer.Extract(delivery.Headers)
 	if err != nil {
-		worker.log().WithError(err).Warn("could not extract SpanContext from headers")
+		worker.log().WithError(err).Debug("could not extract SpanContext from headers")
 	} else {
 		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
 	}
