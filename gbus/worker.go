@@ -257,7 +257,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	spCtx, err := amqptracer.Extract(delivery.Headers)
 	if err != nil {
-		worker.log().WithError(err).Error("could not extract SpanContext from headers")
+		worker.log().WithError(err).Debug("could not extract SpanContext from headers")
 	} else {
 		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
 	}
