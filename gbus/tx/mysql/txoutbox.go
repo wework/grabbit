@@ -189,7 +189,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 		outbox.log().WithError(txErr).WithField("delivery_tag", deliveryTag).Error("failed to create transaction for updating acked delivery tag")
 		return txErr
 	}
-	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
+	outbox.log().WithField("delivery_tag", deliveryTag).Debug("ack received for delivery tag")
 
 	outbox.gl.Lock()
 	recID := outbox.recordsPendingConfirms[deliveryTag]
