@@ -323,18 +323,20 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 			b.log().WithError(err).Error("could not stop worker")
 		}
 	}
-
 	b.Outgoing.shutdown()
 	b.started = false
-
 	if b.IsTxnl {
+
 		err := b.Outbox.Stop()
+
 		if err != nil {
 			b.log().WithError(err).Error("could not shutdown outbox")
 			return err
 		}
-    b.TxProvider.Dispose()
+		b.TxProvider.Dispose()
+
 	}
+
 	return nil
 }
 
@@ -639,7 +641,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		//send to the transactional outbox if the bus is transactional
 		//otherwise send directly to amqp
 		if b.IsTxnl && tx != nil {
-			b.log().WithField("message_id", msg.MessageId).Info("sending message to outbox")
+			b.log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
 			saveErr := b.Outbox.Save(tx, exchange, key, msg)
 			if saveErr != nil {
 				log.WithError(saveErr).Error("failed to save to transactional outbox")
