@@ -179,7 +179,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 	} else {
 		worker.handlersLock.Lock()
 		defer worker.handlersLock.Unlock()
-		worker.log().WithFields(log.Fields{"number_of_handlers": len(worker.registrations)}).Info("found message handlers")
+
 		for _, registration := range worker.registrations {
 			if registration.Matches(delivery.Exchange, delivery.RoutingKey, bm.PayloadFQN) {
 				handlers = append(handlers, registration.Handler)
@@ -187,6 +187,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 		}
 	}
 
+	worker.log().WithFields(log.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 	return handlers
 }
 
