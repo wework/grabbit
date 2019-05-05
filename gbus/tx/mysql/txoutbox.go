@@ -285,7 +285,9 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	if err != nil {
 		outbox.log().WithError(err).Error("could not close Rows")
 	}
-	outbox.log().WithField("messages_sent", len(successfulDeliveries)).Info("outbox relayed messages")
+	if messagesSent := len(successfulDeliveries); messagesSent > 0 {
+		outbox.log().WithField("messages_sent", len(successfulDeliveries)).Info("outbox relayed messages")
+	}
 	for deliveryTag, id := range successfulDeliveries {
 		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
 		if updateErr != nil {
