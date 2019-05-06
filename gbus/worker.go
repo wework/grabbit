@@ -179,7 +179,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 	} else {
 		worker.handlersLock.Lock()
 		defer worker.handlersLock.Unlock()
-		worker.log().WithFields(log.Fields{"number_of_handlers": len(worker.registrations)}).Info("found message handlers")
+
 		for _, registration := range worker.registrations {
 			if registration.Matches(delivery.Exchange, delivery.RoutingKey, bm.PayloadFQN) {
 				handlers = append(handlers, registration.Handler)
@@ -187,12 +187,13 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 		}
 	}
 
+	worker.log().WithFields(log.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 	return handlers
 }
 
 func (worker *worker) ack(delivery amqp.Delivery) error {
 	ack := func(attempts uint) error { return delivery.Ack(false /*multiple*/) }
-	worker.log().WithField("message_id", delivery.MessageId).Info("acking message")
+	worker.log().WithField("message_id", delivery.MessageId).Debug("acking message")
 	err := retry.Retry(ack,
 		strategy.Wait(100*time.Millisecond))
 
@@ -200,7 +201,7 @@ func (worker *worker) ack(delivery amqp.Delivery) error {
 		worker.log().WithError(err).Error("could not ack the message")
 		worker.span.LogFields(slog.Error(err))
 	} else {
-		worker.log().WithField("message_id", delivery.MessageId).Info("message acked")
+		worker.log().WithField("message_id", delivery.MessageId).Debug("message acked")
 	}
 
 	return err

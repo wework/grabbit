@@ -88,7 +88,7 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 
 //Stop forcess the transactional outbox to stop processing additional messages
 func (outbox *TxOutbox) Stop() error {
-	outbox.exit <- true
+	close(outbox.exit)
 	return nil
 }
 
@@ -189,7 +189,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 		outbox.log().WithError(txErr).WithField("delivery_tag", deliveryTag).Error("failed to create transaction for updating acked delivery tag")
 		return txErr
 	}
-	outbox.log().WithField("delivery_tag", deliveryTag).Info("ack received for delivery tag")
+	outbox.log().WithField("delivery_tag", deliveryTag).Debug("ack received for delivery tag")
 
 	outbox.gl.Lock()
 	recID := outbox.recordsPendingConfirms[deliveryTag]
@@ -268,24 +268,26 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 			outbox.log().WithError(decErr).Error("failed to decode amqp message from outbox record")
 			continue
 		}
-		outbox.log().WithField("message_id", publishing.MessageId).Info("relay message")
 
 		//send the amqp message to rabbitmq
 		if deliveryTag, postErr := outbox.amqpOutbox.Post(exchange, routingKey, publishing); postErr != nil {
-
 			outbox.log().WithError(postErr).
 				WithFields(log.Fields{"message_name": publishing.Headers["x-msg-name"], "message_id": publishing.MessageId}).
 				Error("failed to send amqp message")
 			failedDeliveries = append(failedDeliveries, recID)
 		} else {
+			outbox.log().WithFields(log.Fields{"message_id": publishing.MessageId, "delivery_tag": deliveryTag}).Debug("relay message")
 			successfulDeliveries[deliveryTag] = recID
 		}
+
 	}
 	err := rows.Close()
 	if err != nil {
 		outbox.log().WithError(err).Error("could not close Rows")
 	}
-
+	if messagesSent := len(successfulDeliveries); messagesSent > 0 {
+		outbox.log().WithField("messages_sent", len(successfulDeliveries)).Info("outbox relayed messages")
+	}
 	for deliveryTag, id := range successfulDeliveries {
 		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
 		if updateErr != nil {
