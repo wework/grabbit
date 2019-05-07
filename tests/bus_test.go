@@ -3,8 +3,10 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -209,28 +211,34 @@ func TestRPC(t *testing.T) {
 }
 
 func TestDeadlettering(t *testing.T) {
+
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(2)
 	poision := gbus.NewBusMessage(PoisionMessage{})
 	service1 := createBusWithOptions(testSvc1, "grabbit-dead", true, true)
 	deadletterSvc := createBusWithOptions("deadletterSvc", "grabbit-dead", true, true)
-	proceed := make(chan bool)
-	handler := func(tx *sql.Tx, poision amqp.Delivery) error {
-		proceed <- true
+
+	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
+		waitgroup.Done()
 		return nil
 	}
 
-	deadletterSvc.HandleDeadletter(handler)
+	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		return errors.New("fail")
+	}
+
+	deadletterSvc.HandleDeadletter(deadMessageHandler)
+	service1.HandleMessage(Command1{}, faultyHandler)
 
 	deadletterSvc.Start()
 	defer deadletterSvc.Shutdown()
 	service1.Start()
 	defer service1.Shutdown()
 
-	e := service1.Send(context.Background(), testSvc1, poision)
-	if e != nil {
-		log.Printf("send error: %v", e)
-	}
+	service1.Send(context.Background(), testSvc1, poision)
+	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
 
-	<-proceed
+	waitgroup.Wait()
 }
 
 func TestRegistrationAfterBusStarts(t *testing.T) {
