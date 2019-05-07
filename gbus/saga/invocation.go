@@ -14,19 +14,26 @@ type sagaInvocation struct {
 	inboundMsg          *gbus.BusMessage
 	sagaID              string
 	ctx                 context.Context
+	invokingService     string
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
 
 	message.CorrelationID = si.inboundMsg.ID
+	message.SagaID = si.sagaID
 
 	if !isEvent {
 		//support saga-to-saga communication
 		if si.inboundMsg.SagaID != "" {
+			message.SagaCorrelationID = si.inboundMsg.SagaID
+		}
+		//if the saga is potentially invoking itself then set the SagaCorrelationID to reflect that
+		//https://github.com/wework/grabbit/issues/64
+		_, targetService := si.decoratedInvocation.Routing()
+		if targetService == si.invokingService {
 			message.SagaCorrelationID = message.SagaID
 		}
 
-		message.SagaID = si.sagaID
 	}
 
 }

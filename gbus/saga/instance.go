@@ -30,18 +30,12 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 	}
 
 	valueOfMessage := reflect.ValueOf(message)
-	sginv := &sagaInvocation{
-		decoratedBus:        invocation.Bus(),
-		decoratedInvocation: invocation,
-		inboundMsg:          message,
-		sagaID:              si.ID,
-		ctx:                 invocation.Ctx(),
-	}
+
 	reflectedVal := reflect.ValueOf(si.UnderlyingInstance)
 
 	for _, methodName := range methodsToInvoke {
 		params := make([]reflect.Value, 0)
-		params = append(params, reflect.ValueOf(sginv), valueOfMessage)
+		params = append(params, reflect.ValueOf(invocation), valueOfMessage)
 		method := reflectedVal.MethodByName(methodName)
 		log.Printf(" invoking method %v on saga instance %v", methodName, si.ID)
 		returns := method.Call(params)
