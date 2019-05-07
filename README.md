@@ -22,6 +22,8 @@ Planned:
 
 1) Deduplication of inbound messages
 
+## Stable relase
+the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates. 
 
 ## Supported transactional resources
 1) MySql > 8.0 (InnoDB)
@@ -107,7 +109,7 @@ gb.HandleEvent("name of exchange", "name of topic", SomeEvent{}, eventHandler)
 Start the bus
 ```Go
 gb.Start()
-defer gb.Shutsown()
+defer gb.Shutdown()
 ```
 
 Send a command

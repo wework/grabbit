@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"context"
 	"log"
+	"reflect"
 	"testing"
 	"time"
 
@@ -224,6 +226,37 @@ func TestSagaTimeout(t *testing.T) {
 	<-proceed
 }
 
+func TestSagaSelfMessaging(t *testing.T) {
+	proceed := make(chan bool)
+	b := createNamedBusForTest(testSvc1)
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		_, ok := message.Payload.(*Event1)
+		if !ok {
+			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
+		}
+		proceed <- true
+
+		return nil
+	}
+
+	err := b.HandleEvent("test_exchange", "test_topic", Event1{}, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	b.RegisterSaga(&SelfSendingSaga{})
+
+	b.Start()
+	defer b.Shutdown()
+
+	b.Send(context.TODO(), testSvc1, gbus.NewBusMessage(Command1{}))
+
+	<-proceed
+
+}
+
 /*Test Sagas*/
 
 type SagaA struct {
@@ -369,4 +402,41 @@ func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMes
 	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
 		Data: "TimingOutSaga.Timeout",
 	}))
+}
+
+type SelfSendingSaga struct {
+}
+
+func (*SelfSendingSaga) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
+	return append(starters, Command1{})
+}
+
+func (s *SelfSendingSaga) IsComplete() bool {
+	return false
+}
+
+func (s *SelfSendingSaga) New() gbus.Saga {
+	return &SelfSendingSaga{}
+}
+
+func (s *SelfSendingSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
+	register.HandleMessage(Command1{}, s.HandleCommand1)
+	register.HandleMessage(Command2{}, s.HandleCommand2)
+	register.HandleMessage(Reply2{}, s.HandleReply2)
+}
+
+func (s *SelfSendingSaga) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	cmd2 := gbus.NewBusMessage(Command2{})
+	return invocation.Bus().Send(invocation.Ctx(), testSvc1, cmd2)
+}
+
+func (s *SelfSendingSaga) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	reply := gbus.NewBusMessage(Reply2{})
+	return invocation.Reply(invocation.Ctx(), reply)
+}
+
+func (s *SelfSendingSaga) HandleReply2(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	evt1 := gbus.NewBusMessage(Event1{})
+	return invocation.Bus().Publish(invocation.Ctx(), "test_exchange", "test_topic", evt1)
 }
