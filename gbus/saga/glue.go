@@ -106,7 +106,6 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
 	msgName := message.PayloadFQN
-	exchange, routingKey := invocation.Routing()
 
 	defs := imsm.msgToDefMap[strings.ToLower(msgName)]
 
@@ -125,7 +124,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			imsm.log().
 				WithFields(log.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
-			if invkErr := newInstance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+			if invkErr := imsm.invokeSagaInstance(newInstance, invocation, message); invkErr != nil {
 				imsm.log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
@@ -156,7 +155,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				return e
 			}
 
-			if invkErr := instance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+			if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
 				imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
@@ -178,7 +177,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 			for _, instance := range instances {
 
-				if invkErr := instance.invoke(exchange, routingKey, invocation, message); invkErr != nil {
+				if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
 					imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 					return invkErr
 				}
@@ -191,6 +190,19 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	}
 
 	return nil
+}
+
+func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocation, message *gbus.BusMessage) error {
+	sginv := &sagaInvocation{
+		decoratedBus:        invocation.Bus(),
+		decoratedInvocation: invocation,
+		inboundMsg:          message,
+		sagaID:              instance.ID,
+		ctx:                 invocation.Ctx(),
+		invokingService:     imsm.svcName}
+
+	exchange, routingKey := invocation.Routing()
+	return instance.invoke(exchange, routingKey, sginv, message)
 }
 
 func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessage *gbus.BusMessage) error {
