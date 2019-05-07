@@ -22,7 +22,7 @@ Planned:
 
 1) Deduplication of inbound messages
 
-## Stable relase
+## Stable release
 the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates. 
 
 ## Supported transactional resources
