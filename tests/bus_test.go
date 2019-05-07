@@ -323,6 +323,21 @@ func TestSendingPanic(t *testing.T) {
 	}
 }
 
+func TestHealthCheck(t *testing.T) {
+	svc1 := createNamedBusForTest(testSvc1)
+	err := svc1.Start()
+	if err != nil {
+		t.Error(err.Error())
+	}
+	defer svc1.Shutdown()
+	health := svc1.GetHealth()
+
+	fmt.Printf("%v", health)
+	if !health.DbConnected || !health.RabbitConnected || health.RabbitBackPressure {
+		t.Error("bus expected to be healthy but failed health check")
+	}
+}
+
 func noopTraceContext() context.Context {
 	return context.Background()
 	// tracer := opentracing.NoopTracer{}
