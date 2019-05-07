@@ -109,7 +109,7 @@ gb.HandleEvent("name of exchange", "name of topic", SomeEvent{}, eventHandler)
 Start the bus
 ```Go
 gb.Start()
-defer gb.Shutsown()
+defer gb.Shutdown()
 ```
 
 Send a command
