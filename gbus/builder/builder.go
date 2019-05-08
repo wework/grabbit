@@ -49,7 +49,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx,
-		DefaultPolicies:      make([]gbus.MessagePolicy, 0),
+		DefaultPolicies:      builder.defaultPolicies,
 		DbPingTimeout:        3}
 
 	gb.Confirm = builder.confirm
