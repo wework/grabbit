@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"crypto/rand"
 	"reflect"
 	"testing"
 
@@ -83,6 +84,13 @@ func TestProtoSerializationErrors(t *testing.T) {
 	//decoding an unregistered schema fails and returns an error
 	if _, decErr := serializer.Decode(encodedBytes, "kong"); decErr == nil {
 		t.Errorf("decoding an unregistred schema  is expected to return an error but did not")
+	}
+
+	//decoding junk fails and returns an error
+	junk := make([]byte, 16)
+	rand.Read(junk)
+	if _, decErr := serializer.Decode(junk, cmd.SchemaName()); decErr == nil {
+		t.Errorf("decoding junk is expected to return an error but did not")
 	}
 
 }
