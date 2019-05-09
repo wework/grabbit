@@ -86,6 +86,7 @@ func TestProtoSerializationErrors(t *testing.T) {
 		t.Errorf("decoding an unregistred schema  is expected to return an error but did not")
 	}
 
+	serializer.Register(cmd)
 	//decoding junk fails and returns an error
 	junk := make([]byte, 16)
 	rand.Read(junk)
