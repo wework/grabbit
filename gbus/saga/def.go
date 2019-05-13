@@ -66,8 +66,16 @@ func getFunNameFromHandler(handler gbus.MessageHandler) string {
 }
 
 func (sd *Def) newInstance() *Instance {
-	return NewInstance(sd.sagaType, sd.msgToFunc, sd.sagaConfFns...)
+	instance := NewInstance(sd.sagaType, sd.msgToFunc)
+	return sd.configureSaga(instance)
+}
 
+func (sd *Def) configureSaga(instance *Instance) *Instance {
+	saga := instance.UnderlyingInstance
+	for _, conf := range sd.sagaConfFns {
+		saga = conf(saga)
+	}
+	return instance
 }
 
 func (sd *Def) shouldStartNewSaga(message *gbus.BusMessage) bool {
