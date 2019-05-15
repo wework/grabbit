@@ -186,7 +186,7 @@ So in order to fulfill our requerment we will need to add the following to our s
 
 ```go
 
-func (s *BookVacationSaga) RequestTimeout() time.Duration {
+func (s *BookVacationSaga) TimeoutDuration() time.Duration {
 	//request to timeout if after 15 minutes the saga is not complete
 	return time.Minute * 15
 }
