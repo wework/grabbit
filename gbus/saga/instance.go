@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"reflect"
@@ -77,9 +78,18 @@ func (si *Instance) requestsTimeout() (bool, time.Duration) {
 	return canTimeout, timeoutDuration
 }
 
-//NewInstance create a new instance of a Saga
+func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
+
+	saga, canTimeout := si.UnderlyingInstance.(gbus.RequestSagaTimeout)
+	if !canTimeout {
+		return fmt.Errorf("saga instance does not support timeouts")
+
+	}
+	return saga.Timeout(tx, bus)
+}
 
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instance {
+
 
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
