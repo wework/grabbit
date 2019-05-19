@@ -1,17 +1,17 @@
 package saga
 
 import (
-	"context"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 )
 
 //TimeoutManager manages timeouts for sagas
 //TODO:Make it persistent
 type TimeoutManager struct {
-	bus gbus.Bus
+	bus  gbus.Bus
+	glue *Glue
+	txp  gbus.TxProvider
 }
 
 //RequestTimeout requests a timeout from the timeout manager
@@ -20,13 +20,27 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 	go func(svcName, sagaID string, tm *TimeoutManager) {
 		c := time.After(duration)
 		<-c
-		reuqestTimeout := gbus.SagaTimeoutMessage{
-			SagaID: sagaID}
-		msg := gbus.NewBusMessage(reuqestTimeout)
-		msg.SagaCorrelationID = sagaID
-		if err := tm.bus.Send(context.Background(), svcName, msg); err != nil {
-			//TODO: add logger
-			logrus.WithError(err).Error("could not send timeout to bus")
+		if tm.txp == nil {
+			tm.glue.timeoutSaga(nil, sagaID)
+			return
+		}
+		tx, txe := tm.txp.New()
+		if txe != nil {
+			tm.glue.log().WithError(txe).Warn("timeout manager failed to create a transaction")
+		} else {
+			callErr := tm.glue.timeoutSaga(tx, sagaID)
+			if callErr != nil {
+				tm.glue.log().WithError(callErr).WithField("sagaID", sagaID).Error("timing out a saga failed")
+				rlbe := tx.Rollback()
+				if rlbe != nil {
+					tm.glue.log().WithError(rlbe).Warn("timeout manager failed to rollback transaction")
+				}
+			} else {
+				cmte := tx.Commit()
+				if cmte != nil {
+					tm.glue.log().WithError(cmte).Warn("timeout manager failed to rollback transaction")
+				}
+			}
 		}
 
 	}(svcName, sagaID, tm)

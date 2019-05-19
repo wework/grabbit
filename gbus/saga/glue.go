@@ -75,15 +75,6 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 		WithFields(log.Fields{"saga_type": def.sagaType.String(), "handles_messages": len(msgNames)}).
 		Info("registered saga with messages")
 
-	//register on timeout messages
-	timeoutEtfs, requestsTimeout := saga.(gbus.RequestSagaTimeout)
-	if requestsTimeout {
-		timeoutMessage := gbus.SagaTimeoutMessage{}
-		timeoutMsgName := timeoutMessage.SchemaName()
-		_ = def.HandleMessage(timeoutMessage, timeoutEtfs.Timeout)
-		imsm.addMsgNameToDef(timeoutMsgName, def)
-
-	}
 	return nil
 }
 
@@ -236,20 +227,35 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
 }
 
+func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
+
+	saga, err := imsm.sagaStore.GetSagaByID(tx, sagaID)
+	if err != nil {
+		return err
+	}
+	timeoutErr := saga.timeout(tx, imsm.bus)
+	if timeoutErr != nil {
+		imsm.log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
+		return timeoutErr
+	}
+	return imsm.sagaStore.DeleteSaga(tx, saga)
+}
+
 func (imsm *Glue) log() *log.Entry {
 	return log.WithField("_service", imsm.svcName)
 }
 
 //NewGlue creates a new Sagamanager
-func NewGlue(bus gbus.Bus, sagaStore Store, svcName string) *Glue {
-	return &Glue{
+func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider) *Glue {
+	g := &Glue{
 		svcName:          svcName,
 		bus:              bus,
 		sagaDefs:         make([]*Def, 0),
 		lock:             &sync.Mutex{},
 		alreadyRegistred: make(map[string]bool),
 		msgToDefMap:      make(map[string][]*Def),
-		timeoutManger:    TimeoutManager{bus: bus},
 		sagaStore:        sagaStore,
 	}
+	g.timeoutManger = TimeoutManager{bus: bus, txp: txp, glue: g}
+	return g
 }

@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"reflect"
@@ -16,6 +17,7 @@ type Instance struct {
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
+	timeoutFuncName    string
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {
@@ -77,8 +79,17 @@ func (si *Instance) requestsTimeout() (bool, time.Duration) {
 	return canTimeout, timeoutDuration
 }
 
-//NewInstance create a new instance of a Saga
+func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
 
+	saga, canTimeout := si.UnderlyingInstance.(gbus.RequestSagaTimeout)
+	if !canTimeout {
+		return fmt.Errorf("saga instance does not support timeouts")
+
+	}
+	return saga.Timeout(tx, bus)
+}
+
+//NewInstance create a new instance of a Saga
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair, confFns ...gbus.SagaConfFn) *Instance {
 
 	var newSagaPtr interface{}

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"reflect"
 	"testing"
@@ -397,11 +398,9 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 	return time.Second * 1
 }
 
-func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (s *TimingOutSaga) Timeout(tx *sql.Tx, bus gbus.Messaging) error {
 	s.TimedOut = true
-	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
-		Data: "TimingOutSaga.Timeout",
-	}))
+	return bus.Publish(context.Background(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 }
 
 type SelfSendingSaga struct {

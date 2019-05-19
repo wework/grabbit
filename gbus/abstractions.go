@@ -126,7 +126,7 @@ type RegisterDeadletterHandler interface {
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
 type RequestSagaTimeout interface {
 	TimeoutDuration() time.Duration
-	Timeout(invocation Invocation, message *BusMessage) error
+	Timeout(tx *sql.Tx, bus Messaging) error
 }
 
 //SagaConfFn is a function to allow configuration of a saga in the context of the gbus
