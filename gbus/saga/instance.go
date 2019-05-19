@@ -17,7 +17,6 @@ type Instance struct {
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
-	timeoutFuncName    string
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {
