@@ -20,8 +20,12 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 	go func(svcName, sagaID string, tm *TimeoutManager) {
 		c := time.After(duration)
 		<-c
+		//TODO:if the bus is not transactional, moving forward we should not allow using sagas in a non transactional bus
 		if tm.txp == nil {
-			tm.glue.timeoutSaga(nil, sagaID)
+			tme := tm.glue.timeoutSaga(nil, sagaID)
+			if tme != nil {
+				tm.glue.log().WithError(tme).WithField("sagaID", sagaID).Error("timing out a saga failed")
+			}
 			return
 		}
 		tx, txe := tm.txp.New()

@@ -151,7 +151,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				return invkErr
 			}
 
-			return imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
+			return imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 
 		} else if message.Semantics == gbus.CMD {
 			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
@@ -172,7 +172,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 					imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 					return invkErr
 				}
-				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance, message)
+				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 				if e != nil {
 					return e
 				}
@@ -196,11 +196,9 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 	return instance.invoke(exchange, routingKey, sginv, message)
 }
 
-func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance, lastMessage *gbus.BusMessage) error {
+func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 
-	_, timedOut := lastMessage.Payload.(gbus.SagaTimeoutMessage)
-
-	if instance.isComplete() || timedOut {
+	if instance.isComplete() {
 		imsm.log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
 
 		return imsm.sagaStore.DeleteSaga(tx, instance)
@@ -238,10 +236,7 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 		imsm.log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
 		return timeoutErr
 	}
-	if saga.isComplete() {
-		return imsm.sagaStore.DeleteSaga(tx, saga)
-	}
-	return nil
+	return imsm.completeOrUpdateSaga(tx, saga)
 }
 
 func (imsm *Glue) log() *log.Entry {
