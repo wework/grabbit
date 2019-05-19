@@ -145,7 +145,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
 				return e
 			}
-
+			def.configureSaga(instance)
 			if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
 				imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 				return invkErr
@@ -167,7 +167,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			imsm.log().WithFields(log.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
 
 			for _, instance := range instances {
-
+				def.configureSaga(instance)
 				if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
 					imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 					return invkErr
