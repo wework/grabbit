@@ -238,7 +238,10 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 		imsm.log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
 		return timeoutErr
 	}
-	return imsm.sagaStore.DeleteSaga(tx, saga)
+	if saga.isComplete() {
+		return imsm.sagaStore.DeleteSaga(tx, saga)
+	}
+	return nil
 }
 
 func (imsm *Glue) log() *log.Entry {
