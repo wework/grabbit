@@ -178,7 +178,7 @@ In order to define a timeout for the saga and have grabbit call the saga instanc
 ```go
 type RequestSagaTimeout interface {
 	TimeoutDuration() time.Duration
-	Timeout(invocation Invocation, message *BusMessage) error
+	Timeout(tx *sql.Tx, bus Messaging) error
 }
 ```
 
@@ -192,7 +192,7 @@ func (s *BookVacationSaga) RequestTimeout() time.Duration {
 }
 
 func (s *BookVacationSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
-	return invocation.Bus().Publish(invocation.Ctx(), "some_exchange", "some.topic.1", gbus.NewBusMessage(VacationBookingTimedOut{}))
+	return bus.Publish(context.Background(), "some_exchange", "some.topic.1", gbus.NewBusMessage(VacationBookingTimedOut{}))
 }
 
 ```
