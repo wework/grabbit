@@ -47,6 +47,7 @@ type worker struct {
 func (worker *worker) Start() error {
 
 	worker.log().Info("starting worker")
+	worker.stop = make(chan bool)
 	worker.channel.NotifyClose(worker.amqpErrors)
 
 	var (
@@ -62,7 +63,7 @@ func (worker *worker) Start() error {
 	}
 	worker.messages = messages
 	worker.rpcMessages = rpcmsgs
-	worker.stop = make(chan bool)
+
 	go worker.consumeMessages()
 
 	return nil

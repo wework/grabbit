@@ -57,8 +57,8 @@ type DefaultBus struct {
 	Confirm              bool
 	healthChan           chan error
 	backpressure         bool
-	rabbitFailure        bool
 	DbPingTimeout        time.Duration
+	amqpConnected        bool
 }
 
 var (
@@ -257,7 +257,7 @@ func (b *DefaultBus) Start() error {
 	//start monitoring on amqp related errors
 	go b.monitorAMQPErrors()
 	//start consuming messags from service queue
-
+	b.amqpConnected = true
 	return nil
 }
 
@@ -293,12 +293,11 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			serializer:        b.Serializer,
 			b:                 b,
 			amqpErrors:        b.amqpErrors}
-		go func() {
-			err := w.Start()
-			if err != nil {
-				log.WithError(err)
-			}
-		}()
+
+		err := w.Start()
+		if err != nil {
+			log.WithError(err).Error("failed to start worker")
+		}
 
 		workers = append(workers, w)
 	}
@@ -321,6 +320,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		err := worker.Stop()
 		if err != nil {
 			b.log().WithError(err).Error("could not stop worker")
+			return err
 		}
 	}
 	b.Outgoing.shutdown()
@@ -359,7 +359,8 @@ func (b *DefaultBus) GetHealth() HealthCard {
 	return HealthCard{
 		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpressure,
-		RabbitConnected:    !b.rabbitFailure,
+		RabbitConnected:    b.amqpConnected,
+
 	}
 }
 
@@ -577,7 +578,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 			b.backpressure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
-			b.rabbitFailure = true
+			b.amqpConnected = false
 			b.log().WithField("amqp_error", amqpErr).Error("amqp error")
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr

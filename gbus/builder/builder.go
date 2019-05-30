@@ -49,7 +49,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx,
-		DefaultPolicies:      make([]gbus.MessagePolicy, 0),
+		DefaultPolicies:      builder.defaultPolicies,
 		DbPingTimeout:        3}
 
 	gb.Confirm = builder.confirm
@@ -99,7 +99,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-	gb.Glue = saga.NewGlue(gb, sagaStore, svcName)
+	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider)
 	return gb
 }
 

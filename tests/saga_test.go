@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"reflect"
 	"testing"
@@ -257,6 +258,54 @@ func TestSagaSelfMessaging(t *testing.T) {
 
 }
 
+func TestSagaConfFunctions(t *testing.T) {
+	proceed := make(chan bool)
+	fail := make(chan bool)
+
+	b := createNamedBusForTest(testSvc1)
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		_, routingKey := invocation.Routing()
+
+		if routingKey == "saga.config.functions.not.run" {
+			fail <- true
+		} else {
+
+			proceed <- true
+		}
+
+		return nil
+	}
+
+	err := b.HandleEvent("test_exchange", "saga.config.functions.not.run", Event1{}, handler)
+	if err != nil {
+		t.Fatalf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.HandleEvent("test_exchange", "saga.config.functions.executed", Event1{}, handler)
+	if err != nil {
+		t.Fatalf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	b.RegisterSaga(&ConfigurableSaga{}, func(saga gbus.Saga) gbus.Saga {
+		sagaInstance := saga.(*ConfigurableSaga)
+		sagaInstance.nonPersistedSField = "rhinof"
+		return sagaInstance
+	})
+
+	b.Start()
+	defer b.Shutdown()
+
+	b.Send(context.TODO(), testSvc1, gbus.NewBusMessage(Command1{}))
+	select {
+	case <-fail:
+		t.Fatalf("saga configurtion functions not executed")
+	case <-proceed:
+	}
+
+}
+
 /*Test Sagas*/
 
 type SagaA struct {
@@ -279,39 +328,25 @@ func (s *SagaA) New() gbus.Saga {
 }
 
 func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
-	register.HandleMessage(Command1{
-		Data: "SagaA.RegisterAllHandlers",
-	}, s.HandleCommand1)
-	register.HandleMessage(Command2{
-		Data: "SagaA.RegisterAllHandlers",
-	}, s.HandleCommand2)
-	register.HandleEvent("test_exchange", "some.topic.1", Event1{
-		Data: "SagaA.RegisterAllHandlers",
-	}, s.HandleEvent1)
-	register.HandleEvent("test_exchange", "some.topic.2", Event2{
-		Data: "SagaA.RegisterAllHandlers",
-	}, s.HandleEvent1)
+	register.HandleMessage(Command1{}, s.HandleCommand1)
+	register.HandleMessage(Command2{}, s.HandleCommand2)
+	register.HandleEvent("test_exchange", "some.topic.1", Event1{}, s.HandleEvent1)
+	register.HandleEvent("test_exchange", "some.topic.2", Event2{}, s.HandleEvent1)
 }
 
 func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
-	reply := gbus.NewBusMessage(Reply1{
-		Data: "SagaA.HandleCommand1",
-	})
+	reply := gbus.NewBusMessage(Reply1{})
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command2 received")
-	reply := gbus.NewBusMessage(Reply2{
-		Data: "SagaA.HandleCommand2",
-	})
+	reply := gbus.NewBusMessage(Reply2{})
 	return invocation.Reply(noopTraceContext(), reply)
 }
 
 func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
-	reply := gbus.NewBusMessage(Reply2{
-		Data: "SagaA.HandleEvent1",
-	})
+	reply := gbus.NewBusMessage(Reply2{})
 	log.Println("event1 received")
 	return invocation.Reply(noopTraceContext(), reply)
 }
@@ -397,11 +432,9 @@ func (s *TimingOutSaga) TimeoutDuration() time.Duration {
 	return time.Second * 1
 }
 
-func (s *TimingOutSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (s *TimingOutSaga) Timeout(tx *sql.Tx, bus gbus.Messaging) error {
 	s.TimedOut = true
-	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
-		Data: "TimingOutSaga.Timeout",
-	}))
+	return bus.Publish(context.Background(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 }
 
 type SelfSendingSaga struct {
@@ -439,4 +472,49 @@ func (s *SelfSendingSaga) HandleCommand2(invocation gbus.Invocation, message *gb
 func (s *SelfSendingSaga) HandleReply2(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	evt1 := gbus.NewBusMessage(Event1{})
 	return invocation.Bus().Publish(invocation.Ctx(), "test_exchange", "test_topic", evt1)
+}
+
+type ConfigurableSaga struct {
+	//this field should be set via a saga configuration function
+	nonPersistedSField string
+	Complete           bool
+}
+
+func (*ConfigurableSaga) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
+	return append(starters, Command1{})
+}
+
+func (s *ConfigurableSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
+	register.HandleMessage(Command1{}, s.HandleCommand1)
+	register.HandleMessage(Command2{}, s.HandleCommand2)
+}
+
+func (s *ConfigurableSaga) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+	if s.nonPersistedSField == "" {
+		invocation.Bus().Publish(invocation.Ctx(), "test_exchange", "saga.config.functions.not.run", gbus.NewBusMessage(Event1{}))
+		return nil
+	}
+
+	_, selfService := invocation.Routing()
+	invocation.Bus().Send(invocation.Ctx(), selfService, gbus.NewBusMessage(Command2{}))
+	return nil
+}
+
+func (s *ConfigurableSaga) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	if s.nonPersistedSField == "" {
+		invocation.Bus().Publish(invocation.Ctx(), "test_exchange", "saga.config.functions.not.run", gbus.NewBusMessage(Event1{}))
+		return nil
+	}
+	invocation.Bus().Publish(invocation.Ctx(), "test_exchange", "saga.config.functions.executed", gbus.NewBusMessage(Event1{}))
+	return nil
+}
+
+func (s *ConfigurableSaga) IsComplete() bool {
+	return s.Complete
+}
+
+func (s *ConfigurableSaga) New() gbus.Saga {
+	return &ConfigurableSaga{}
 }
