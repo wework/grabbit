@@ -141,5 +141,6 @@ if e != nil{
 
 ## Testing
 
+0) ensure that you have the dependencies installed: `go get -v -t -d ./...`
 1) make sure to first: `docker-compose up -V -d`
 2) then to run the tests: `go test ./...`
