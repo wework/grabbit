@@ -145,7 +145,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 		bm.Semantics = CMD
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
-		//TODO: Log poision pill message
+		//TODO: Log poison pill message
 		worker.log().WithFields(log.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
@@ -328,7 +328,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery) (err error) {
 
 	//this is the action that will get retried
-	// each retry shoukd run a new and sperate transaction which should end with a commit or rollback
+	// each retry should run a new and separate transaction which should end with a commit or rollback
 
 	action := func(attempts uint) (actionErr error) {
 		var tx *sql.Tx
@@ -393,13 +393,13 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		return nil
 	}
 
-	//retry for MaxRetryCount, back off by a jittered stratergy
+	//retry for MaxRetryCount, back off by a jittered strategy
 	seed := time.Now().UnixNano()
 	random := rand.New(rand.NewSource(seed))
 	return retry.Retry(action,
 		strategy.Limit(MaxRetryCount),
 		strategy.BackoffWithJitter(
-			backoff.BinaryExponential(10*time.Millisecond),
+			backoff.BinaryExponential(BaseRetryDuration),
 			jitter.Deviation(random, 0.5),
 		))
 }

@@ -65,6 +65,9 @@ var (
 	//MaxRetryCount defines the max times a retry can run.
 	//Default is 3 but it is configurable
 	MaxRetryCount uint = 3
+	//BaseRetryDuration defines the basic milliseconds that the retry algorithm uses
+	//for a random retry time. Default is 10 but it is configurable.
+	BaseRetryDuration = 10*time.Millisecond
 	//RpcHeaderName used to define the header in grabbit for RPC
 	RpcHeaderName = "x-grabbit-msg-rpc-id"
 )
@@ -394,7 +397,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 	actionErr := b.SafeWithRetries(retryAction, MaxRetryCount)
 
 	/*
-		if the bus is transactional and there is no ambient tranaction then create a new one else use the ambient tranaction.
+		if the bus is transactional and there is no ambient transaction then create a new one else use the ambient tranaction.
 		if the bus is not transactional a nil transaction reference  will be passed
 	*/
 	if b.IsTxnl && shouldCommitTx {

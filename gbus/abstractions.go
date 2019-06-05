@@ -3,6 +3,7 @@ package gbus
 import (
 	"context"
 	"database/sql"
+	"github.com/wework/grabbit/gbus/builder"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -167,7 +168,7 @@ type Builder interface {
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
 
 	//RetriesNum defines the number of retries upon error
-	RetriesNum(retries uint) Builder
+	WithConfiguration(config builder.ConfigObject) Builder
 
 	//Build the bus
 	Build(svcName string) Bus

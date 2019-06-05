@@ -29,6 +29,11 @@ type defaultBuilder struct {
 	usingPingTimeout bool
 }
 
+type ConfigObject struct {
+	MaxRetryCount uint
+	BaseRetryDuration int
+}
+
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
@@ -110,14 +115,14 @@ func (builder *defaultBuilder) PurgeOnStartUp() gbus.Builder {
 
 func (builder *defaultBuilder) WithOutbox(connStr string) gbus.Builder {
 
-	//TODO: Add outbox suppoert to builder
+	//TODO: Add outbox support to builder
 	return builder
 }
 
 func (builder *defaultBuilder) WithDeadlettering(deadletterExchange string) gbus.Builder {
 
 	builder.dlx = deadletterExchange
-	//TODO: Add outbox suppoert to builder
+	//TODO: Add outbox support to builder
 	return builder
 }
 
@@ -170,8 +175,13 @@ func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Durati
 	return builder
 }
 
-func (builder *defaultBuilder) RetriesNum(retries uint) gbus.Builder {
-	gbus.MaxRetryCount = retries
+func (builder *defaultBuilder) WithConfiguration(config ConfigObject) gbus.Builder {
+	if config.MaxRetryCount > 0 {
+		gbus.MaxRetryCount = config.MaxRetryCount
+	}
+	if config.BaseRetryDuration > 0 {
+		gbus.BaseRetryDuration = time.Millisecond*time.Duration(config.BaseRetryDuration)
+	}
 	return builder
 }
 
