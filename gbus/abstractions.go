@@ -166,6 +166,9 @@ type Builder interface {
 	//ConfigureHealthCheck defines the default timeout in seconds for the db ping check
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
 
+	//RetriesNum defines the number of retries upon error
+	RetriesNum(retries uint) Builder
+
 	//Build the bus
 	Build(svcName string) Bus
 }

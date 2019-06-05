@@ -170,6 +170,11 @@ func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Durati
 	return builder
 }
 
+func (builder *defaultBuilder) RetriesNum(retries uint) gbus.Builder {
+	gbus.MaxRetryCount = retries
+	return builder
+}
+
 //New :)
 func New() Nu {
 	return Nu{}

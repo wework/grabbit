@@ -62,9 +62,8 @@ type DefaultBus struct {
 }
 
 var (
-	//TODO: Replace constants with configuration
-
-	//MaxRetryCount defines the max times a retry can run
+	//MaxRetryCount defines the max times a retry can run.
+	//Default is 3 but it is configurable
 	MaxRetryCount uint = 3
 	//RpcHeaderName used to define the header in grabbit for RPC
 	RpcHeaderName = "x-grabbit-msg-rpc-id"

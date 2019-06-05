@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/jitter"
 	"github.com/Rican7/retry/strategy"
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
 	"github.com/opentracing/opentracing-go"
@@ -402,10 +404,15 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		return nil
 	}
 
-	//retry for MaxRetryCount, back off by a Fibonacci series 50, 50, 100, 150, 250 ms
+	//retry for MaxRetryCount, back off by a jittered stratergy
+	seed := time.Now().UnixNano()
+	random := rand.New(rand.NewSource(seed))
 	return retry.Retry(action,
 		strategy.Limit(MaxRetryCount),
-		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
+		strategy.BackoffWithJitter(
+			backoff.BinaryExponential(10*time.Millisecond),
+			jitter.Deviation(random, 0.5),
+		))
 }
 
 func (worker *worker) log() *log.Entry {
