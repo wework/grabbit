@@ -29,11 +29,6 @@ type defaultBuilder struct {
 	usingPingTimeout bool
 }
 
-type ConfigObject struct {
-	MaxRetryCount uint
-	BaseRetryDuration int
-}
-
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
@@ -175,7 +170,7 @@ func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Durati
 	return builder
 }
 
-func (builder *defaultBuilder) WithConfiguration(config ConfigObject) gbus.Builder {
+func (builder *defaultBuilder) WithConfiguration(config gbus.ConfigObject) gbus.Builder {
 	if config.MaxRetryCount > 0 {
 		gbus.MaxRetryCount = config.MaxRetryCount
 	}

@@ -3,7 +3,6 @@ package gbus
 import (
 	"context"
 	"database/sql"
-	"github.com/wework/grabbit/gbus/builder"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -15,6 +14,12 @@ const (
 	CMD Semantics = "cmd"
 	EVT Semantics = "evt"
 )
+
+//ConfigObject provides configuration passed to the bus builder
+type ConfigObject struct {
+	MaxRetryCount uint
+	BaseRetryDuration int
+}
 
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
@@ -168,7 +173,7 @@ type Builder interface {
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
 
 	//RetriesNum defines the number of retries upon error
-	WithConfiguration(config builder.ConfigObject) Builder
+	WithConfiguration(config ConfigObject) Builder
 
 	//Build the bus
 	Build(svcName string) Bus
