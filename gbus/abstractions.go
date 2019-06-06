@@ -15,8 +15,8 @@ const (
 	EVT Semantics = "evt"
 )
 
-//ConfigObject provides configuration passed to the bus builder
-type ConfigObject struct {
+//BusConfiguration provides configuration passed to the bus builder
+type BusConfiguration struct {
 	MaxRetryCount uint
 	BaseRetryDuration int
 }
@@ -173,7 +173,7 @@ type Builder interface {
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
 
 	//RetriesNum defines the number of retries upon error
-	WithConfiguration(config ConfigObject) Builder
+	WithConfiguration(config BusConfiguration) Builder
 
 	//Build the bus
 	Build(svcName string) Bus

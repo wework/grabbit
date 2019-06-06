@@ -31,7 +31,7 @@ func createBusWithOptions(svcName string, deadletter string, txnl, pos bool) gbu
 		WithPolicies(&policy.Durable{}, &policy.TTL{Duration: time.Second * 3600}).
 		WorkerNum(3, 1).
 		WithConfirms().
-		WithConfiguration(gbus.ConfigObject{MaxRetryCount: 4, BaseRetryDuration: 15})
+		WithConfiguration(gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15})
 
 	if txnl {
 		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")
