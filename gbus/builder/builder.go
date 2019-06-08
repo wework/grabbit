@@ -110,14 +110,14 @@ func (builder *defaultBuilder) PurgeOnStartUp() gbus.Builder {
 
 func (builder *defaultBuilder) WithOutbox(connStr string) gbus.Builder {
 
-	//TODO: Add outbox suppoert to builder
+	//TODO: Add outbox support to builder
 	return builder
 }
 
 func (builder *defaultBuilder) WithDeadlettering(deadletterExchange string) gbus.Builder {
 
 	builder.dlx = deadletterExchange
-	//TODO: Add outbox suppoert to builder
+	//TODO: Add outbox support to builder
 	return builder
 }
 
@@ -167,6 +167,16 @@ func (builder *defaultBuilder) WithSerializer(serializer gbus.Serializer) gbus.B
 func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Duration) gbus.Builder {
 	builder.usingPingTimeout = true
 	builder.dbPingTimeout = timeoutInSeconds
+	return builder
+}
+
+func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) gbus.Builder {
+	if config.MaxRetryCount > 0 {
+		gbus.MaxRetryCount = config.MaxRetryCount
+	}
+	if config.BaseRetryDuration > 0 {
+		gbus.BaseRetryDuration = time.Millisecond*time.Duration(config.BaseRetryDuration)
+	}
 	return builder
 }
 

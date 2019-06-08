@@ -15,6 +15,12 @@ const (
 	EVT Semantics = "evt"
 )
 
+//BusConfiguration provides configuration passed to the bus builder
+type BusConfiguration struct {
+	MaxRetryCount uint
+	BaseRetryDuration int
+}
+
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
@@ -165,6 +171,9 @@ type Builder interface {
 
 	//ConfigureHealthCheck defines the default timeout in seconds for the db ping check
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
+
+	//RetriesNum defines the number of retries upon error
+	WithConfiguration(config BusConfiguration) Builder
 
 	//Build the bus
 	Build(svcName string) Bus
