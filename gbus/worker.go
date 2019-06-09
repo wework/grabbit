@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/jitter"
 	"github.com/Rican7/retry/strategy"
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
 	"github.com/opentracing/opentracing-go"
@@ -47,6 +49,7 @@ type worker struct {
 func (worker *worker) Start() error {
 
 	worker.log().Info("starting worker")
+	worker.stop = make(chan bool)
 	worker.channel.NotifyClose(worker.amqpErrors)
 
 	var (
@@ -62,7 +65,7 @@ func (worker *worker) Start() error {
 	}
 	worker.messages = messages
 	worker.rpcMessages = rpcmsgs
-	worker.stop = make(chan bool)
+
 	go worker.consumeMessages()
 
 	return nil
@@ -142,7 +145,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 		bm.Semantics = CMD
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
-		//TODO: Log poision pill message
+		//TODO: Log poison pill message
 		worker.log().WithFields(log.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
@@ -314,61 +317,31 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 
-	var tx *sql.Tx
-	var txErr error
-	if worker.isTxnl {
-		tx, txErr = worker.txProvider.New()
-		if txErr != nil {
-			worker.log().WithError(txErr).Error("failed to create transaction")
-			worker.span.LogFields(slog.Error(txErr))
-			//reject the message but requeue it so it gets redelivered until we can create transactions
-			_ = worker.reject(true, delivery)
-			return
-		}
-	}
-	err = worker.invokeHandlers(ctx, handlers, bm, &delivery, tx)
-
-	// if all handlers executed with out errors then commit the transactional if the bus is transactional
-	// if the tranaction committed successfully then ack the message.
-	// if the bus is not transactional then just ack the message
+	err = worker.invokeHandlers(ctx, handlers, bm, &delivery)
 	if err == nil {
-		if worker.isTxnl {
-			err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
-			if err == nil {
-				worker.log().Info("bus transaction committed successfully ")
-				//ack the message
-				_ = worker.ack(delivery)
-			} else {
-				worker.span.LogFields(slog.Error(err))
-				worker.log().WithError(err).Error("failed committing transaction")
-				//if the commit failed we will reject the message
-				_ = worker.reject(false, delivery)
-			}
-		} else { /*if the bus in not transactional just try acking the message*/
-			_ = worker.ack(delivery)
-		}
-		//else there was an error in the invokation then try rollingback the transaction and reject the message
+		_ = worker.ack(delivery)
 	} else {
-		worker.span.LogFields(slog.Error(err))
-		worker.log().WithError(err).WithFields(log.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Error("Failed to consume message due to failure of one or more handlers.\n Message rejected as poison")
-
-		if worker.isTxnl {
-			worker.log().Warn("rolling back transaction")
-			err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
-
-			if err != nil {
-				worker.span.LogFields(slog.Error(err))
-				worker.log().WithError(err).Error("failed to rollback transaction")
-			}
-		}
-
 		_ = worker.reject(false, delivery)
 	}
 }
 
-func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery, tx *sql.Tx) (err error) {
+func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery) (err error) {
+
+	//this is the action that will get retried
+	// each retry should run a new and separate transaction which should end with a commit or rollback
 
 	action := func(attempts uint) (actionErr error) {
+		var tx *sql.Tx
+		var txCreateErr error
+		if worker.isTxnl {
+			tx, txCreateErr = worker.txProvider.New()
+			if txCreateErr != nil {
+				worker.log().WithError(txCreateErr).Error("failed creating new tx")
+				worker.span.LogFields(slog.Error(txCreateErr))
+				return txCreateErr
+			}
+		}
+
 		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
 		worker.span.LogFields(slog.Uint64("attempt", uint64(attempts+1)))
 		defer func() {
@@ -376,6 +349,12 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 				actionErr = errors.New(pncMsg)
+				if worker.isTxnl {
+					rbkErr := tx.Rollback()
+					if rbkErr != nil {
+						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
+					}
+				}
 				worker.span.LogFields(slog.Error(actionErr))
 			}
 			worker.span.Finish()
@@ -392,19 +371,37 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				ctx:         hsctx,
 				exchange:    delivery.Exchange,
 				routingKey:  delivery.RoutingKey}
-			e := handler(ctx, message)
-			if e != nil {
-				hspan.LogFields(slog.Error(e))
-				return e
+			handlerErr := handler(ctx, message)
+			if handlerErr != nil {
+				hspan.LogFields(slog.Error(handlerErr))
+				if worker.isTxnl {
+					rbkErr := tx.Rollback()
+					if rbkErr != nil {
+						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
+					}
+				}
+				return handlerErr
+			}
+		}
+		if worker.isTxnl {
+			cmtErr := tx.Commit()
+			if cmtErr != nil {
+				worker.log().WithError(cmtErr).Error("failed commiting transaction after invoking handlers")
+				return cmtErr
 			}
 		}
 		return nil
 	}
 
-	//retry for MaxRetryCount, back off by a Fibonacci series 50, 50, 100, 150, 250 ms
+	//retry for MaxRetryCount, back off by a jittered strategy
+	seed := time.Now().UnixNano()
+	random := rand.New(rand.NewSource(seed))
 	return retry.Retry(action,
 		strategy.Limit(MaxRetryCount),
-		strategy.Backoff(backoff.Fibonacci(50*time.Millisecond)))
+		strategy.BackoffWithJitter(
+			backoff.BinaryExponential(BaseRetryDuration),
+			jitter.Deviation(random, 0.5),
+		))
 }
 
 func (worker *worker) log() *log.Entry {

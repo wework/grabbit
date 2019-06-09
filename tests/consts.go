@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"time"
+
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/builder"
 	"github.com/wework/grabbit/gbus/policy"
@@ -26,8 +28,10 @@ func createBusWithOptions(svcName string, deadletter string, txnl, pos bool) gbu
 	busBuilder := builder.
 		New().
 		Bus(connStr).
-		WithPolicies(&policy.Durable{}).
-		WithConfirms()
+		WithPolicies(&policy.Durable{}, &policy.TTL{Duration: time.Second * 3600}).
+		WorkerNum(3, 1).
+		WithConfirms().
+		WithConfiguration(gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15})
 
 	if txnl {
 		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")

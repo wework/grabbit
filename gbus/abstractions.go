@@ -15,6 +15,12 @@ const (
 	EVT Semantics = "evt"
 )
 
+//BusConfiguration provides configuration passed to the bus builder
+type BusConfiguration struct {
+	MaxRetryCount uint
+	BaseRetryDuration int
+}
+
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
@@ -126,7 +132,7 @@ type RegisterDeadletterHandler interface {
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
 type RequestSagaTimeout interface {
 	TimeoutDuration() time.Duration
-	Timeout(invocation Invocation, message *BusMessage) error
+	Timeout(tx *sql.Tx, bus Messaging) error
 }
 
 //SagaConfFn is a function to allow configuration of a saga in the context of the gbus
@@ -165,6 +171,9 @@ type Builder interface {
 
 	//ConfigureHealthCheck defines the default timeout in seconds for the db ping check
 	ConfigureHealthCheck(timeoutInSeconds time.Duration) Builder
+
+	//RetriesNum defines the number of retries upon error
+	WithConfiguration(config BusConfiguration) Builder
 
 	//Build the bus
 	Build(svcName string) Bus

@@ -57,15 +57,17 @@ type DefaultBus struct {
 	Confirm              bool
 	healthChan           chan error
 	backpreasure         bool
-	rabbitFailure        bool
 	DbPingTimeout        time.Duration
+	amqpConnected        bool
 }
 
 var (
-	//TODO: Replace constants with configuration
-
-	//MaxRetryCount defines the max times a retry can run
+	//MaxRetryCount defines the max times a retry can run.
+	//Default is 3 but it is configurable
 	MaxRetryCount uint = 3
+	//BaseRetryDuration defines the basic milliseconds that the retry algorithm uses
+	//for a random retry time. Default is 10 but it is configurable.
+	BaseRetryDuration = 10*time.Millisecond
 	//RpcHeaderName used to define the header in grabbit for RPC
 	RpcHeaderName = "x-grabbit-msg-rpc-id"
 )
@@ -257,7 +259,7 @@ func (b *DefaultBus) Start() error {
 	//start monitoring on amqp related errors
 	go b.monitorAMQPErrors()
 	//start consuming messags from service queue
-
+	b.amqpConnected = true
 	return nil
 }
 
@@ -293,12 +295,11 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			serializer:        b.Serializer,
 			b:                 b,
 			amqpErrors:        b.amqpErrors}
-		go func() {
-			err := w.Start()
-			if err != nil {
-				log.WithError(err)
-			}
-		}()
+
+		err := w.Start()
+		if err != nil {
+			log.WithError(err).Error("failed to start worker")
+		}
 
 		workers = append(workers, w)
 	}
@@ -321,6 +322,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		err := worker.Stop()
 		if err != nil {
 			b.log().WithError(err).Error("could not stop worker")
+			return err
 		}
 	}
 	b.Outgoing.shutdown()
@@ -359,7 +361,7 @@ func (b *DefaultBus) GetHealth() HealthCard {
 	return HealthCard{
 		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpreasure,
-		RabbitConnected:    !b.rabbitFailure,
+		RabbitConnected:    b.amqpConnected,
 	}
 }
 
@@ -395,7 +397,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 	actionErr := b.SafeWithRetries(retryAction, MaxRetryCount)
 
 	/*
-		if the bus is transactional and there is no ambient tranaction then create a new one else use the ambient tranaction.
+		if the bus is transactional and there is no ambient transaction then create a new one else use the ambient tranaction.
 		if the bus is not transactional a nil transaction reference  will be passed
 	*/
 	if b.IsTxnl && shouldCommitTx {
@@ -577,7 +579,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 			b.backpreasure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
-			b.rabbitFailure = true
+			b.amqpConnected = false
 			b.log().WithField("amqp_error", amqpErr).Error("amqp error")
 			if b.healthChan != nil {
 				b.healthChan <- amqpErr
