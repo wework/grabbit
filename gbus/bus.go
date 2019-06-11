@@ -56,7 +56,7 @@ type DefaultBus struct {
 	DefaultPolicies      []MessagePolicy
 	Confirm              bool
 	healthChan           chan error
-	backpreasure         bool
+	backpressure         bool
 	DbPingTimeout        time.Duration
 	amqpConnected        bool
 }
@@ -360,8 +360,9 @@ func (b *DefaultBus) GetHealth() HealthCard {
 
 	return HealthCard{
 		DbConnected:        dbConnected,
-		RabbitBackPressure: b.backpreasure,
+		RabbitBackPressure: b.backpressure,
 		RabbitConnected:    b.amqpConnected,
+
 	}
 }
 
@@ -577,7 +578,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			} else {
 				b.log().WithField("reason", blocked.Reason).Info("amqp connection unblocked")
 			}
-			b.backpreasure = blocked.Active
+			b.backpressure = blocked.Active
 		case amqpErr := <-b.amqpErrors:
 			b.amqpConnected = false
 			b.log().WithField("amqp_error", amqpErr).Error("amqp error")
@@ -650,9 +651,9 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 			}
 			return saveErr
 		}
-		//do not attempt to contact the borker if backpreasure is being applied
-		if b.backpreasure {
-			return errors.New("can't send message due to backpreasure from amqp broker")
+		//do not attempt to contact the borker if backpressure is being applied
+		if b.backpressure {
+			return errors.New("can't send message due to backpressure from amqp broker")
 		}
 		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
 		return outgoingErr
