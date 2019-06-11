@@ -3,6 +3,7 @@ package saga
 import (
 	"context"
 	"database/sql"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/wework/grabbit/gbus"
@@ -81,5 +82,8 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 }
 
 func (si *sagaInvocation) Log() gbus.FieldLogger {
-	return si.log
+	if si.log != nil {
+		return si.log
+	}
+	return logrus.WithField("log", "nil")
 }

@@ -23,7 +23,10 @@ type defaultInvocationContext struct {
 }
 
 func (dfi *defaultInvocationContext) Log() FieldLogger {
-	return dfi.logger
+	if dfi.logger != nil {
+		return dfi.logger
+	}
+	return logrus.WithField("log", "nil")
 }
 
 func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *BusMessage) error {

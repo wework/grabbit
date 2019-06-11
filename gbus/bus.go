@@ -364,7 +364,6 @@ func (b *DefaultBus) GetHealth() HealthCard {
 		DbConnected:        dbConnected,
 		RabbitBackPressure: b.backpressure,
 		RabbitConnected:    b.amqpConnected,
-
 	}
 }
 
@@ -698,5 +697,8 @@ func (b *DefaultBus) SetLogger(entry FieldLogger) {
 }
 
 func (b *DefaultBus) Log() FieldLogger {
-	return b.log
+	if b.log != nil {
+		return b.log
+	}
+	return logrus.WithField("log", "nil")
 }
