@@ -19,10 +19,10 @@ type defaultInvocationContext struct {
 	ctx         context.Context
 	exchange    string
 	routingKey  string
-	logger      logrus.FieldLogger
+	logger      FieldLogger
 }
 
-func (dfi *defaultInvocationContext) Logger() logrus.FieldLogger {
+func (dfi *defaultInvocationContext) Log() FieldLogger {
 	return dfi.logger
 }
 

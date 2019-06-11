@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 )
 
@@ -72,7 +72,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 	}
 
 	imsm.log().
-		WithFields(log.Fields{"saga_type": def.sagaType.String(), "handles_messages": len(msgNames)}).
+		WithFields(logrus.Fields{"saga_type": def.sagaType.String(), "handles_messages": len(msgNames)}).
 		Info("registered saga with messages")
 
 	return nil
@@ -113,7 +113,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		if startNew {
 			newInstance := def.newInstance()
 			imsm.log().
-				WithFields(log.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
+				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
 			if invkErr := imsm.invokeSagaInstance(newInstance, invocation, message); invkErr != nil {
 				imsm.log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
@@ -129,7 +129,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				}
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
-					imsm.log().WithFields(log.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
+					imsm.log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
 					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
 			}
@@ -158,13 +158,13 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return e
 		} else {
 
-			imsm.log().WithFields(log.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
+			imsm.log().WithFields(logrus.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				return e
 			}
-			imsm.log().WithFields(log.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
+			imsm.log().WithFields(logrus.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
 
 			for _, instance := range instances {
 				def.configureSaga(instance)
@@ -191,7 +191,11 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 		sagaID:              instance.ID,
 		ctx:                 invocation.Ctx(),
 		invokingService:     imsm.svcName,
-		logger:              imsm.log().WithField("saga_id", instance.ID),
+		log: imsm.log().WithFields(logrus.Fields{
+			"saga_id":      instance.ID,
+			"saga_type":    instance.String(),
+			"message_name": message.PayloadFQN,
+		}),
 	}
 
 	exchange, routingKey := invocation.Routing()
@@ -241,8 +245,8 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 	return imsm.completeOrUpdateSaga(tx, saga)
 }
 
-func (imsm *Glue) log() *log.Entry {
-	return log.WithField("_service", imsm.svcName)
+func (imsm *Glue) log() gbus.FieldLogger {
+	return imsm.bus.Log().WithField("_service", imsm.svcName)
 }
 
 //NewGlue creates a new Sagamanager

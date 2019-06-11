@@ -105,7 +105,8 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instan
 	newInstance := &Instance{
 		ID:                 xid.New().String(),
 		UnderlyingInstance: newSaga,
-		MsgToMethodMap:     msgToMethodMap}
+		MsgToMethodMap:     msgToMethodMap,
+	}
 	return newInstance
 }
 
