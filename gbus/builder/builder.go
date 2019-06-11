@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 
@@ -27,13 +28,14 @@ type defaultBuilder struct {
 	confirm          bool
 	dbPingTimeout    time.Duration
 	usingPingTimeout bool
+	logger           logrus.FieldLogger
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 	gb := &gbus.DefaultBus{
 		AmqpConnStr:   builder.connStr,
-		PrefetchCount: 1,
+		PrefetchCount: builder.PrefetchCount,
 		Outgoing: &gbus.AMQPOutbox{
 			SvcName: svcName,
 		},
@@ -50,15 +52,21 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		Serializer:           builder.serializer,
 		DLX:                  builder.dlx,
 		DefaultPolicies:      builder.defaultPolicies,
-		DbPingTimeout:        3}
+		DbPingTimeout:        3,
+		Confirm:              builder.confirm,
+	}
 
-	gb.Confirm = builder.confirm
+	if builder.logger != nil {
+		gb.SetLogger(builder.logger.WithField("_service", svcName))
+	} else {
+		gb.SetLogger(logrus.WithField("_service", svcName))
+	}
+
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
 	} else {
 		gb.WorkerNum = builder.workerNum
 	}
-	gb.PrefetchCount = builder.PrefetchCount
 	var (
 		sagaStore saga.Store
 	)
@@ -175,8 +183,13 @@ func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) g
 		gbus.MaxRetryCount = config.MaxRetryCount
 	}
 	if config.BaseRetryDuration > 0 {
-		gbus.BaseRetryDuration = time.Millisecond*time.Duration(config.BaseRetryDuration)
+		gbus.BaseRetryDuration = time.Millisecond * time.Duration(config.BaseRetryDuration)
 	}
+	return builder
+}
+
+func (builder *defaultBuilder) WithLogger(logger logrus.FieldLogger) gbus.Builder {
+	builder.logger = logger
 	return builder
 }
 

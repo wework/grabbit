@@ -90,7 +90,6 @@ func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
 
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instance {
 
-
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()

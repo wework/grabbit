@@ -190,7 +190,9 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 		inboundMsg:          message,
 		sagaID:              instance.ID,
 		ctx:                 invocation.Ctx(),
-		invokingService:     imsm.svcName}
+		invokingService:     imsm.svcName,
+		logger:              imsm.log().WithField("saga_id", instance.ID),
+	}
 
 	exchange, routingKey := invocation.Routing()
 	return instance.invoke(exchange, routingKey, sginv, message)

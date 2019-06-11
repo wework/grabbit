@@ -3,10 +3,13 @@ package saga
 import (
 	"context"
 	"database/sql"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/wework/grabbit/gbus"
 )
+
+var _ gbus.Invocation = &sagaInvocation{}
 
 type sagaInvocation struct {
 	decoratedBus        gbus.Messaging
@@ -15,6 +18,7 @@ type sagaInvocation struct {
 	sagaID              string
 	ctx                 context.Context
 	invokingService     string
+	logger              logrus.FieldLogger
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
@@ -75,4 +79,8 @@ func (si *sagaInvocation) RPC(ctx context.Context, service string, request,
 
 func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 	return si.decoratedInvocation.Routing()
+}
+
+func (si *sagaInvocation) Logger() logrus.FieldLogger {
+	panic("implement me")
 }

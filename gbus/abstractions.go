@@ -3,6 +3,7 @@ package gbus
 import (
 	"context"
 	"database/sql"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -17,7 +18,7 @@ const (
 
 //BusConfiguration provides configuration passed to the bus builder
 type BusConfiguration struct {
-	MaxRetryCount uint
+	MaxRetryCount     uint
 	BaseRetryDuration int
 }
 
@@ -29,6 +30,7 @@ type Bus interface {
 	Messaging
 	SagaRegister
 	Health
+	Logged
 }
 
 //Message a common interface that passes to the serializers to allow decoding and encoding of content
@@ -185,6 +187,7 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
+	Logger() logrus.FieldLogger
 	Routing() (exchange, routingKey string)
 }
 
@@ -208,4 +211,9 @@ type TxOutbox interface {
 	Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error
 	Start(amqpOut *AMQPOutbox) error
 	Stop() error
+}
+
+type Logged interface {
+	SetLogger(entry logrus.FieldLogger)
+	Logger() logrus.FieldLogger
 }
