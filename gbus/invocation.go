@@ -24,9 +24,9 @@ type defaultInvocationContext struct {
 
 func (dfi *defaultInvocationContext) Log() FieldLogger {
 	if dfi.logger != nil {
-		return dfi.logger
+		return dfi.logger.WithField("routing_key", dfi.routingKey)
 	}
-	return logrus.WithField("log", "nil")
+	return logrus.WithField("routing_key", dfi.routingKey)
 }
 
 func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *BusMessage) error {

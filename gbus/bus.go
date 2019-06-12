@@ -698,7 +698,7 @@ func (b *DefaultBus) SetLogger(entry FieldLogger) {
 
 func (b *DefaultBus) Log() FieldLogger {
 	if b.log != nil {
-		return b.log
+		return b.log.WithField("_service", b.SvcName)
 	}
-	return logrus.WithField("log", "nil")
+	return logrus.WithField("_service", b.SvcName)
 }

@@ -83,7 +83,7 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 
 func (si *sagaInvocation) Log() gbus.FieldLogger {
 	if si.log != nil {
-		return si.log
+		return si.log.WithField("saga_id", si.sagaID)
 	}
-	return logrus.WithField("log", "nil")
+	return logrus.WithField("saga_id", si.sagaID)
 }

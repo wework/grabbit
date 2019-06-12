@@ -44,7 +44,7 @@ type TxOutbox struct {
 }
 
 func (outbox *TxOutbox) log() *log.Entry {
-	return log.WithField("_service", outbox.svcName)
+	return log.WithField("tx", "mysql")
 }
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change

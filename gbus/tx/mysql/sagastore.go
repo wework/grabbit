@@ -10,13 +10,13 @@ import (
 	"github.com/wework/grabbit/gbus/tx"
 )
 
-//SagaStore implements the saga/store interface on top of PostgreSQL
+//SagaStore implements the saga/store interface on top of MySQL
 type SagaStore struct {
 	*tx.SagaStore
 }
 
 func (store *SagaStore) log() *log.Entry {
-	return log.WithField("_service", store.SvcName)
+	return log.WithField("saga_store", "mysql")
 }
 
 func (store *SagaStore) ensureSchema() {

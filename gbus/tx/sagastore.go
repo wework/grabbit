@@ -220,5 +220,5 @@ func (store *SagaStore) GetSagatableName() string {
 }
 
 func (store *SagaStore) log() *log.Entry {
-	return log.WithField("_service", store.SvcName)
+	return log.WithField("store", "mysql")
 }

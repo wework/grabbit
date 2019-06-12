@@ -57,9 +57,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 
 	if builder.logger != nil {
-		gb.SetLogger(builder.logger.WithField("_service", svcName))
+		gb.SetLogger(builder.logger)
 	} else {
-		gb.SetLogger(logrus.WithField("_service", svcName))
+		gb.SetLogger(logrus.New())
 	}
 
 	if builder.workerNum < 1 {
