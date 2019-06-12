@@ -2,6 +2,7 @@ package saga
 
 import (
 	"errors"
+	"github.com/sirupsen/logrus"
 	"reflect"
 	"testing"
 
@@ -19,7 +20,9 @@ func TestInstanceInvocationReturnsErrors(t *testing.T) {
 	m2 := TestMsg2{}
 
 	exchange, routingKey := "", "kong"
-	invocationStub := &sagaInvocation{}
+	invocationStub := &sagaInvocation{
+		log: logrus.New(),
+	}
 
 	failName := getFunNameFromHandler(s.Fail)
 	failFilter := gbus.NewMessageFilter(exchange, routingKey, m1)

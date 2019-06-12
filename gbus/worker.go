@@ -19,7 +19,7 @@ import (
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
 	"github.com/opentracing/opentracing-go"
 	slog "github.com/opentracing/opentracing-go/log"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -146,7 +146,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poison pill message
-		worker.log().WithFields(log.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
+		worker.log().WithFields(logrus.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
 	}
@@ -190,7 +190,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 		}
 	}
 
-	worker.log().WithFields(log.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
+	worker.log().WithFields(logrus.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 	return handlers
 }
 
@@ -212,14 +212,14 @@ func (worker *worker) ack(delivery amqp.Delivery) error {
 
 func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
 	reject := func(attempts uint) error { return delivery.Reject(requeue /*multiple*/) }
-	worker.log().WithFields(log.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("rejecting message")
+	worker.log().WithFields(logrus.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("rejecting message")
 	err := retry.Retry(reject,
 		strategy.Wait(100*time.Millisecond))
 	if err != nil {
 		worker.log().WithError(err).Error("could not reject the message")
 		worker.span.LogFields(slog.Error(err))
 	}
-	worker.log().WithFields(log.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("message rejected")
+	worker.log().WithFields(logrus.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("message rejected")
 	return err
 }
 
@@ -283,7 +283,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		worker.span.Finish()
 	}()
 
-	worker.log().WithFields(log.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
+	worker.log().WithFields(logrus.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
 
 	//handle a message that originated from a deadletter exchange
 	if worker.isDead(delivery) {
@@ -307,7 +307,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if len(handlers) == 0 {
 		worker.log().
 			WithFields(
-				log.Fields{"message-name": bm.PayloadFQN,
+				logrus.Fields{"message-name": bm.PayloadFQN,
 					"message-type": bm.Semantics}).
 			Warn("Message received but no handlers found")
 		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
@@ -359,9 +359,11 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			}
 			worker.span.Finish()
 		}()
+		var handlerErr error
+		var hspan opentracing.Span
+		var hsctx context.Context
 		for _, handler := range handlers {
-			hspan, hsctx := opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
-			hspan.Finish()
+			hspan, hsctx = opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -370,18 +372,26 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				tx:          tx,
 				ctx:         hsctx,
 				exchange:    delivery.Exchange,
-				routingKey:  delivery.RoutingKey}
-			handlerErr := handler(ctx, message)
+				routingKey:  delivery.RoutingKey,
+				logger:      worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()),
+			}
+			handlerErr = handler(ctx, message)
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
-				if worker.isTxnl {
-					rbkErr := tx.Rollback()
-					if rbkErr != nil {
-						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
-					}
-				}
-				return handlerErr
+				break
 			}
+			hspan.Finish()
+		}
+		if handlerErr != nil {
+			hspan.LogFields(slog.Error(handlerErr))
+			if worker.isTxnl {
+				rbkErr := tx.Rollback()
+				if rbkErr != nil {
+					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
+				}
+			}
+			hspan.Finish()
+			return handlerErr
 		}
 		if worker.isTxnl {
 			cmtErr := tx.Commit()
@@ -404,10 +414,8 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		))
 }
 
-func (worker *worker) log() *log.Entry {
-
-	return log.WithFields(log.Fields{
-		"_service": worker.svcName})
+func (worker *worker) log() FieldLogger {
+	return worker.b.Log()
 }
 
 func (worker *worker) AddRegistration(registration *Registration) {
