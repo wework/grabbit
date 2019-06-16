@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/sirupsen/logrus"
 	"github.com/golang/protobuf/proto"
 	"github.com/wework/grabbit/gbus"
 )
@@ -18,11 +19,11 @@ var _ gbus.Serializer = &Proto{}
 type Proto struct {
 	lock              *sync.Mutex
 	registeredSchemas map[string]reflect.Type
-	logger            gbus.FieldLogger
+	logger            logrus.FieldLogger
 }
 
 //NewProtoSerializer creates a new instance of Proto and returns it
-func NewProtoSerializer(logger gbus.FieldLogger) gbus.Serializer {
+func NewProtoSerializer(logger logrus.FieldLogger) gbus.Serializer {
 	return &Proto{
 		registeredSchemas: make(map[string]reflect.Type),
 		lock:              &sync.Mutex{},

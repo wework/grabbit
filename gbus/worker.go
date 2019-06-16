@@ -414,7 +414,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		))
 }
 
-func (worker *worker) log() FieldLogger {
+func (worker *worker) log() logrus.FieldLogger {
 	return worker.b.Log()
 }
 

@@ -18,7 +18,7 @@ type sagaInvocation struct {
 	sagaID              string
 	ctx                 context.Context
 	invokingService     string
-	log                 gbus.FieldLogger
+	log                 logrus.FieldLogger
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
@@ -81,9 +81,6 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 	return si.decoratedInvocation.Routing()
 }
 
-func (si *sagaInvocation) Log() gbus.FieldLogger {
-	if si.log != nil {
-		return si.log.WithField("saga_id", si.sagaID)
-	}
-	return logrus.WithField("saga_id", si.sagaID)
+func (si *sagaInvocation) Log() logrus.FieldLogger {
+	return si.decoratedInvocation.Log().WithField("saga_id", si.sagaID)
 }

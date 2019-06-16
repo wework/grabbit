@@ -245,7 +245,7 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 	return imsm.completeOrUpdateSaga(tx, saga)
 }
 
-func (imsm *Glue) log() gbus.FieldLogger {
+func (imsm *Glue) log() logrus.FieldLogger {
 	return imsm.bus.Log().WithField("_service", imsm.svcName)
 }
 

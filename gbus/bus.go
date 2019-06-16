@@ -37,7 +37,7 @@ type DefaultBus struct {
 	amqpErrors     chan *amqp.Error
 	amqpBlocks     chan amqp.Blocking
 	Registrations  []*Registration
-	log            FieldLogger
+	log            logrus.FieldLogger
 
 	RPCHandlers          map[string]MessageHandler
 	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
@@ -692,11 +692,11 @@ func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RpcHeaderName] = p.rpcID
 }
 
-func (b *DefaultBus) SetLogger(entry FieldLogger) {
+func (b *DefaultBus) SetLogger(entry logrus.FieldLogger) {
 	b.log = entry
 }
 
-func (b *DefaultBus) Log() FieldLogger {
+func (b *DefaultBus) Log() logrus.FieldLogger {
 	if b.log != nil {
 		return b.log.WithField("_service", b.SvcName)
 	}

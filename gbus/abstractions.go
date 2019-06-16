@@ -187,7 +187,7 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
-	Log() FieldLogger
+	Log() logrus.FieldLogger
 	Routing() (exchange, routingKey string)
 }
 
@@ -213,9 +213,7 @@ type TxOutbox interface {
 	Stop() error
 }
 
-type FieldLogger logrus.FieldLogger
-
 type Logged interface {
-	SetLogger(entry FieldLogger)
-	Log() FieldLogger
+	SetLogger(entry logrus.FieldLogger)
+	Log() logrus.FieldLogger
 }
