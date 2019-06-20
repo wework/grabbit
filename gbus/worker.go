@@ -373,8 +373,8 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				ctx:         hsctx,
 				exchange:    delivery.Exchange,
 				routingKey:  delivery.RoutingKey,
-				logger:      worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()),
 			}
+			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
 			handlerErr = handler(ctx, message)
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))

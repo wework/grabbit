@@ -23,6 +23,7 @@ var _ Bus = &DefaultBus{}
 //DefaultBus implements the Bus interface
 type DefaultBus struct {
 	*Safety
+	*Glogged
 	Outgoing       *AMQPOutbox
 	Outbox         TxOutbox
 	PrefetchCount  uint
@@ -37,7 +38,6 @@ type DefaultBus struct {
 	amqpErrors     chan *amqp.Error
 	amqpBlocks     chan amqp.Blocking
 	Registrations  []*Registration
-	log            logrus.FieldLogger
 
 	RPCHandlers          map[string]MessageHandler
 	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
@@ -692,13 +692,11 @@ func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RpcHeaderName] = p.rpcID
 }
 
-func (b *DefaultBus) SetLogger(entry logrus.FieldLogger) {
-	b.log = entry
-}
-
 func (b *DefaultBus) Log() logrus.FieldLogger {
-	if b.log != nil {
-		return b.log.WithField("_service", b.SvcName)
+	if b.Glogged == nil {
+		b.Glogged = &Glogged{
+			log: logrus.WithField("_service", b.SvcName),
+		}
 	}
-	return logrus.WithField("_service", b.SvcName)
+	return b.Glogged.Log()
 }

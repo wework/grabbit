@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/golang/protobuf/proto"
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 )
 

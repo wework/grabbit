@@ -12,6 +12,7 @@ var _ Invocation = &defaultInvocationContext{}
 var _ Messaging = &defaultInvocationContext{}
 
 type defaultInvocationContext struct {
+	*Glogged
 	invocingSvc string
 	bus         *DefaultBus
 	inboundMsg  *BusMessage
@@ -19,17 +20,10 @@ type defaultInvocationContext struct {
 	ctx         context.Context
 	exchange    string
 	routingKey  string
-	logger      logrus.FieldLogger
 }
 
 func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
-	var l logrus.FieldLogger
-	if dfi.logger != nil {
-		l = dfi.logger
-	} else {
-		l = logrus.New()
-	}
-	return l.WithFields(logrus.Fields{"routing_key": dfi.routingKey, "message_id": dfi.inboundMsg.ID})
+	return dfi.Glogged.Log().WithFields(logrus.Fields{"routing_key": dfi.routingKey, "message_id": dfi.inboundMsg.ID})
 }
 
 func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *BusMessage) error {
