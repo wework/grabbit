@@ -17,7 +17,7 @@ type Instance struct {
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
-	Log                gbus.FieldLogger
+	Log                logrus.FieldLogger
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {

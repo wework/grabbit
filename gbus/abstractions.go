@@ -179,15 +179,18 @@ type Builder interface {
 
 	//Build the bus
 	Build(svcName string) Bus
+
+	//WithLogger set custom logger instance
+	WithLogger(logger logrus.FieldLogger) Builder
 }
 
 //Invocation context for a specific processed message
 type Invocation interface {
+	Logged
 	Reply(ctx context.Context, message *BusMessage) error
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
-	Log() FieldLogger
 	Routing() (exchange, routingKey string)
 }
 
@@ -213,9 +216,7 @@ type TxOutbox interface {
 	Stop() error
 }
 
-type FieldLogger logrus.FieldLogger
-
 type Logged interface {
-	SetLogger(entry FieldLogger)
-	Log() FieldLogger
+	SetLogger(entry logrus.FieldLogger)
+	Log() logrus.FieldLogger
 }

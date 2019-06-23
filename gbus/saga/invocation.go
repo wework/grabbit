@@ -3,7 +3,6 @@ package saga
 import (
 	"context"
 	"database/sql"
-	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/wework/grabbit/gbus"
@@ -12,13 +11,13 @@ import (
 var _ gbus.Invocation = &sagaInvocation{}
 
 type sagaInvocation struct {
+	*gbus.Glogged
 	decoratedBus        gbus.Messaging
 	decoratedInvocation gbus.Invocation
 	inboundMsg          *gbus.BusMessage
 	sagaID              string
 	ctx                 context.Context
 	invokingService     string
-	log                 gbus.FieldLogger
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
@@ -81,9 +80,6 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 	return si.decoratedInvocation.Routing()
 }
 
-func (si *sagaInvocation) Log() gbus.FieldLogger {
-	if si.log != nil {
-		return si.log
-	}
-	return logrus.WithField("log", "nil")
-}
+//func (si *sagaInvocation) Log() logrus.FieldLogger {
+//	return si.decoratedInvocation.Log().WithField("saga_id", si.sagaID)
+//}

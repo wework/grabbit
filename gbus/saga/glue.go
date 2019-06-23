@@ -191,12 +191,12 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 		sagaID:              instance.ID,
 		ctx:                 invocation.Ctx(),
 		invokingService:     imsm.svcName,
-		log: imsm.log().WithFields(logrus.Fields{
-			"saga_id":      instance.ID,
-			"saga_type":    instance.String(),
-			"message_name": message.PayloadFQN,
-		}),
 	}
+	sginv.SetLogger(imsm.log().WithFields(logrus.Fields{
+		"saga_id":      instance.ID,
+		"saga_type":    instance.String(),
+		"message_name": message.PayloadFQN,
+	}))
 
 	exchange, routingKey := invocation.Routing()
 	return instance.invoke(exchange, routingKey, sginv, message)
@@ -245,7 +245,7 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 	return imsm.completeOrUpdateSaga(tx, saga)
 }
 
-func (imsm *Glue) log() gbus.FieldLogger {
+func (imsm *Glue) log() logrus.FieldLogger {
 	return imsm.bus.Log().WithField("_service", imsm.svcName)
 }
 

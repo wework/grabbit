@@ -28,7 +28,7 @@ type defaultBuilder struct {
 	confirm          bool
 	dbPingTimeout    time.Duration
 	usingPingTimeout bool
-	logger           gbus.FieldLogger
+	logger           logrus.FieldLogger
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -57,9 +57,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 
 	if builder.logger != nil {
-		gb.SetLogger(builder.logger.WithField("_service", svcName))
+		gb.SetLogger(builder.logger)
 	} else {
-		gb.SetLogger(logrus.WithField("_service", svcName))
+		gb.SetLogger(logrus.New())
 	}
 
 	if builder.workerNum < 1 {
@@ -188,7 +188,7 @@ func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) g
 	return builder
 }
 
-func (builder *defaultBuilder) WithLogger(logger gbus.FieldLogger) gbus.Builder {
+func (builder *defaultBuilder) WithLogger(logger logrus.FieldLogger) gbus.Builder {
 	builder.logger = logger
 	return builder
 }
