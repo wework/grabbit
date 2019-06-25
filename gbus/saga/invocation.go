@@ -80,6 +80,10 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 	return si.decoratedInvocation.Routing()
 }
 
+func (si *sagaInvocation) Retry() (attempt, maxRetryCount uint) {
+	return si.decoratedInvocation.Retry()
+}
+
 //func (si *sagaInvocation) Log() logrus.FieldLogger {
 //	return si.decoratedInvocation.Log().WithField("saga_id", si.sagaID)
 //}
