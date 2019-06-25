@@ -81,3 +81,7 @@ func (dfi *defaultInvocationContext) Ctx() context.Context {
 func (dfi *defaultInvocationContext) Routing() (exchange, routingKey string) {
 	return dfi.exchange, dfi.routingKey
 }
+
+func (dfi *defaultInvocationContext) Retry() (attempt, axRetryCount uint) {
+	return dfi.attempt, dfi.maxRetryCount
+}
