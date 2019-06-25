@@ -406,12 +406,13 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 	//retry for MaxRetryCount, back off by a jittered strategy
 	seed := time.Now().UnixNano()
 	random := rand.New(rand.NewSource(seed))
-	return retry.Retry(action,
+	result := retry.Retry(action,
 		strategy.Limit(MaxRetryCount),
 		strategy.BackoffWithJitter(
 			backoff.BinaryExponential(BaseRetryDuration),
 			jitter.Deviation(random, 0.5),
 		))
+	return result
 }
 
 func (worker *worker) log() logrus.FieldLogger {
