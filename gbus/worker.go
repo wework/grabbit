@@ -366,15 +366,17 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			hspan, hsctx = opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
 
 			ctx := &defaultInvocationContext{
-				invocingSvc:   delivery.ReplyTo,
-				bus:           worker.b,
-				inboundMsg:    message,
-				tx:            tx,
-				ctx:           hsctx,
-				exchange:      delivery.Exchange,
-				routingKey:    delivery.RoutingKey,
-				attempt:       attempt,
-				maxRetryCount: MaxRetryCount,
+				invocingSvc: delivery.ReplyTo,
+				bus:         worker.b,
+				inboundMsg:  message,
+				tx:          tx,
+				ctx:         hsctx,
+				exchange:    delivery.Exchange,
+				routingKey:  delivery.RoutingKey,
+				deliveryInfo: DeliveryInfo{
+					attempt:       attempt,
+					maxRetryCount: MaxRetryCount,
+				},
 			}
 			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
 			handlerErr = handler(ctx, message)

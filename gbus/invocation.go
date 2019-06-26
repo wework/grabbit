@@ -13,13 +13,17 @@ var _ Messaging = &defaultInvocationContext{}
 
 type defaultInvocationContext struct {
 	*Glogged
-	invocingSvc   string
-	bus           *DefaultBus
-	inboundMsg    *BusMessage
-	tx            *sql.Tx
-	ctx           context.Context
-	exchange      string
-	routingKey    string
+	invocingSvc  string
+	bus          *DefaultBus
+	inboundMsg   *BusMessage
+	tx           *sql.Tx
+	ctx          context.Context
+	exchange     string
+	routingKey   string
+	deliveryInfo DeliveryInfo
+}
+
+type DeliveryInfo struct {
 	attempt       uint
 	maxRetryCount uint
 }
@@ -82,6 +86,6 @@ func (dfi *defaultInvocationContext) Routing() (exchange, routingKey string) {
 	return dfi.exchange, dfi.routingKey
 }
 
-func (dfi *defaultInvocationContext) RetryInfo() (attempt, maxRetryCount uint) {
-	return dfi.attempt, dfi.maxRetryCount
+func (dfi *defaultInvocationContext) DeliveryInfo() DeliveryInfo {
+	return dfi.deliveryInfo
 }
