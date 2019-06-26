@@ -374,8 +374,8 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				exchange:    delivery.Exchange,
 				routingKey:  delivery.RoutingKey,
 				deliveryInfo: DeliveryInfo{
-					attempt:       attempt,
-					maxRetryCount: MaxRetryCount,
+					Attempt:       attempt,
+					MaxRetryCount: MaxRetryCount,
 				},
 			}
 			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))

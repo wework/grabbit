@@ -24,8 +24,8 @@ type defaultInvocationContext struct {
 }
 
 type DeliveryInfo struct {
-	attempt       uint
-	maxRetryCount uint
+	Attempt       uint
+	MaxRetryCount uint
 }
 
 func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
