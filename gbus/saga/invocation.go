@@ -8,7 +8,10 @@ import (
 	"github.com/wework/grabbit/gbus"
 )
 
+var _ gbus.Invocation = &sagaInvocation{}
+
 type sagaInvocation struct {
+	*gbus.Glogged
 	decoratedBus        gbus.Messaging
 	decoratedInvocation gbus.Invocation
 	inboundMsg          *gbus.BusMessage
@@ -76,3 +79,7 @@ func (si *sagaInvocation) RPC(ctx context.Context, service string, request,
 func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 	return si.decoratedInvocation.Routing()
 }
+
+//func (si *sagaInvocation) Log() logrus.FieldLogger {
+//	return si.decoratedInvocation.Log().WithField("saga_id", si.sagaID)
+//}

@@ -2,6 +2,9 @@
 [![CircleCI](https://circleci.com/gh/wework/grabbit.svg?style=svg)](https://circleci.com/gh/wework/grabbit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/wework/grabbit)](https://goreportcard.com/report/github.com/wework/grabbit)
 [![Coverage Status](https://coveralls.io/repos/github/wework/grabbit/badge.svg?branch=master)](https://coveralls.io/github/wework/grabbit?branch=master)
+![GitHub release](https://img.shields.io/github/release/wework/grabbit.svg)
+
+
 
 # grabbit
 
@@ -141,5 +144,6 @@ if e != nil{
 
 ## Testing
 
+0) ensure that you have the dependencies installed: `go get -v -t -d ./...`
 1) make sure to first: `docker-compose up -V -d`
 2) then to run the tests: `go test ./...`

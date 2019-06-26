@@ -8,7 +8,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var _ Invocation = &defaultInvocationContext{}
+var _ Messaging = &defaultInvocationContext{}
+
 type defaultInvocationContext struct {
+	*Glogged
 	invocingSvc string
 	bus         *DefaultBus
 	inboundMsg  *BusMessage
@@ -16,6 +20,10 @@ type defaultInvocationContext struct {
 	ctx         context.Context
 	exchange    string
 	routingKey  string
+}
+
+func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
+	return dfi.Glogged.Log().WithFields(logrus.Fields{"routing_key": dfi.routingKey, "message_id": dfi.inboundMsg.ID})
 }
 
 func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *BusMessage) error {

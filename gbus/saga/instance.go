@@ -3,7 +3,7 @@ package saga
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"github.com/sirupsen/logrus"
 	"reflect"
 	"time"
 
@@ -17,6 +17,7 @@ type Instance struct {
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
+	Log                logrus.FieldLogger
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {
@@ -38,16 +39,21 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 		params := make([]reflect.Value, 0)
 		params = append(params, reflect.ValueOf(invocation), valueOfMessage)
 		method := reflectedVal.MethodByName(methodName)
-		log.Printf(" invoking method %v on saga instance %v", methodName, si.ID)
+		if invocation.Log() == nil {
+			panic("here")
+		}
+		invocation.Log().WithFields(logrus.Fields{
+			"method_name": methodName, "saga_id": si.ID,
+		}).Info("invoking method on saga")
 		returns := method.Call(params)
 
 		val := returns[0]
 		if !val.IsNil() {
 			return val.Interface().(error)
 		}
-
-		log.Printf(" saga instance %v invoked", si.ID)
-
+		invocation.Log().WithFields(logrus.Fields{
+			"method_name": methodName, "saga_id": si.ID,
+		}).Info("saga instance invoked")
 	}
 
 	return nil
@@ -90,7 +96,6 @@ func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
 
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instance {
 
-
 	var newSagaPtr interface{}
 	if sagaType.Kind() == reflect.Ptr {
 		newSagaPtr = reflect.New(sagaType).Elem().Interface()
@@ -106,7 +111,8 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instan
 	newInstance := &Instance{
 		ID:                 xid.New().String(),
 		UnderlyingInstance: newSaga,
-		MsgToMethodMap:     msgToMethodMap}
+		MsgToMethodMap:     msgToMethodMap,
+	}
 	return newInstance
 }
 
