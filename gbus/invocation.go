@@ -13,13 +13,19 @@ var _ Messaging = &defaultInvocationContext{}
 
 type defaultInvocationContext struct {
 	*Glogged
-	invocingSvc string
-	bus         *DefaultBus
-	inboundMsg  *BusMessage
-	tx          *sql.Tx
-	ctx         context.Context
-	exchange    string
-	routingKey  string
+	invocingSvc  string
+	bus          *DefaultBus
+	inboundMsg   *BusMessage
+	tx           *sql.Tx
+	ctx          context.Context
+	exchange     string
+	routingKey   string
+	deliveryInfo DeliveryInfo
+}
+
+type DeliveryInfo struct {
+	Attempt       uint
+	MaxRetryCount uint
 }
 
 func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
@@ -78,4 +84,8 @@ func (dfi *defaultInvocationContext) Ctx() context.Context {
 
 func (dfi *defaultInvocationContext) Routing() (exchange, routingKey string) {
 	return dfi.exchange, dfi.routingKey
+}
+
+func (dfi *defaultInvocationContext) DeliveryInfo() DeliveryInfo {
+	return dfi.deliveryInfo
 }
