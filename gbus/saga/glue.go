@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
@@ -31,7 +32,7 @@ type Glue struct {
 	alreadyRegistred map[string]bool
 	msgToDefMap      map[string][]*Def
 	sagaStore        Store
-	timeoutManger    TimeoutManager
+	requestTimeout   func(string, string, time.Duration)
 	getLog           func() logrus.FieldLogger
 }
 
@@ -131,7 +132,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
 					imsm.log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
-					imsm.timeoutManger.RequestTimeout(imsm.svcName, newInstance.ID, duration)
+					imsm.requestTimeout(imsm.svcName, newInstance.ID, duration)
 				}
 			}
 			return nil
@@ -232,7 +233,7 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
 }
 
-func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
+func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 
 	saga, err := imsm.sagaStore.GetSagaByID(tx, sagaID)
 	if err != nil {
@@ -251,7 +252,7 @@ func (imsm *Glue) log() logrus.FieldLogger {
 }
 
 //NewGlue creates a new Sagamanager
-func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, tm TimeoutManager) *Glue {
+func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, requestTimeoutFunc func(string, string, time.Duration)) *Glue {
 	g := &Glue{
 		svcName:          svcName,
 		bus:              bus,
@@ -262,7 +263,6 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		sagaStore:        sagaStore,
 		getLog:           getLog,
 	}
-	tm.TimeoutSaga = g.timeoutSaga
-	g.timeoutManger = tm
+	g.requestTimeout = requestTimeoutFunc
 	return g
 }

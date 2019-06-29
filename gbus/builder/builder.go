@@ -11,6 +11,7 @@ import (
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/saga/stores"
 	"github.com/wework/grabbit/gbus/serialization"
+	"github.com/wework/grabbit/gbus/tx"
 	"github.com/wework/grabbit/gbus/tx/mysql"
 )
 
@@ -108,10 +109,12 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-	tm := saga.TimeoutManager{
+	tm := tx.TimeoutManager{
 		Bus: gb, Txp: gb.TxProvider, Log: gb.Log,
 	}
-	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, tm)
+	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, tm.RequestTimeout)
+	gb.Glue = glue
+	tm.TimeoutSaga = glue.TimeoutSaga
 	return gb
 }
 
