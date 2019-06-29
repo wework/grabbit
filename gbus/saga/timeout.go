@@ -1,17 +1,20 @@
 package saga
 
 import (
+	"database/sql"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 )
 
 //TimeoutManager manages timeouts for sagas
 //TODO:Make it persistent
 type TimeoutManager struct {
-	bus  gbus.Bus
-	glue *Glue
-	txp  gbus.TxProvider
+	Bus         gbus.Bus
+	Log         func() logrus.FieldLogger
+	TimeoutSaga func(*sql.Tx, string) error
+	Txp         gbus.TxProvider
 }
 
 //RequestTimeout requests a timeout from the timeout manager
@@ -21,28 +24,28 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 		c := time.After(duration)
 		<-c
 		//TODO:if the bus is not transactional, moving forward we should not allow using sagas in a non transactional bus
-		if tm.txp == nil {
-			tme := tm.glue.timeoutSaga(nil, sagaID)
+		if tm.Txp == nil {
+			tme := tm.TimeoutSaga(nil, sagaID)
 			if tme != nil {
-				tm.glue.log().WithError(tme).WithField("sagaID", sagaID).Error("timing out a saga failed")
+				tm.Log().WithError(tme).WithField("sagaID", sagaID).Error("timing out a saga failed")
 			}
 			return
 		}
-		tx, txe := tm.txp.New()
+		tx, txe := tm.Txp.New()
 		if txe != nil {
-			tm.glue.log().WithError(txe).Warn("timeout manager failed to create a transaction")
+			tm.Log().WithError(txe).Warn("timeout manager failed to create a transaction")
 		} else {
-			callErr := tm.glue.timeoutSaga(tx, sagaID)
+			callErr := tm.TimeoutSaga(tx, sagaID)
 			if callErr != nil {
-				tm.glue.log().WithError(callErr).WithField("sagaID", sagaID).Error("timing out a saga failed")
+				tm.Log().WithError(callErr).WithField("sagaID", sagaID).Error("timing out a saga failed")
 				rlbe := tx.Rollback()
 				if rlbe != nil {
-					tm.glue.log().WithError(rlbe).Warn("timeout manager failed to rollback transaction")
+					tm.Log().WithError(rlbe).Warn("timeout manager failed to rollback transaction")
 				}
 			} else {
 				cmte := tx.Commit()
 				if cmte != nil {
-					tm.glue.log().WithError(cmte).Warn("timeout manager failed to rollback transaction")
+					tm.Log().WithError(cmte).Warn("timeout manager failed to rollback transaction")
 				}
 			}
 		}

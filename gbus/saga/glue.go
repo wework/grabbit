@@ -32,6 +32,7 @@ type Glue struct {
 	msgToDefMap      map[string][]*Def
 	sagaStore        Store
 	timeoutManger    TimeoutManager
+	getLog           func() logrus.FieldLogger
 }
 
 func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
@@ -246,11 +247,11 @@ func (imsm *Glue) timeoutSaga(tx *sql.Tx, sagaID string) error {
 }
 
 func (imsm *Glue) log() logrus.FieldLogger {
-	return imsm.bus.Log().WithField("_service", imsm.svcName)
+	return imsm.getLog()
 }
 
 //NewGlue creates a new Sagamanager
-func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider) *Glue {
+func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, tm TimeoutManager) *Glue {
 	g := &Glue{
 		svcName:          svcName,
 		bus:              bus,
@@ -259,7 +260,9 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider)
 		alreadyRegistred: make(map[string]bool),
 		msgToDefMap:      make(map[string][]*Def),
 		sagaStore:        sagaStore,
+		getLog:           getLog,
 	}
-	g.timeoutManger = TimeoutManager{bus: bus, txp: txp, glue: g}
+	tm.TimeoutSaga = g.timeoutSaga
+	g.timeoutManger = tm
 	return g
 }

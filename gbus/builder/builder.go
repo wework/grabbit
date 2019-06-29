@@ -2,9 +2,10 @@ package builder
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/saga"
@@ -107,7 +108,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider)
+	tm := saga.TimeoutManager{
+		Bus: gb, Txp: gb.TxProvider, Log: gb.Log,
+	}
+	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, tm)
 	return gb
 }
 
