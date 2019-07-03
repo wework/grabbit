@@ -29,6 +29,7 @@ type DefaultBus struct {
 	PrefetchCount  uint
 	AmqpConnStr    string
 	amqpConn       *amqp.Connection
+	outAmqpConn    *amqp.Connection
 	workers        []*worker
 	AMQPChannel    *amqp.Channel
 	outAMQPChannel *amqp.Channel
@@ -181,11 +182,14 @@ func (b *DefaultBus) Start() error {
 	if b.amqpConn, e = b.connect(MaxRetryCount); e != nil {
 		return e
 	}
+	if b.outAmqpConn, e = b.connect(MaxRetryCount); e != nil {
+		return e
+	}
 
 	if b.AMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
 		return e
 	}
-	if b.outAMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
+	if b.outAMQPChannel, e = b.createAMQPChannel(b.outAmqpConn); e != nil {
 		return e
 	}
 
@@ -194,6 +198,8 @@ func (b *DefaultBus) Start() error {
 	b.amqpBlocks = make(chan amqp.Blocking)
 	b.amqpConn.NotifyClose(b.amqpErrors)
 	b.amqpConn.NotifyBlocked(b.amqpBlocks)
+	b.outAmqpConn.NotifyClose(b.amqpErrors)
+	b.outAmqpConn.NotifyBlocked(b.amqpBlocks)
 	b.outAMQPChannel.NotifyClose(b.amqpErrors)
 	//TODO:Figure out what should be done
 
@@ -208,7 +214,7 @@ func (b *DefaultBus) Start() error {
 	if b.IsTxnl {
 
 		var amqpChan *amqp.Channel
-		if amqpChan, e = b.createAMQPChannel(b.amqpConn); e != nil {
+		if amqpChan, e = b.createAMQPChannel(b.outAmqpConn); e != nil {
 			b.Log().WithError(e).Error("failed to create amqp channel for transactional outbox")
 			return e
 		}
