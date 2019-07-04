@@ -20,7 +20,7 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 4) Publisher confirms
 5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
-7) Structured logging
+7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
 
 Planned:
 
@@ -79,7 +79,7 @@ Register a command handler
 ```Go
 
 
-handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
+handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error{
     cmd, ok := message.Payload.(*SomeCommand)
     if ok {
       fmt.Printf("handler invoked with  message %v", cmd)
