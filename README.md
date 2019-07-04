@@ -20,13 +20,14 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 4) Publisher confirms
 5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
+7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
 
 Planned:
 
 1) Deduplication of inbound messages
 
 ## Stable release
-the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates. 
+the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates.
 
 ## Supported transactional resources
 1) MySql > 8.0 (InnoDB)
@@ -78,8 +79,8 @@ Register a command handler
 ```Go
 
 
-handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
-    cmd, ok := message.Payload.(SomeCommand)
+handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error{
+    cmd, ok := message.Payload.(*SomeCommand)
     if ok {
       fmt.Printf("handler invoked with  message %v", cmd)
             return nil
@@ -96,7 +97,7 @@ Register an event handler
 
 
 eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
-    evt, ok := message.Payload.(SomeEvent)
+    evt, ok := message.Payload.(*SomeEvent)
     if ok {
       fmt.Printf("handler invoked with event %v", evt)
             return nil
