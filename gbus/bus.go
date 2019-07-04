@@ -28,11 +28,11 @@ type DefaultBus struct {
 	Outbox         TxOutbox
 	PrefetchCount  uint
 	AmqpConnStr    string
-	amqpConn       *amqp.Connection
-	outAmqpConn    *amqp.Connection
+	ingressConn    *amqp.Connection
+	egressConn     *amqp.Connection
 	workers        []*worker
-	AMQPChannel    *amqp.Channel
-	outAMQPChannel *amqp.Channel
+	ingressChannel *amqp.Channel
+	egressChannel  *amqp.Channel
 	serviceQueue   amqp.Queue
 	rpcQueue       amqp.Queue
 	SvcName        string
@@ -84,7 +84,7 @@ func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
 	*/
 	uid := xid.New().String()
 	qName := b.SvcName + "_rpc_" + uid
-	q, e := b.AMQPChannel.QueueDeclare(qName,
+	q, e := b.ingressChannel.QueueDeclare(qName,
 		false, /*durable*/
 		true,  /*autoDelete*/
 		false, /*exclusive*/
@@ -98,7 +98,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	var q amqp.Queue
 
 	if b.PurgeOnStartup {
-		msgsPurged, purgeError := b.AMQPChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
+		msgsPurged, purgeError := b.ingressChannel.QueueDelete(qName, false /*ifUnused*/, false /*ifEmpty*/, false /*noWait*/)
 		if purgeError != nil {
 			b.Log().WithError(purgeError).WithField("deleted_messages", msgsPurged).Error("failed to purge queue")
 			return q, purgeError
@@ -109,7 +109,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 	if b.DLX != "" {
 		args["x-dead-letter-exchange"] = b.DLX
 	}
-	q, e := b.AMQPChannel.QueueDeclare(qName,
+	q, e := b.ingressChannel.QueueDeclare(qName,
 		true,  /*durable*/
 		false, /*autoDelete*/
 		false, /*exclusive*/
@@ -125,7 +125,7 @@ func (b *DefaultBus) createServiceQueue() (amqp.Queue, error) {
 func (b *DefaultBus) bindServiceQueue() error {
 
 	if b.deadletterHandler != nil && b.DLX != "" {
-		err := b.AMQPChannel.ExchangeDeclare(b.DLX, /*name*/
+		err := b.ingressChannel.ExchangeDeclare(b.DLX, /*name*/
 			"fanout", /*kind*/
 			true,     /*durable*/
 			false,    /*autoDelete*/
@@ -145,7 +145,7 @@ func (b *DefaultBus) bindServiceQueue() error {
 	for _, subscription := range b.DelayedSubscriptions {
 		topic := subscription[0]
 		exchange := subscription[1]
-		e := b.AMQPChannel.ExchangeDeclare(exchange, /*name*/
+		e := b.ingressChannel.ExchangeDeclare(exchange, /*name*/
 			"topic", /*kind*/
 			true,    /*durable*/
 			false,   /*autoDelete*/
@@ -179,32 +179,32 @@ func (b *DefaultBus) Start() error {
 
 	var e error
 	//create amqo connection and channel
-	if b.amqpConn, e = b.connect(MaxRetryCount); e != nil {
+	if b.ingressConn, e = b.connect(MaxRetryCount); e != nil {
 		return e
 	}
-	if b.outAmqpConn, e = b.connect(MaxRetryCount); e != nil {
+	if b.egressConn, e = b.connect(MaxRetryCount); e != nil {
 		return e
 	}
 
-	if b.AMQPChannel, e = b.createAMQPChannel(b.amqpConn); e != nil {
+	if b.ingressChannel, e = b.createAMQPChannel(b.ingressConn); e != nil {
 		return e
 	}
-	if b.outAMQPChannel, e = b.createAMQPChannel(b.outAmqpConn); e != nil {
+	if b.egressChannel, e = b.createAMQPChannel(b.egressConn); e != nil {
 		return e
 	}
 
 	//register on failure notifications
 	b.amqpErrors = make(chan *amqp.Error)
 	b.amqpBlocks = make(chan amqp.Blocking)
-	b.amqpConn.NotifyClose(b.amqpErrors)
-	b.amqpConn.NotifyBlocked(b.amqpBlocks)
-	b.outAmqpConn.NotifyClose(b.amqpErrors)
-	b.outAmqpConn.NotifyBlocked(b.amqpBlocks)
-	b.outAMQPChannel.NotifyClose(b.amqpErrors)
+	b.ingressConn.NotifyClose(b.amqpErrors)
+	b.ingressConn.NotifyBlocked(b.amqpBlocks)
+	b.egressConn.NotifyClose(b.amqpErrors)
+	b.egressConn.NotifyBlocked(b.amqpBlocks)
+	b.egressChannel.NotifyClose(b.amqpErrors)
 	//TODO:Figure out what should be done
 
 	//init the outbox that sends the messages to the amqp transport and handles publisher confirms
-	if e := b.Outgoing.init(b.outAMQPChannel, b.Confirm, true); e != nil {
+	if e := b.Outgoing.init(b.egressChannel, b.Confirm, true); e != nil {
 		return e
 	}
 	/*
@@ -214,7 +214,7 @@ func (b *DefaultBus) Start() error {
 	if b.IsTxnl {
 
 		var amqpChan *amqp.Channel
-		if amqpChan, e = b.createAMQPChannel(b.outAmqpConn); e != nil {
+		if amqpChan, e = b.createAMQPChannel(b.egressConn); e != nil {
 			b.Log().WithError(e).Error("failed to create amqp channel for transactional outbox")
 			return e
 		}
@@ -275,7 +275,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 	workers := make([]*worker, 0)
 	for i := uint(0); i < workerNum; i++ {
 		//create a channel per worker as we can't share channels across go routines
-		amqpChan, createChanErr := b.createAMQPChannel(b.amqpConn)
+		amqpChan, createChanErr := b.createAMQPChannel(b.ingressConn)
 		if createChanErr != nil {
 			return nil, createChanErr
 		}
@@ -687,7 +687,7 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 }
 
 func (b *DefaultBus) bindQueue(topic, exchange string) error {
-	return b.AMQPChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
+	return b.ingressChannel.QueueBind(b.serviceQueue.Name, topic, exchange, false /*noWait*/, nil /*args*/)
 }
 
 type rpcPolicy struct {
