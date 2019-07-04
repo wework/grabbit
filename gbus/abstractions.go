@@ -192,6 +192,7 @@ type Invocation interface {
 	Tx() *sql.Tx
 	Ctx() context.Context
 	Routing() (exchange, routingKey string)
+	DeliveryInfo() DeliveryInfo
 }
 
 //Serializer is the base interface for all message serializers

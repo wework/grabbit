@@ -330,7 +330,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 	//this is the action that will get retried
 	// each retry should run a new and separate transaction which should end with a commit or rollback
 
-	action := func(attempts uint) (actionErr error) {
+	action := func(attempt uint) (actionErr error) {
 		var tx *sql.Tx
 		var txCreateErr error
 		if worker.isTxnl {
@@ -343,7 +343,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		}
 
 		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
-		worker.span.LogFields(slog.Uint64("attempt", uint64(attempts+1)))
+		worker.span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
 		defer func() {
 			if p := recover(); p != nil {
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
@@ -373,6 +373,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				ctx:         hsctx,
 				exchange:    delivery.Exchange,
 				routingKey:  delivery.RoutingKey,
+				deliveryInfo: DeliveryInfo{
+					Attempt:       attempt,
+					MaxRetryCount: MaxRetryCount,
+				},
 			}
 			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
 			handlerErr = handler(ctx, message)
