@@ -20,6 +20,7 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 4) Publisher confirms
 5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
+7) Structured logging
 
 Planned:
 
