@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -70,7 +71,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		gb.WorkerNum = builder.workerNum
 	}
 	var (
-		sagaStore saga.Store
+		sagaStore          saga.Store
+		requestTimeoutFunc func(svcName, sagaID string, duration time.Duration)
+		timeoutSagaFunc    func(tx *sql.Tx, sagaID string) error
 	)
 	if builder.txnl {
 		gb.IsTxnl = true
@@ -91,6 +94,14 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 			gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
 
+			//setup timeout manager
+			baseTimeoutManager := &tx.TimeoutManager{
+				Bus: gb, Txp: gb.TxProvider, Log: gb.Log, SvcName: svcName,
+			}
+			tm := mysql.NewTimeoutManager(baseTimeoutManager, builder.purgeOnStartup)
+			requestTimeoutFunc = tm.RequestTimeout
+			tm.TimeoutSaga = timeoutSagaFunc
+
 		default:
 			err := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
 			panic(err)
@@ -109,12 +120,10 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-	tm := tx.TimeoutManager{
-		Bus: gb, Txp: gb.TxProvider, Log: gb.Log,
-	}
-	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, tm.RequestTimeout)
+
+	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, requestTimeoutFunc)
+	timeoutSagaFunc = glue.TimeoutSaga
 	gb.Glue = glue
-	tm.TimeoutSaga = glue.TimeoutSaga
 	return gb
 }
 

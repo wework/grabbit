@@ -2,6 +2,8 @@ package tx
 
 import (
 	"database/sql"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -15,6 +17,7 @@ type TimeoutManager struct {
 	Log         func() logrus.FieldLogger
 	TimeoutSaga func(*sql.Tx, string) error
 	Txp         gbus.TxProvider
+	SvcName     string
 }
 
 //RequestTimeout requests a timeout from the timeout manager
@@ -51,4 +54,13 @@ func (tm *TimeoutManager) RequestTimeout(svcName, sagaID string, duration time.D
 		}
 
 	}(svcName, sagaID, tm)
+}
+
+//GetTimeoutsTableName returns the table name in which to store timeouts
+func (tm *TimeoutManager) GetTimeoutsTableName() string {
+
+	var re = regexp.MustCompile(`-|;|\\|`)
+	sanitized := re.ReplaceAllString(tm.SvcName, "")
+
+	return strings.ToLower("grabbit_" + sanitized + "_timeouts")
 }

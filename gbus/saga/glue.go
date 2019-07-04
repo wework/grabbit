@@ -253,7 +253,7 @@ func (imsm *Glue) log() logrus.FieldLogger {
 
 //NewGlue creates a new Sagamanager
 func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, requestTimeoutFunc func(string, string, time.Duration)) *Glue {
-	g := &Glue{
+	return &Glue{
 		svcName:          svcName,
 		bus:              bus,
 		sagaDefs:         make([]*Def, 0),
@@ -262,7 +262,6 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		msgToDefMap:      make(map[string][]*Def),
 		sagaStore:        sagaStore,
 		getLog:           getLog,
+		requestTimeout:   requestTimeoutFunc,
 	}
-	g.requestTimeout = requestTimeoutFunc
-	return g
 }
