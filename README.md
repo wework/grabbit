@@ -26,7 +26,7 @@ Planned:
 1) Deduplication of inbound messages
 
 ## Stable release
-the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates. 
+the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates.
 
 ## Supported transactional resources
 1) MySql > 8.0 (InnoDB)
@@ -79,7 +79,7 @@ Register a command handler
 
 
 handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error
-    cmd, ok := message.Payload.(SomeCommand)
+    cmd, ok := message.Payload.(*SomeCommand)
     if ok {
       fmt.Printf("handler invoked with  message %v", cmd)
             return nil
@@ -96,7 +96,7 @@ Register an event handler
 
 
 eventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) {
-    evt, ok := message.Payload.(SomeEvent)
+    evt, ok := message.Payload.(*SomeEvent)
     if ok {
       fmt.Printf("handler invoked with event %v", evt)
             return nil
