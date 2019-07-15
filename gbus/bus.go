@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -62,6 +63,7 @@ type DefaultBus struct {
 	backpressure         bool
 	DbPingTimeout        time.Duration
 	amqpConnected        bool
+	HistogramBuckets	 []float64
 }
 
 var (
@@ -678,6 +680,7 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 		b.Serializer.Register(msg)
 	}
 
+	metrics.AddHandlerMetrics(handler.Name(), b.HistogramBuckets)
 	registration := NewRegistration(exchange, routingKey, msg, handler)
 	b.Registrations = append(b.Registrations, registration)
 	for _, worker := range b.workers {

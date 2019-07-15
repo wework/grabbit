@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"time"
 
@@ -45,12 +46,21 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 		invocation.Log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("invoking method on saga")
-		returns := method.Call(params)
 
-		val := returns[0]
-		if !val.IsNil() {
-			return val.Interface().(error)
+		err := metrics.RunHandlerWithMetric(func() error {
+			returns := method.Call(params)
+
+			val := returns[0]
+			if !val.IsNil() {
+				return val.Interface().(error)
+			}
+			return nil
+		}, methodName)
+
+		if err != nil {
+			return err
 		}
+
 		invocation.Log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("saga instance invoked")

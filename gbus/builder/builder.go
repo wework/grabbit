@@ -3,6 +3,7 @@ package builder
 import (
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus/metrics"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ type defaultBuilder struct {
 	dbPingTimeout    time.Duration
 	usingPingTimeout bool
 	logger           logrus.FieldLogger
+	latencyBuckets 	 []float64
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -107,6 +109,13 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
+
+	if len(builder.latencyBuckets) != 0 {
+		gb.HistogramBuckets = builder.latencyBuckets
+	} else {
+		gb.HistogramBuckets = metrics.DefaultBuckets()
+	}
+
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider)
 	return gb
 }
@@ -190,6 +199,11 @@ func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) g
 
 func (builder *defaultBuilder) WithLogger(logger logrus.FieldLogger) gbus.Builder {
 	builder.logger = logger
+	return builder
+}
+
+func (builder *defaultBuilder) WithHistogramBuckets(buckets []float64) gbus.Builder{
+
 	return builder
 }
 

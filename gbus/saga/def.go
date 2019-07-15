@@ -2,8 +2,6 @@ package saga
 
 import (
 	"reflect"
-	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/wework/grabbit/gbus"
@@ -50,19 +48,12 @@ func (sd *Def) getHandledMessages() []string {
 
 func (sd *Def) addMsgToHandlerMapping(exchange, routingKey string, message gbus.Message, handler gbus.MessageHandler) {
 
-	fn := getFunNameFromHandler(handler)
+	fn := handler.Name()
 
 	msgToFunc := &MsgToFuncPair{
 		Filter:       gbus.NewMessageFilter(exchange, routingKey, message),
 		SagaFuncName: fn}
 	sd.msgToFunc = append(sd.msgToFunc, msgToFunc)
-}
-
-func getFunNameFromHandler(handler gbus.MessageHandler) string {
-	funName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
-	splits := strings.Split(funName, ".")
-	fn := strings.Replace(splits[len(splits)-1], "-fm", "", -1)
-	return fn
 }
 
 func (sd *Def) newInstance() *Instance {

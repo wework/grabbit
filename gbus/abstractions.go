@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"github.com/sirupsen/logrus"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -109,6 +112,12 @@ type HandlerRegister interface {
 //MessageHandler signature for all command handlers
 type MessageHandler func(invocation Invocation, message *BusMessage) error
 
+func (mg MessageHandler) Name() string {
+	funName := runtime.FuncForPC(reflect.ValueOf(mg).Pointer()).Name()
+	splits := strings.Split(funName, ".")
+	fn := strings.Replace(splits[len(splits)-1], "-fm", "", -1)
+	return fn
+}
 //Saga is the base interface for all Sagas.
 type Saga interface {
 	//StartedBy returns the messages that when received should create a new saga instance
@@ -182,6 +191,9 @@ type Builder interface {
 
 	//WithLogger set custom logger instance
 	WithLogger(logger logrus.FieldLogger) Builder
+
+	//WithHistogramBuckets set the buckets for the latency histogram metrics of the handlers
+	WithHistogramBuckets(buckets []float64) Builder
 }
 
 //Invocation context for a specific processed message
