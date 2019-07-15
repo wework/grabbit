@@ -98,26 +98,35 @@ func trackTime(functionToTrack func() error, observer prometheus.Observer) error
 	return functionToTrack()
 }
 
-func (hm *HandlerMetrics) GetSuccessCount() float64 {
+func (hm *HandlerMetrics) GetSuccessCount() (float64, error) {
 	return hm.getCounterValue(Success)
 }
 
-func (hm *HandlerMetrics) GetFailureCount() float64 {
+func (hm *HandlerMetrics) GetFailureCount() (float64, error) {
 	return hm.getCounterValue(Failure)
 }
 
-func (hm *HandlerMetrics) GetExceededRetiesCount() float64 {
+func (hm *HandlerMetrics) GetExceededRetiesCount() (float64, error) {
 	return hm.getCounterValue(ExceededRetries)
 }
 
-func (hm *HandlerMetrics) GetLatencyBuckets() []*io_prometheus_client.Bucket {
+func (hm *HandlerMetrics) GetLatencyBuckets() ([]*io_prometheus_client.Bucket, error) {
 	m := &io_prometheus_client.Metric{}
-	hm.latency.Write(m)
-	return m.GetHistogram().Bucket
+	err := hm.latency.Write(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.GetHistogram().Bucket, nil
 }
 
-func (hm *HandlerMetrics) getCounterValue(label string) float64 {
+func (hm *HandlerMetrics) getCounterValue(label string) (float64, error) {
 	m := &io_prometheus_client.Metric{}
-	hm.result.WithLabelValues(label).Write(m)
-	return m.GetCounter().GetValue()
+	err := hm.result.WithLabelValues(label).Write(m)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return m.GetCounter().GetValue(), nil
 }
