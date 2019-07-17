@@ -27,7 +27,7 @@ type HandlerMetrics struct {
 }
 
 func DefaultBuckets() []float64 {
-	return []float64{0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1}
+	return []float64{0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1}
 }
 
 func AddHandlerMetrics(handlerName string, buckets []float64) {
