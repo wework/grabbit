@@ -321,7 +321,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.ack(delivery)
 	} else {
 		for _, handler := range handlers {
-			metrics.ReportHandlerExceededMaxRetries(handler.Name())
+			metrics.ReportHandlerExceededMaxRetries(handler.Name(), worker.log())
 		}
 		_ = worker.reject(false, delivery)
 	}
@@ -383,7 +383,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
 			handlerErr = metrics.RunHandlerWithMetric(func() error {
 				return  handler(ctx, message)
-			}, handler.Name())
+			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break

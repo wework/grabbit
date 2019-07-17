@@ -55,7 +55,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 				return val.Interface().(error)
 			}
 			return nil
-		}, methodName)
+		}, methodName, invocation.Log())
 
 		if err != nil {
 			return err

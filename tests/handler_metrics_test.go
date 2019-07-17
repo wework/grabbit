@@ -2,12 +2,13 @@ package tests
 
 import (
 	"errors"
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus/metrics"
 	"testing"
 )
 
 var (
-	buckets 	 = []float64{1}
+	logger  logrus.FieldLogger
 	runningTries = 5
 )
 
@@ -45,6 +46,7 @@ func TestAddHandlerMetrics(t *testing.T) {
 }
 
 func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
+	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_FailureCounter")
 	name := "failure"
 	metrics.AddHandlerMetrics(name)
 	hm := metrics.GetHandlerMetrics(name)
@@ -57,7 +59,7 @@ func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		err := metrics.RunHandlerWithMetric(failure, name)
+		err := metrics.RunHandlerWithMetric(failure, name, logger)
 
 		if err == nil {
 			t.Error("Failed handler run should return an error")
@@ -75,6 +77,7 @@ func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
 }
 
 func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
+	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_SuccessCounter")
 	name := "success"
 	metrics.AddHandlerMetrics(name)
 	success := func() error {
@@ -87,7 +90,7 @@ func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		err := metrics.RunHandlerWithMetric(success, name)
+		err := metrics.RunHandlerWithMetric(success, name, logger)
 
 		if err != nil {
 			t.Error("Successful handler run shouldn't return an error")
@@ -105,6 +108,7 @@ func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 }
 
 func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
+	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_ExceededRetriesCounter")
 	name := "exceededRetries"
 	metrics.AddHandlerMetrics(name)
 	hm := metrics.GetHandlerMetrics(name)
@@ -114,7 +118,7 @@ func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		metrics.ReportHandlerExceededMaxRetries(name)
+		metrics.ReportHandlerExceededMaxRetries(name, logger)
 		count, err := hm.GetExceededRetiesCount()
 
 		if err != nil {
@@ -128,6 +132,7 @@ func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
 }
 
 func TestRunHandlerWithMetric_Latency(t *testing.T) {
+	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_ExceededRetriesCounter")
 	name := "latency"
 	metrics.AddHandlerMetrics(name)
 	success := func() error {
@@ -140,7 +145,7 @@ func TestRunHandlerWithMetric_Latency(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		_ = metrics.RunHandlerWithMetric(success, name)
+		_ = metrics.RunHandlerWithMetric(success, name, logger)
 		sc, err := hm.GetLatencySampleCount()
 
 		if err != nil {

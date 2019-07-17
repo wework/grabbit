@@ -15,12 +15,12 @@ var (
 )
 
 const (
-	Failure         = "failure"
-	Success         = "success"
-	ExceededRetries = "exceeded_retries"
-	HandlerResult   = "result"
-	Namespace		= "grabbit"
-	Subsystem		= "handlers"
+	Failure           = "failure"
+	Success           = "success"
+	ExceededRetries   = "exceeded_retries"
+	HandlerResult     = "result"
+	GrabbitNamespace  = "grabbit"
+	HandlersSubsystem = "handlers"
 )
 
 type HandlerMetrics struct {
@@ -37,11 +37,11 @@ func AddHandlerMetrics(handlerName string) {
 	}
 }
 
-func RunHandlerWithMetric(handleMessage func() error, handlerName string) error {
+func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger logrus.FieldLogger) error {
 	handlerMetrics, ok := handlerMetricsByHandlerName[handlerName]
 
 	if !ok {
-		logrus.WithField("handler", handlerName).Warn("Running with metrics - couldn't find metrics for the given handler")
+		logger.WithField("handler", handlerName).Warn("Running with metrics - couldn't find metrics for the given handler")
 		return handleMessage()
 	}
 
@@ -56,11 +56,11 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName string) error 
 	return err
 }
 
-func ReportHandlerExceededMaxRetries(handlerName string) {
+func ReportHandlerExceededMaxRetries(handlerName string, logger logrus.FieldLogger) {
 	handlerMetrics, ok := handlerMetricsByHandlerName[handlerName]
 
 	if !ok {
-		logrus.WithField("handler", handlerName).Warn("Report handler exceeded retries - couldn't find metrics for the given handler")
+		logger.WithField("handler", handlerName).Warn("Report handler exceeded retries - couldn't find metrics for the given handler")
 	}
 
 	handlerMetrics.result.WithLabelValues(ExceededRetries).Inc()
@@ -74,16 +74,16 @@ func newHandlerMetrics(handlerName string) *HandlerMetrics {
 	return &HandlerMetrics{
 		result: promauto.NewCounterVec(
 			prometheus.CounterOpts{
-				Namespace: Namespace,
-				Subsystem: Subsystem,
+				Namespace: GrabbitNamespace,
+				Subsystem: HandlersSubsystem,
 				Name:      fmt.Sprintf("%s_result", handlerName),
 				Help:      fmt.Sprintf("The %s's result", handlerName),
 			},
 			[]string{HandlerResult}),
 		latency: promauto.NewSummary(
 			prometheus.SummaryOpts{
-				Namespace: Namespace,
-				Subsystem: Subsystem,
+				Namespace: GrabbitNamespace,
+				Subsystem: HandlersSubsystem,
 				Name:      fmt.Sprintf("%s_latency", handlerName),
 				Help:      fmt.Sprintf("The %s's latency", handlerName),
 			}),
