@@ -191,9 +191,6 @@ type Builder interface {
 
 	//WithLogger set custom logger instance
 	WithLogger(logger logrus.FieldLogger) Builder
-
-	//WithHistogramBuckets set the buckets for the latency histogram metrics of the handlers
-	WithHistogramBuckets(buckets []float64) Builder
 }
 
 //Invocation context for a specific processed message

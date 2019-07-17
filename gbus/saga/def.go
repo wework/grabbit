@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"sync"
 
@@ -47,12 +48,11 @@ func (sd *Def) getHandledMessages() []string {
 }
 
 func (sd *Def) addMsgToHandlerMapping(exchange, routingKey string, message gbus.Message, handler gbus.MessageHandler) {
-
-	fn := handler.Name()
-
+	handlerName := handler.Name()
+	metrics.AddHandlerMetrics(handlerName)
 	msgToFunc := &MsgToFuncPair{
 		Filter:       gbus.NewMessageFilter(exchange, routingKey, message),
-		SagaFuncName: fn}
+		SagaFuncName: handlerName}
 	sd.msgToFunc = append(sd.msgToFunc, msgToFunc)
 }
 

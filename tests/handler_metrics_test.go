@@ -13,14 +13,14 @@ var (
 
 func TestAddHandlerMetrics(t *testing.T) {
 	name := "handler1"
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	hm := metrics.GetHandlerMetrics(name)
 
 	if hm == nil {
 		t.Error("Failed to create handler metrics")
 	}
 
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	hm1 := metrics.GetHandlerMetrics(name)
 
 	if hm1 == nil {
@@ -32,7 +32,7 @@ func TestAddHandlerMetrics(t *testing.T) {
 	}
 
 	differentName := "handler2"
-	metrics.AddHandlerMetrics(differentName, buckets)
+	metrics.AddHandlerMetrics(differentName)
 	hm2 := metrics.GetHandlerMetrics(differentName)
 
 	if hm2 == nil {
@@ -46,7 +46,7 @@ func TestAddHandlerMetrics(t *testing.T) {
 
 func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
 	name := "failure"
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	hm := metrics.GetHandlerMetrics(name)
 
 	if hm == nil {
@@ -76,7 +76,7 @@ func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
 
 func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 	name := "success"
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	success := func() error {
 		return nil
 	}
@@ -106,7 +106,7 @@ func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 
 func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
 	name := "exceededRetries"
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	hm := metrics.GetHandlerMetrics(name)
 
 	if hm == nil {
@@ -129,7 +129,7 @@ func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
 
 func TestRunHandlerWithMetric_Latency(t *testing.T) {
 	name := "latency"
-	metrics.AddHandlerMetrics(name, buckets)
+	metrics.AddHandlerMetrics(name)
 	success := func() error {
 		return nil
 	}
@@ -141,16 +141,16 @@ func TestRunHandlerWithMetric_Latency(t *testing.T) {
 
 	for i := 1; i < runningTries; i++ {
 		_ = metrics.RunHandlerWithMetric(success, name)
-		lb, err := hm.GetLatencyBuckets()
+		sc, err := hm.GetLatencySampleCount()
 
 		if err != nil {
 			t.Errorf("Failed to get latency value: %e", err)
 		}
-		if len(lb) != len(buckets) {
-			t.Errorf("Expected latency buckets array length to equal the given buckets length: %d but was %d", len(buckets), len(lb))
+		if sc == nil {
+			t.Errorf("Expected latency sample count not be nil")
 		}
-		if *lb[0].CumulativeCount != uint64(i) {
-			t.Errorf("Expected to get %d as the value of the bucket cumulative count, but got %d", uint64(i), *lb[0].CumulativeCount)
+		if *sc != uint64(i) {
+			t.Errorf("Expected to get %d as the value of the latency sample count, but got %d", uint64(i), *sc)
 		}
 	}
 }

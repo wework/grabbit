@@ -19,23 +19,21 @@ const (
 	Success         = "success"
 	ExceededRetries = "exceeded_retries"
 	HandlerResult   = "result"
+	Namespace		= "grabbit"
+	Subsystem		= "handlers"
 )
 
 type HandlerMetrics struct {
 	result  *prometheus.CounterVec
-	latency prometheus.Histogram
+	latency prometheus.Summary
 }
 
-func DefaultBuckets() []float64 {
-	return []float64{0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1}
-}
-
-func AddHandlerMetrics(handlerName string, buckets []float64) {
+func AddHandlerMetrics(handlerName string) {
 	lock.Lock()
 	defer lock.Unlock()
 	_, ok := handlerMetricsByHandlerName[handlerName]
 	if !ok {
-		handlerMetricsByHandlerName[handlerName] = newHandlerMetrics(handlerName, buckets)
+		handlerMetricsByHandlerName[handlerName] = newHandlerMetrics(handlerName)
 	}
 }
 
@@ -72,21 +70,22 @@ func GetHandlerMetrics(handlerName string) *HandlerMetrics {
 	return handlerMetricsByHandlerName[handlerName]
 }
 
-func newHandlerMetrics(handlerName string, buckets []float64) *HandlerMetrics {
+func newHandlerMetrics(handlerName string) *HandlerMetrics {
 	return &HandlerMetrics{
 		result: promauto.NewCounterVec(
 			prometheus.CounterOpts{
-				Subsystem: "handlers",
+				Namespace: Namespace,
+				Subsystem: Subsystem,
 				Name:      fmt.Sprintf("%s_result", handlerName),
 				Help:      fmt.Sprintf("The %s's result", handlerName),
 			},
 			[]string{HandlerResult}),
-		latency: promauto.NewHistogram(
-			prometheus.HistogramOpts{
-				Subsystem: "handlers",
+		latency: promauto.NewSummary(
+			prometheus.SummaryOpts{
+				Namespace: Namespace,
+				Subsystem: Subsystem,
 				Name:      fmt.Sprintf("%s_latency", handlerName),
 				Help:      fmt.Sprintf("The %s's latency", handlerName),
-				Buckets:   buckets,
 			}),
 	}
 }
@@ -110,14 +109,14 @@ func (hm *HandlerMetrics) GetExceededRetiesCount() (float64, error) {
 	return hm.getCounterValue(ExceededRetries)
 }
 
-func (hm *HandlerMetrics) GetLatencyBuckets() ([]*io_prometheus_client.Bucket, error) {
+func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := hm.latency.Write(m)
 	if err != nil {
 		return nil, err
 	}
 
-	return m.GetHistogram().Bucket, nil
+	return m.GetSummary().SampleCount, nil
 }
 
 func (hm *HandlerMetrics) getCounterValue(label string) (float64, error) {
