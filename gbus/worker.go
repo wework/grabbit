@@ -320,8 +320,8 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if err == nil {
 		_ = worker.ack(delivery)
 	} else {
-		//TODO: Report message rejected
 		_ = worker.reject(false, delivery)
+		metrics.ReportRejectedMessage()
 	}
 }
 

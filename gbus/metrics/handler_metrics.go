@@ -13,11 +13,11 @@ var (
 )
 
 const (
-	Failure           = "failure"
-	Success           = "success"
-	HandlerResult     = "result"
-	HandlersSubsystem = "handlers"
-	grabbitPrefix     = "grabbit"
+	failure       = "failure"
+	success       = "success"
+	handlerResult = "result"
+	handlers      = "handlers"
+	grabbitPrefix = "grabbit"
 )
 
 type HandlerMetrics struct {
@@ -36,6 +36,15 @@ func AddHandlerMetrics(handlerName string) {
 
 func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger logrus.FieldLogger) error {
 	handlerMetrics := GetHandlerMetrics(handlerName)
+	defer func() {
+		if p := recover(); p != nil {
+			if handlerMetrics != nil {
+				handlerMetrics.result.WithLabelValues(failure).Inc()
+			}
+
+			panic(p)
+		}
+	}()
 
 	if handlerMetrics == nil {
 		logger.WithField("handler", handlerName).Warn("Running with metrics - couldn't find metrics for the given handler")
@@ -45,9 +54,9 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger
 	err := trackTime(handleMessage, handlerMetrics.latency)
 
 	if err != nil {
-		handlerMetrics.result.WithLabelValues(Failure).Inc()
+		handlerMetrics.result.WithLabelValues(failure).Inc()
 	} else {
-		handlerMetrics.result.WithLabelValues(Success).Inc()
+		handlerMetrics.result.WithLabelValues(success).Inc()
 	}
 
 	return err
@@ -67,15 +76,15 @@ func newHandlerMetrics(handlerName string) *HandlerMetrics {
 		result: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: grabbitPrefix,
-				Subsystem: HandlersSubsystem,
+				Subsystem: handlers,
 				Name:      fmt.Sprintf("%s_result", handlerName),
 				Help:      fmt.Sprintf("The %s's result", handlerName),
 			},
-			[]string{HandlerResult}),
+			[]string{handlerResult}),
 		latency: prometheus.NewSummary(
 			prometheus.SummaryOpts{
 				Namespace: grabbitPrefix,
-				Subsystem: HandlersSubsystem,
+				Subsystem: handlers,
 				Name:      fmt.Sprintf("%s_latency", handlerName),
 				Help:      fmt.Sprintf("The %s's latency", handlerName),
 			}),
@@ -90,11 +99,11 @@ func trackTime(functionToTrack func() error, observer prometheus.Observer) error
 }
 
 func (hm *HandlerMetrics) GetSuccessCount() (float64, error) {
-	return hm.getCounterValue(Success)
+	return hm.getLabeledCounterValue(success)
 }
 
 func (hm *HandlerMetrics) GetFailureCount() (float64, error) {
-	return hm.getCounterValue(Failure)
+	return hm.getLabeledCounterValue(failure)
 }
 
 func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
@@ -107,7 +116,7 @@ func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	return m.GetSummary().SampleCount, nil
 }
 
-func (hm *HandlerMetrics) getCounterValue(label string) (float64, error) {
+func (hm *HandlerMetrics) getLabeledCounterValue(label string) (float64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := hm.result.WithLabelValues(label).Write(m)
 
