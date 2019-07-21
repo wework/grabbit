@@ -320,9 +320,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if err == nil {
 		_ = worker.ack(delivery)
 	} else {
-		for _, handler := range handlers {
-			metrics.ReportHandlerExceededMaxRetries(handler.Name(), worker.log())
-		}
+		//TODO: Report message rejected
 		_ = worker.reject(false, delivery)
 	}
 }

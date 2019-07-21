@@ -3,24 +3,21 @@ package metrics
 import (
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_model/go"
 	"github.com/sirupsen/logrus"
 	"sync"
 )
 
 var (
-	handlerMetricsByHandlerName  = make(map[string]*HandlerMetrics)
-	lock      					 = &sync.Mutex{}
+	handlerMetricsByHandlerName = &sync.Map{}
 )
 
 const (
 	Failure           = "failure"
 	Success           = "success"
-	ExceededRetries   = "exceeded_retries"
 	HandlerResult     = "result"
-	GrabbitNamespace  = "grabbit"
 	HandlersSubsystem = "handlers"
+	grabbitPrefix     = "grabbit"
 )
 
 type HandlerMetrics struct {
@@ -29,18 +26,18 @@ type HandlerMetrics struct {
 }
 
 func AddHandlerMetrics(handlerName string) {
-	lock.Lock()
-	defer lock.Unlock()
-	_, ok := handlerMetricsByHandlerName[handlerName]
-	if !ok {
-		handlerMetricsByHandlerName[handlerName] = newHandlerMetrics(handlerName)
+	handlerMetrics := newHandlerMetrics(handlerName)
+	_, exists := handlerMetricsByHandlerName.LoadOrStore(handlerName, handlerMetrics)
+
+	if !exists {
+		prometheus.MustRegister(handlerMetrics.latency, handlerMetrics.result)
 	}
 }
 
 func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger logrus.FieldLogger) error {
-	handlerMetrics, ok := handlerMetricsByHandlerName[handlerName]
+	handlerMetrics := GetHandlerMetrics(handlerName)
 
-	if !ok {
+	if handlerMetrics == nil {
 		logger.WithField("handler", handlerName).Warn("Running with metrics - couldn't find metrics for the given handler")
 		return handleMessage()
 	}
@@ -56,33 +53,28 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger
 	return err
 }
 
-func ReportHandlerExceededMaxRetries(handlerName string, logger logrus.FieldLogger) {
-	handlerMetrics, ok := handlerMetricsByHandlerName[handlerName]
-
-	if !ok {
-		logger.WithField("handler", handlerName).Warn("Report handler exceeded retries - couldn't find metrics for the given handler")
+func GetHandlerMetrics(handlerName string) *HandlerMetrics {
+	entry, ok := handlerMetricsByHandlerName.Load(handlerName)
+	if ok {
+		return entry.(*HandlerMetrics)
 	}
 
-	handlerMetrics.result.WithLabelValues(ExceededRetries).Inc()
-}
-
-func GetHandlerMetrics(handlerName string) *HandlerMetrics {
-	return handlerMetricsByHandlerName[handlerName]
+	return nil
 }
 
 func newHandlerMetrics(handlerName string) *HandlerMetrics {
 	return &HandlerMetrics{
-		result: promauto.NewCounterVec(
+		result: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Namespace: GrabbitNamespace,
+				Namespace: grabbitPrefix,
 				Subsystem: HandlersSubsystem,
 				Name:      fmt.Sprintf("%s_result", handlerName),
 				Help:      fmt.Sprintf("The %s's result", handlerName),
 			},
 			[]string{HandlerResult}),
-		latency: promauto.NewSummary(
+		latency: prometheus.NewSummary(
 			prometheus.SummaryOpts{
-				Namespace: GrabbitNamespace,
+				Namespace: grabbitPrefix,
 				Subsystem: HandlersSubsystem,
 				Name:      fmt.Sprintf("%s_latency", handlerName),
 				Help:      fmt.Sprintf("The %s's latency", handlerName),
@@ -103,10 +95,6 @@ func (hm *HandlerMetrics) GetSuccessCount() (float64, error) {
 
 func (hm *HandlerMetrics) GetFailureCount() (float64, error) {
 	return hm.getCounterValue(Failure)
-}
-
-func (hm *HandlerMetrics) GetExceededRetiesCount() (float64, error) {
-	return hm.getCounterValue(ExceededRetries)
 }
 
 func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {

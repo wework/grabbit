@@ -107,30 +107,6 @@ func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 	}
 }
 
-func TestRunHandlerWithMetric_ExceededRetriesCounter(t *testing.T) {
-	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_ExceededRetriesCounter")
-	name := "exceededRetries"
-	metrics.AddHandlerMetrics(name)
-	hm := metrics.GetHandlerMetrics(name)
-
-	if hm == nil {
-		t.Errorf("Couldn't find handler with the name %s", name)
-	}
-
-	for i := 1; i < runningTries; i++ {
-		metrics.ReportHandlerExceededMaxRetries(name, logger)
-		count, err := hm.GetExceededRetiesCount()
-
-		if err != nil {
-			t.Errorf("Failed to get counter value: %e", err)
-		}
-
-		if count != float64(i) {
-			t.Errorf("Expected to get %f as the value of the exceeded retries counter, but got %f", float64(i), count)
-		}
-	}
-}
-
 func TestRunHandlerWithMetric_Latency(t *testing.T) {
 	logger = logrus.WithField("testCase", "TestRunHandlerWithMetric_ExceededRetriesCounter")
 	name := "latency"

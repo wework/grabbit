@@ -107,7 +107,6 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-
 	gb.Glue = saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider)
 	return gb
 }
