@@ -21,10 +21,10 @@ func TestInstanceInvocationReturnsErrors(t *testing.T) {
 	exchange, routingKey := "", "kong"
 	invocationStub := &sagaInvocation{}
 
-	failName := getFunNameFromHandler(s.Fail)
+	failName := gbus.MessageHandler(s.Fail).Name()
 	failFilter := gbus.NewMessageFilter(exchange, routingKey, m1)
 
-	passName := getFunNameFromHandler(s.Pass)
+	passName := gbus.MessageHandler(s.Pass).Name()
 	passFilter := gbus.NewMessageFilter(exchange, routingKey, m2)
 
 	//map the filter to correct saga function name

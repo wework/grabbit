@@ -5,9 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"math/rand"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -322,6 +321,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.ack(delivery)
 	} else {
 		_ = worker.reject(false, delivery)
+		metrics.ReportRejectedMessage()
 	}
 }
 
@@ -363,7 +363,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		var hspan opentracing.Span
 		var hsctx context.Context
 		for _, handler := range handlers {
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
+			hspan, hsctx = opentracing.StartSpanFromContext(sctx, handler.Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -378,8 +378,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 					MaxRetryCount: MaxRetryCount,
 				},
 			}
-			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
-			handlerErr = handler(ctx, message)
+			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
+			handlerErr = metrics.RunHandlerWithMetric(func() error {
+				return  handler(ctx, message)
+			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break

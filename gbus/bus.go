@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -670,7 +671,6 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 }
 
 func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Message, handler MessageHandler) error {
-
 	b.HandlersLock.Lock()
 	defer b.HandlersLock.Unlock()
 
@@ -678,6 +678,7 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 		b.Serializer.Register(msg)
 	}
 
+	metrics.AddHandlerMetrics(handler.Name())
 	registration := NewRegistration(exchange, routingKey, msg, handler)
 	b.Registrations = append(b.Registrations, registration)
 	for _, worker := range b.workers {
