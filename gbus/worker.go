@@ -261,7 +261,6 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	} else {
 		_ = worker.ack(delivery)
 	}
-	return
 }
 
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
