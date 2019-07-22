@@ -258,6 +258,8 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 
 	if reject {
 		_ = worker.reject(true, delivery)
+	} else {
+		worker.ack(delivery)
 	}
 }
 
