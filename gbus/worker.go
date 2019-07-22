@@ -236,22 +236,28 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	if txCreateErr != nil {
 		worker.log().WithError(txCreateErr).Error("failed creating new tx")
 		worker.span.LogFields(slog.Error(txCreateErr))
-		_ = worker.ack(delivery)
+		_ = worker.reject(true, delivery)
 		return
 	}
-	var fn func() error
 	err := worker.deadletterHandler(tx, delivery)
+	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")
 		worker.span.LogFields(slog.Error(err))
-		fn = tx.Rollback
+		err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
+		reject = true
 	} else {
-		fn = tx.Commit
+		err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 	}
-	err = worker.SafeWithRetries(fn, MaxRetryCount)
+
 	if err != nil {
 		worker.log().WithError(err).Error("Rollback/Commit deadletter handler message")
 		worker.span.LogFields(slog.Error(err))
+		reject = true
+	}
+
+	if reject {
+		_ = worker.reject(true, delivery)
 	}
 }
 
