@@ -34,6 +34,14 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 	return bm
 }
 
+//NewRawBusMessage creates a BusMessage from headers of an amqp message and payload
+func NewRawBusMessage(headers amqp.Table, payload Message) *BusMessage {
+	bm := &BusMessage{}
+	bm.SetFromAMQPHeaders(headers)
+	bm.SetPayload(payload)
+	return bm
+}
+
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
 func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers = amqp.Table{}

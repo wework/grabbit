@@ -47,6 +47,12 @@ type Messaging interface {
 	Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
 
 	/*
+		Send a command or a command response to a specific service without serializing it
+		one-to-one semantics
+	*/
+	RawSend(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
+
+	/*
 		Publish and event, one-to-many semantics
 	*/
 	Publish(ctx context.Context, exchange, topic string, event *BusMessage, policies ...MessagePolicy) error
