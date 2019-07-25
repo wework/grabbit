@@ -50,7 +50,7 @@ type Messaging interface {
 		Send a command or a command response to a specific service without serializing it
 		one-to-one semantics
 	*/
-	RawSend(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
+	RawSend(ctx context.Context, serializer, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error
 
 	/*
 		Publish and event, one-to-many semantics
