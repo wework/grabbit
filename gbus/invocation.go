@@ -51,6 +51,13 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 	return err
 }
 
+func (dfi *defaultInvocationContext) RawSend(ctx context.Context, serializer, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error {
+	if dfi.tx != nil {
+		return dfi.bus.sendRawWithTx(ctx, dfi.tx, serializer, toService, replyTo, message, policies...)
+	}
+	return dfi.bus.RawSend(ctx, serializer, toService, replyTo, message, policies...)
+}
+
 func (dfi *defaultInvocationContext) Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error {
 	if dfi.tx != nil {
 		return dfi.bus.sendWithTx(ctx, dfi.tx, toService, command, policies...)
