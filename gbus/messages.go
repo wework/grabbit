@@ -19,12 +19,13 @@ type BusMessage struct {
 }
 
 type RawMessage struct {
-	Serializer string
-	RawData    []byte
+	Serializer  string
+	RawData     []byte
+	MessageName string
 }
 
 func (r RawMessage) SchemaName() string {
-	return ""
+	return r.MessageName
 }
 
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
@@ -44,11 +45,12 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 }
 
 //NewRawBusMessage creates a BusMessage from headers of an amqp message and RawMessage
-func NewRawBusMessage(sagaID, sagaCorrelationID, rPCID, schemaName string, payload Message) *BusMessage {
+func NewRawBusMessage(sagaID, sagaCorrelationID, rPCID string, payload Message) *BusMessage {
 	bm := &BusMessage{}
-	headers := NewRawHeaders(sagaID, sagaCorrelationID, rPCID, schemaName)
+	headers := NewRawHeaders(sagaID, sagaCorrelationID, rPCID, payload.SchemaName())
 	bm.SetFromAMQPHeaders(headers)
 	bm.SetPayload(payload)
+
 	return bm
 }
 
