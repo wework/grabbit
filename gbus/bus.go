@@ -461,7 +461,7 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 		rpcID: rpcID}
 
 	b.Serializer.Register(reply.Payload)
-	err := b.sendImpl(ctx, nil, "", service, b.rpcQueue.Name, "", "", request, rpc)
+	err := b.sendImpl(ctx, nil, service, b.rpcQueue.Name, "", "", request, rpc)
 	if err != nil {
 		b.Log().WithError(err).Error("could not send message")
 		return nil, err
@@ -489,7 +489,7 @@ func (b *DefaultBus) publishWithTx(ctx context.Context, ambientTx *sql.Tx, excha
 	}
 	message.Semantics = EVT
 	publish := func(tx *sql.Tx) error {
-		return b.sendImpl(ctx, tx, "", "", b.SvcName, exchange, topic, message, policies...)
+		return b.sendImpl(ctx, tx, "", b.SvcName, exchange, topic, message, policies...)
 	}
 	return b.withTx(publish, ambientTx)
 }
@@ -505,13 +505,13 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	return b.withTx(send, ambientTx)
 }
 
-func (b *DefaultBus) sendRawWithTx(ctx context.Context, ambientTx *sql.Tx, toService, replayTo string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) sendRawWithTx(ctx context.Context, ambientTx *sql.Tx, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = CMD
 	send := func(tx *sql.Tx) error {
-		return b.sendImpl(ctx, tx, toService, replayTo, "", "", message, policies...)
+		return b.sendImpl(ctx, tx, toService, replyTo, "", "", message, policies...)
 	}
 	return b.withTx(send, ambientTx)
 }
@@ -627,16 +627,16 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 
 	var buffer []byte
 	var serializer string
-	if reflect.TypeOf(message).Name() == "RawMessage" {
-		buffer = message.Payload.RawData
-		serializer = message.Payload.Serializer
-	} else {
+	if reflect.TypeOf(message).Name() != "RawMessage" {
 		buffer, err = b.Serializer.Encode(message.Payload)
 		if err != nil {
 			b.Log().WithError(err).WithField("message", message).Error("failed to send message, encoding of message failed")
 			return err
 		}
 		serializer = b.Serializer.Name()
+	} else {
+		buffer = message.Payload.RawData
+		serializer = message.Payload.Serializer
 	}
 
 	msg := amqp.Publishing{
