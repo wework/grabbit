@@ -65,6 +65,12 @@ func (si *sagaInvocation) Send(ctx context.Context, toService string,
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
+func (si *sagaInvocation) RawSend(ctx context.Context, toService, ReplyTo string,
+	command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
+	si.setCorrelationIDs(command, false)
+	return si.decoratedBus.RawSend(ctx, toService, ReplyTo, command, policies...)
+}
+
 func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string,
 	event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(event, true)
