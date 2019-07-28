@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/wework/grabbit/gbus/metrics"
-	"reflect"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -627,7 +626,8 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 
 	var buffer []byte
 	var serializer string
-	if reflect.TypeOf(message).Name() != "RawMessage" {
+	payload, ok := message.Payload.(RawMessage)
+	if !ok {
 		buffer, err = b.Serializer.Encode(message.Payload)
 		if err != nil {
 			b.Log().WithError(err).WithField("message", message).Error("failed to send message, encoding of message failed")
@@ -635,8 +635,8 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		}
 		serializer = b.Serializer.Name()
 	} else {
-		buffer = message.Payload.RawData
-		serializer = message.Payload.Serializer
+		buffer = payload.RawData
+		serializer = payload.Serializer
 	}
 
 	msg := amqp.Publishing{
