@@ -18,6 +18,15 @@ type BusMessage struct {
 	RPCID             string
 }
 
+type RawMessage struct {
+	Serializer string
+	RawData    []byte
+}
+
+func (r RawMessage) SchemaName() string {
+	return ""
+}
+
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
 func NewBusMessage(payload Message) *BusMessage {
 	bm := &BusMessage{
@@ -34,7 +43,7 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 	return bm
 }
 
-//NewRawBusMessage creates a BusMessage from headers of an amqp message and payload
+//NewRawBusMessage creates a BusMessage from headers of an amqp message and RawMessage
 func NewRawBusMessage(headers amqp.Table, payload Message) *BusMessage {
 	bm := &BusMessage{}
 	bm.SetFromAMQPHeaders(headers)

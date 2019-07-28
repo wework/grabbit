@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/wework/grabbit/gbus/metrics"
+	"reflect"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -432,8 +433,8 @@ func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMes
 }
 
 //RawSend implements  GBus.RawSend(destination string, message interface{})
-func (b *DefaultBus) RawSend(ctx context.Context, serializer, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error {
-	return b.sendRawWithTx(ctx, nil, serializer, toService, replyTo, message, policies...)
+func (b *DefaultBus) RawSend(ctx context.Context, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error {
+	return b.sendRawWithTx(ctx, nil, toService, replyTo, message, policies...)
 }
 
 //RPC implements  GBus.RPC
@@ -499,18 +500,18 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	}
 	message.Semantics = CMD
 	send := func(tx *sql.Tx) error {
-		return b.sendImpl(ctx, tx, "", toService, b.SvcName, "", "", message, policies...)
+		return b.sendImpl(ctx, tx, toService, b.SvcName, "", "", message, policies...)
 	}
 	return b.withTx(send, ambientTx)
 }
 
-func (b *DefaultBus) sendRawWithTx(ctx context.Context, ambientTx *sql.Tx, serializer, toService, replayTo string, message *BusMessage, policies ...MessagePolicy) error {
+func (b *DefaultBus) sendRawWithTx(ctx context.Context, ambientTx *sql.Tx, toService, replayTo string, message *BusMessage, policies ...MessagePolicy) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
 	message.Semantics = CMD
 	send := func(tx *sql.Tx) error {
-		return b.sendImpl(ctx, tx, serializer, toService, replayTo, "", "", message, policies...)
+		return b.sendImpl(ctx, tx, toService, replayTo, "", "", message, policies...)
 	}
 	return b.withTx(send, ambientTx)
 }
@@ -605,7 +606,7 @@ func (b *DefaultBus) monitorAMQPErrors() {
 	}
 }
 
-func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, serializedBy string, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
+func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
 	span, _ := opentracing.StartSpanFromContext(sctx, "sendImpl")
@@ -624,11 +625,13 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, serializedBy str
 		b.Log().WithError(err).Error("could not inject headers")
 	}
 
-	buffer := message.Payload
-	serializer := serializedBy
-	// if there message was already serialized by "serializedBy" then it should be sent raw. otherwise, it should get serialized with the bug serializer
-	if serializedBy == "" {
-		buffer, err := b.Serializer.Encode(message.Payload)
+	var buffer []byte
+	var serializer string
+	if reflect.TypeOf(message).Name() == "RawMessage" {
+		buffer = message.Payload.RawData
+		serializer = message.Payload.Serializer
+	} else {
+		buffer, err = b.Serializer.Encode(message.Payload)
 		if err != nil {
 			b.Log().WithError(err).WithField("message", message).Error("failed to send message, encoding of message failed")
 			return err
