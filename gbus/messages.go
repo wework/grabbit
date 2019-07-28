@@ -44,11 +44,23 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 }
 
 //NewRawBusMessage creates a BusMessage from headers of an amqp message and RawMessage
-func NewRawBusMessage(headers amqp.Table, payload Message) *BusMessage {
+func NewRawBusMessage(sagaID, sagaCorrelationID, rPCID, schemaName string, payload Message) *BusMessage {
 	bm := &BusMessage{}
+	headers := NewRawHeaders(sagaID, sagaCorrelationID, rPCID, schemaName)
 	bm.SetFromAMQPHeaders(headers)
 	bm.SetPayload(payload)
 	return bm
+}
+
+//NewRawHeaders creates headers of an amqp message
+func NewRawHeaders(sagaID, sagaCorrelationID, rPCID, schemaName string) (headers amqp.Table) {
+	headers = amqp.Table{}
+	headers["x-msg-saga-id"] = sagaID
+	headers["x-msg-saga-correlation-id"] = sagaCorrelationID
+	headers["x-grabbit-msg-rpc-id"] = rPCID
+	headers["x-msg-name"] = schemaName
+
+	return
 }
 
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
