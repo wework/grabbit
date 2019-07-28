@@ -67,7 +67,6 @@ func (si *sagaInvocation) Send(ctx context.Context, toService string,
 
 func (si *sagaInvocation) RawSend(ctx context.Context, toService, ReplyTo string,
 	command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
-	si.setCorrelationIDs(command, false)
 	return si.decoratedBus.RawSend(ctx, toService, ReplyTo, command, policies...)
 }
 
