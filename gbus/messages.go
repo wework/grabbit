@@ -45,8 +45,10 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 }
 
 //NewRawBusMessage creates a BusMessage from headers of an amqp message and RawMessage
-func NewRawBusMessage(sagaID, sagaCorrelationID, rPCID string, payload Message) *BusMessage {
-	bm := &BusMessage{}
+func NewRawBusMessage(msgId, sagaID, sagaCorrelationID, rPCID string, payload Message) *BusMessage {
+	bm := &BusMessage{
+		ID: msgId,
+	}
 	headers := NewRawHeaders(sagaID, sagaCorrelationID, rPCID, payload.SchemaName())
 	bm.SetFromAMQPHeaders(headers)
 	bm.SetPayload(payload)
