@@ -17,6 +17,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/lopezator/migrator v0.1.0 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
@@ -42,3 +43,5 @@ require (
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
+
+replace github.com/lopezator/migrator => github.com/adiweiss/migrator v0.1.1
