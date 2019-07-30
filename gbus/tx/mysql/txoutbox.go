@@ -323,7 +323,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 
 func (outbox *TxOutbox) ensureSchema(db *sql.DB, svcName string) error {
 
-	migrationsTable := "grabbitMigrations"
+	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
 
 	createOutboxTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
 	rec_id int NOT NULL AUTO_INCREMENT,
