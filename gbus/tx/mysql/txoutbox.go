@@ -325,6 +325,25 @@ func (outbox *TxOutbox) ensureSchema(db *sql.DB, svcName string) error {
 
 	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
 
+	migrate := migrator.NewNamed(migrationsTable,
+		outboxMigration(svcName),
+	)
+	err := migrate.Migrate(db)
+	if err != nil {
+		outbox.log().WithField("sql_err", err).Info("migration error")
+	}
+
+	return err
+
+}
+
+func getOutboxName(svcName string) string {
+
+	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
+}
+
+func outboxMigration(svcName string) *migrator.Migration {
+
 	createOutboxTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
 	rec_id int NOT NULL AUTO_INCREMENT,
 	message_id varchar(50) NOT NULL UNIQUE,
@@ -340,27 +359,13 @@ func (outbox *TxOutbox) ensureSchema(db *sql.DB, svcName string) error {
 	PRIMARY KEY(rec_id),
 	INDEX status_delivery (rec_id, status, delivery_attempts))`
 
-	migrate := migrator.NewNamed(migrationsTable,
-		&migrator.Migration{
-			Name: "create outbox table",
-			Func: func(tx *sql.Tx) error {
-				if _, err := tx.Exec(createOutboxTablesSQL); err != nil {
-					return err
-				}
-				return nil
-			},
+	return &migrator.Migration{
+		Name: "create outbox table",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(createOutboxTablesSQL); err != nil {
+				return err
+			}
+			return nil
 		},
-	)
-	err := migrate.Migrate(db)
-	if err != nil {
-		outbox.log().WithField("sql_err", err).Info("migration error")
 	}
-
-	return err
-
-}
-
-func getOutboxName(svcName string) string {
-
-	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
 }
