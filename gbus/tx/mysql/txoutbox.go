@@ -5,16 +5,15 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/lopezator/migrator"
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/wework/grabbit/gbus"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 var (
@@ -342,15 +341,6 @@ func (outbox *TxOutbox) ensureSchema(db *sql.DB, svcName string) error {
 	INDEX status_delivery (rec_id, status, delivery_attempts))`
 
 	migrate := migrator.NewNamed(migrationsTable,
-		&migrator.Migration{
-			Name: "create outbox table",
-			Func: func(tx *sql.Tx) error {
-				if _, err := tx.Exec(createOutboxTablesSQL); err != nil {
-					return err
-				}
-				return nil
-			},
-		},
 		&migrator.Migration{
 			Name: "create outbox table",
 			Func: func(tx *sql.Tx) error {
