@@ -50,7 +50,7 @@ type Messaging interface {
 		Send a command or a command response to a specific service without serializing it
 		one-to-one semantics
 	*/
-	RawSend(ctx context.Context, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error
+	ReturnToQueue(ctx context.Context, exchange, routingKey string, publishing *amqp.Publishing) error
 
 	/*
 		Publish and event, one-to-many semantics

@@ -3,6 +3,7 @@ package gbus
 import (
 	"context"
 	"database/sql"
+	"github.com/streadway/amqp"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -51,11 +52,11 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 	return err
 }
 
-func (dfi *defaultInvocationContext) RawSend(ctx context.Context, toService, replyTo string, message *BusMessage, policies ...MessagePolicy) error {
+func (dfi *defaultInvocationContext) ReturnToQueue(ctx context.Context, exchange, routingKey string, publishing *amqp.Publishing) error {
 	if dfi.tx != nil {
-		return dfi.bus.sendRawWithTx(ctx, dfi.tx, toService, replyTo, message, policies...)
+		return dfi.bus.returnToQueue(ctx, dfi.tx, exchange, routingKey, publishing)
 	}
-	return dfi.bus.RawSend(ctx, toService, replyTo, message, policies...)
+	return dfi.bus.ReturnToQueue(ctx, exchange, routingKey, publishing)
 }
 
 func (dfi *defaultInvocationContext) Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error {

@@ -431,9 +431,9 @@ func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMes
 	return b.sendWithTx(ctx, nil, toService, message, policies...)
 }
 
-//RawSend implements  GBus.RawSend(destination string, message interface{})
-func (b *DefaultBus) ReturnToQueue(ctx context.Context, publishing *amqp.Publishing) error {
-	return b.returnToQueue(ctx, nil, publishing)
+//ReturnToQueue returns a message to its original destination
+func (b *DefaultBus) ReturnToQueue(ctx context.Context, exchange, routingKey string, publishing *amqp.Publishing) error {
+	return b.returnToQueue(ctx, nil, exchange, routingKey, publishing)
 }
 
 //RPC implements  GBus.RPC
@@ -504,13 +504,17 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	return b.withTx(send, ambientTx)
 }
 
-func (b *DefaultBus) returnToQueue(ctx context.Context, ambientTx *sql.Tx, exchange, toService string, publishing amqp.Publishing) error {
+func (b *DefaultBus) returnToQueue(ctx context.Context, ambientTx *sql.Tx, exchange, routingKey string, publishing *amqp.Publishing) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	// TODO remove xdeath headers
+	//publishing.Headers.
+	delete(publishing.Headers, "x-death")
+	delete(publishing.Headers, "x-first-death-queue")
+	delete(publishing.Headers, "x-first-death-reason")
+
 	send := func(tx *sql.Tx) error {
-		return b.sendRawImpl(ctx, tx, exchange, toService, publishing)
+		return b.publish(tx, exchange, routingKey, publishing)
 	}
 	return b.withTx(send, ambientTx)
 }
@@ -605,13 +609,13 @@ func (b *DefaultBus) monitorAMQPErrors() {
 	}
 }
 
-func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg amqp.Publishing) error {
+func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg *amqp.Publishing) error {
 	publish := func() error {
 		//send to the transactional outbox if the bus is transactional
 		//otherwise send directly to amqp
 		if b.IsTxnl && tx != nil {
 			b.Log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
-			saveErr := b.Outbox.Save(tx, exchange, routingKey, msg)
+			saveErr := b.Outbox.Save(tx, exchange, routingKey, *msg)
 			if saveErr != nil {
 				b.Log().WithError(saveErr).Error("failed to save to transactional outbox")
 			}
@@ -621,7 +625,7 @@ func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg amqp.P
 		if b.backpressure {
 			return errors.New("can't send message due to backpressure from amqp broker")
 		}
-		_, outgoingErr := b.Outgoing.Post(exchange, routingKey, msg)
+		_, outgoingErr := b.Outgoing.Post(exchange, routingKey, *msg)
 		return outgoingErr
 	}
 	//currently only one thread can publish at a time
@@ -634,22 +638,6 @@ func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg amqp.P
 		return err
 	}
 	return err
-}
-
-func (b *DefaultBus) sendRawImpl(sctx context.Context, tx *sql.Tx, exchange, routingKey string, msg amqp.Publishing) (er error) {
-	b.SenderLock.Lock()
-	defer b.SenderLock.Unlock()
-	span, _ := opentracing.StartSpanFromContext(sctx, "sendImpl")
-	defer func() {
-		if err := recover(); err != nil {
-			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%s", err, debug.Stack())
-			er = errors.New(errMsg)
-			span.LogFields(slog.Error(er))
-		}
-		span.Finish()
-	}()
-
-	return b.publish(tx, exchange, routingKey, msg)
 }
 
 func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
@@ -703,7 +691,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		key = topic
 	}
 
-	return b.publish(tx, exchange, key, msg)
+	return b.publish(tx, exchange, key, &msg)
 }
 
 func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Message, handler MessageHandler) error {
