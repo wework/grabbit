@@ -52,11 +52,11 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 	return err
 }
 
-func (dfi *defaultInvocationContext) ReturnToQueue(ctx context.Context, exchange, routingKey string, publishing *amqp.Publishing) error {
+func (dfi *defaultInvocationContext) ReturnToQueue(ctx context.Context, routingKey string, publishing *amqp.Publishing) error {
 	if dfi.tx != nil {
-		return dfi.bus.returnToQueue(ctx, dfi.tx, exchange, routingKey, publishing)
+		return dfi.bus.returnToQueue(ctx, dfi.tx, routingKey, publishing)
 	}
-	return dfi.bus.ReturnToQueue(ctx, exchange, routingKey, publishing)
+	return dfi.bus.ReturnToQueue(ctx, routingKey, publishing)
 }
 
 func (dfi *defaultInvocationContext) Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error {

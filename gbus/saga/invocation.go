@@ -66,9 +66,9 @@ func (si *sagaInvocation) Send(ctx context.Context, toService string,
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
-func (si *sagaInvocation) ReturnToQueue(ctx context.Context, exchange, routingKey string,
+func (si *sagaInvocation) ReturnToQueue(ctx context.Context, routingKey string,
 	publishing *amqp.Publishing) error {
-	return si.decoratedBus.ReturnToQueue(ctx, exchange, routingKey, publishing)
+	return si.decoratedBus.ReturnToQueue(ctx, routingKey, publishing)
 }
 
 func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string,
