@@ -34,7 +34,7 @@ func SagaStoreTableMigration(svcName string) *migrator.Migration {
 func SagaStoreIndexMigration(svcName string) *migrator.Migration {
 	tblName := tx.GetSagatableName(svcName)
 
-	createIndexQuery := `CREATE INDEX IF NOT EXISTS ` + tblName + `_sagatype_idx ON ` + tblName + ` (saga_type)`
+	createIndexQuery := `ALTER TABLE ` + tblName + ` ADD INDEX saga_type`
 
 	return &migrator.Migration{
 		Name: "create saga store table index",
