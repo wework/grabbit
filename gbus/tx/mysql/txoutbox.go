@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"github.com/lopezator/migrator"
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -54,13 +53,6 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	tx, e := outbox.txProv.New()
 	if e != nil {
 		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
-	}
-	if ensureErr := outbox.ensureSchema(outbox.txProv.GetDb(), outbox.svcName); ensureErr != nil {
-		err := tx.Rollback()
-		if err != nil {
-			outbox.log().WithError(err).Error("could not rollback the transaction for creation of schemas")
-		}
-		return ensureErr
 	}
 	if outbox.purgeOnStartup {
 		if purgeErr := outbox.purge(tx); purgeErr != nil {
@@ -321,51 +313,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	return nil
 }
 
-func (outbox *TxOutbox) ensureSchema(db *sql.DB, svcName string) error {
-
-	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
-
-	migrate := migrator.NewNamed(migrationsTable,
-		outboxMigration(svcName),
-	)
-	err := migrate.Migrate(db)
-	if err != nil {
-		outbox.log().WithField("sql_err", err).Info("migration error")
-	}
-
-	return err
-
-}
-
 func getOutboxName(svcName string) string {
 
 	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
-}
-
-func outboxMigration(svcName string) *migrator.Migration {
-
-	createOutboxTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
-	rec_id int NOT NULL AUTO_INCREMENT,
-	message_id varchar(50) NOT NULL UNIQUE,
-	message_type varchar(50) NOT NULL,
-	exchange	varchar(50) NOT NULL,
-	routing_key	varchar(50) NOT NULL,
-	publishing	longblob NOT NULL,
-	status	int(11) NOT NULL,
-	relay_id varchar(50)  NULL,
-	delivery_tag	bigint(20) NOT NULL,
-	delivery_attempts int NOT NULL DEFAULT 0,
-	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(rec_id),
-	INDEX status_delivery (rec_id, status, delivery_attempts))`
-
-	return &migrator.Migration{
-		Name: "create outbox table",
-		Func: func(tx *sql.Tx) error {
-			if _, err := tx.Exec(createOutboxTablesSQL); err != nil {
-				return err
-			}
-			return nil
-		},
-	}
 }
