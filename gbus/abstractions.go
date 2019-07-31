@@ -47,10 +47,9 @@ type Messaging interface {
 	Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
 
 	/*
-		Send a command or a command response to a specific service without serializing it
-		one-to-one semantics
+		Returns a message from Deadletter queue to the original queue
 	*/
-	ReturnToQueue(ctx context.Context, publishing *amqp.Publishing) error
+	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 
 	/*
 		Publish and event, one-to-many semantics

@@ -431,9 +431,9 @@ func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMes
 	return b.sendWithTx(ctx, nil, toService, message, policies...)
 }
 
-//ReturnToQueue returns a message to its original destination
-func (b *DefaultBus) ReturnToQueue(ctx context.Context, publishing *amqp.Publishing) error {
-	return b.returnToQueue(ctx, nil, publishing)
+//ReturnDeadToQueue returns a message to its original destination
+func (b *DefaultBus) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
+	return b.returnDeadToQueue(ctx, nil, publishing)
 }
 
 //RPC implements  GBus.RPC
@@ -504,7 +504,7 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	return b.withTx(send, ambientTx)
 }
 
-func (b *DefaultBus) returnToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
+func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
 	if !b.started {
 		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
 	}
