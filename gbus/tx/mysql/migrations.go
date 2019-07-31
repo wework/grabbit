@@ -18,28 +18,12 @@ func SagaStoreTableMigration(svcName string) *migrator.Migration {
 		saga_data LONGBLOB NOT NULL,
 		version integer NOT NULL DEFAULT 0,
 		last_update timestamp  DEFAULT NOW()
-		)`
+		INDEX ` + tblName + `_sagatype_idx (saga_type))`
 
 	return &migrator.Migration{
 		Name: "create saga store table",
 		Func: func(tx *sql.Tx) error {
 			if _, err := tx.Exec(createTableQuery); err != nil {
-				return err
-			}
-			return nil
-		},
-	}
-}
-
-func SagaStoreIndexMigration(svcName string) *migrator.Migration {
-	tblName := tx.GetSagatableName(svcName)
-
-	createIndexQuery := `ALTER TABLE ` + tblName + ` ADD INDEX saga_type`
-
-	return &migrator.Migration{
-		Name: "create saga store table index",
-		Func: func(tx *sql.Tx) error {
-			if _, err := tx.Exec(createIndexQuery); err != nil {
 				return err
 			}
 			return nil
@@ -82,7 +66,6 @@ func EnsureSchema(db *sql.DB, svcName string) {
 	migrate := migrator.NewNamed(migrationsTable,
 		OutboxMigrations(svcName),
 		SagaStoreTableMigration(svcName),
-		SagaStoreIndexMigration(svcName),
 	)
 	err := migrate.Migrate(db)
 	if err != nil {
