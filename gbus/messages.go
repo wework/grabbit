@@ -18,16 +18,6 @@ type BusMessage struct {
 	RPCID             string
 }
 
-type RawMessage struct {
-	Serializer  string
-	RawData     []byte
-	MessageName string
-}
-
-func (r RawMessage) SchemaName() string {
-	return r.MessageName
-}
-
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
 func NewBusMessage(payload Message) *BusMessage {
 	bm := &BusMessage{
@@ -42,29 +32,6 @@ func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
 	bm := &BusMessage{}
 	bm.SetFromAMQPHeaders(headers)
 	return bm
-}
-
-//NewRawBusMessage creates a BusMessage from headers of an amqp message and RawMessage
-func NewRawBusMessage(msgId, sagaID, sagaCorrelationID, rPCID string, payload Message) *BusMessage {
-	bm := &BusMessage{
-		ID: msgId,
-	}
-	headers := NewRawHeaders(sagaID, sagaCorrelationID, rPCID, payload.SchemaName())
-	bm.SetFromAMQPHeaders(headers)
-	bm.SetPayload(payload)
-
-	return bm
-}
-
-//NewRawHeaders creates headers of an amqp message
-func NewRawHeaders(sagaID, sagaCorrelationID, rPCID, schemaName string) (headers amqp.Table) {
-	headers = amqp.Table{}
-	headers["x-msg-saga-id"] = sagaID
-	headers["x-msg-saga-correlation-id"] = sagaCorrelationID
-	headers["x-grabbit-msg-rpc-id"] = rPCID
-	headers["x-msg-name"] = schemaName
-
-	return
 }
 
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
