@@ -17,7 +17,7 @@ func SagaStoreTableMigration(svcName string) *migrator.Migration {
 		saga_type VARCHAR(255)  NOT NULL,
 		saga_data LONGBLOB NOT NULL,
 		version integer NOT NULL DEFAULT 0,
-		last_update timestamp  DEFAULT NOW()
+		last_update timestamp  DEFAULT NOW(),
 		INDEX ` + tblName + `_sagatype_idx (saga_type))`
 
 	return &migrator.Migration{
