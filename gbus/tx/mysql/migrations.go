@@ -11,7 +11,7 @@ import (
 func SagaStoreTableMigration(svcName string) *migrator.Migration {
 	tblName := tx.GetSagatableName(svcName)
 
-	createTableQuery := `CREATE TABLE IF NOT EXISTS` + tblName + ` (
+	createTableQuery := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
 		rec_id INT PRIMARY KEY AUTO_INCREMENT,
 		saga_id VARCHAR(255) UNIQUE NOT NULL,
 		saga_type VARCHAR(255)  NOT NULL,
