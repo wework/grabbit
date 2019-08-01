@@ -31,35 +31,20 @@ func (tm *TimeoutManager) ensureSchema() error {
 		return e
 	}
 
-	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
-
-	tm.Log().Info(selectSQL)
-
-	row := tx.QueryRow(selectSQL)
-	var exists int
-	err := row.Scan(&exists)
-	if err != nil && err != sql.ErrNoRows {
-
-		createTableSQL := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
+	createTableSQL := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
       rec_id INT PRIMARY KEY AUTO_INCREMENT,
       saga_id VARCHAR(255) UNIQUE NOT NULL,
 	  timeout DATETIME NOT NULL,
 	  INDEX ix_` + tm.GetTimeoutsTableName() + `_timeout_date(timeout)
       )`
 
-		if _, e := tx.Exec(createTableSQL); e != nil {
-			if rbkErr := tx.Rollback(); rbkErr != nil {
-				tm.Log().Warn("timeout manager failed to rollback transaction")
-			}
-			return e
+	if _, e := tx.Exec(createTableSQL); e != nil {
+		if rbkErr := tx.Rollback(); rbkErr != nil {
+			tm.Log().Warn("timeout manager failed to rollback transaction")
 		}
-
-		return tx.Commit()
-	} else if err != nil {
-		return err
+		return e
 	}
-
-	return nil
+	return tx.Commit()
 }
 
 func (tm *TimeoutManager) purge() error {
