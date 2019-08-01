@@ -3,8 +3,9 @@ package gbus
 import (
 	"context"
 	"database/sql"
-	"github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/streadway/amqp"
 )
@@ -215,6 +216,16 @@ type TxOutbox interface {
 	Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error
 	Start(amqpOut *AMQPOutbox) error
 	Stop() error
+}
+
+//TimeoutManager abstracts the implementation of determining when a saga should be timed out
+type TimeoutManager interface {
+	//RegisterTimeout requests the TimeoutManager to register a timeout for a specific saga instance
+	RegisterTimeout(tx *sql.Tx, sagaID string, duration time.Duration) error
+	//ClearTimeout clears a timeout for a specific saga
+	ClearTimeout(tx *sql.Tx, sagaID string) error
+	//AcceptTimeoutFunction accepts the function that the TimeoutManager should invoke once a timeout expires
+	AcceptTimeoutFunction(func(tx *sql.Tx, sagaID string) error)
 }
 
 type Logged interface {

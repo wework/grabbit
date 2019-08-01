@@ -2,11 +2,11 @@ package saga
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
@@ -21,6 +21,9 @@ func fqnsFromMessages(objs []gbus.Message) []string {
 	return fqns
 }
 
+//ErrInstanceNotFound is returned by the saga store if a saga lookup by saga id returns no valid instances
+var ErrInstanceNotFound = errors.New("saga  not be found")
+
 var _ gbus.SagaRegister = &Glue{}
 
 //Glue ties the incoming messages from the Bus with the needed Saga instances
@@ -32,8 +35,8 @@ type Glue struct {
 	alreadyRegistred map[string]bool
 	msgToDefMap      map[string][]*Def
 	sagaStore        Store
-	requestTimeout   func(string, string, time.Duration)
 	getLog           func() logrus.FieldLogger
+	timeoutManager   gbus.TimeoutManager
 }
 
 func (imsm *Glue) isSagaAlreadyRegistered(sagaType reflect.Type) bool {
@@ -132,7 +135,9 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
 					imsm.log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
-					imsm.requestTimeout(imsm.svcName, newInstance.ID, duration)
+					if tme := imsm.timeoutManager.RegisterTimeout(invocation.Tx(), newInstance.ID, duration); tme != nil {
+						return tme
+					}
 				}
 			}
 			return nil
@@ -209,7 +214,12 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 	if instance.isComplete() {
 		imsm.log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
 
-		return imsm.sagaStore.DeleteSaga(tx, instance)
+		deleteErr := imsm.sagaStore.DeleteSaga(tx, instance)
+		if deleteErr != nil {
+			return deleteErr
+		}
+
+		return imsm.timeoutManager.ClearTimeout(tx, instance.ID)
 
 	}
 	return imsm.sagaStore.UpdateSaga(tx, instance)
@@ -233,9 +243,15 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
 }
 
+//TimeoutSaga fetches a saga instance and calls its timeout interface
 func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 
 	saga, err := imsm.sagaStore.GetSagaByID(tx, sagaID)
+	//we are assuming that if the TimeoutSaga has been called but no instance returned from the store the saga
+	//has been completed already and
+	if err == ErrInstanceNotFound {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -252,8 +268,8 @@ func (imsm *Glue) log() logrus.FieldLogger {
 }
 
 //NewGlue creates a new Sagamanager
-func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, requestTimeoutFunc func(string, string, time.Duration)) *Glue {
-	return &Glue{
+func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider, getLog func() logrus.FieldLogger, timeoutManager gbus.TimeoutManager) *Glue {
+	g := &Glue{
 		svcName:          svcName,
 		bus:              bus,
 		sagaDefs:         make([]*Def, 0),
@@ -262,6 +278,9 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		msgToDefMap:      make(map[string][]*Def),
 		sagaStore:        sagaStore,
 		getLog:           getLog,
-		requestTimeout:   requestTimeoutFunc,
+		timeoutManager:   timeoutManager,
 	}
+
+	timeoutManager.AcceptTimeoutFunction(g.TimeoutSaga)
+	return g
 }

@@ -133,6 +133,10 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 			store.log().WithError(err).Error("could not close rows")
 		}
 	}()
+
+	if err != nil && err == sql.ErrNoRows {
+		return nil, saga.ErrInstanceNotFound
+	}
 	if err != nil {
 		store.log().WithError(err).
 			WithFields(log.Fields{"saga_id": sagaID, "table_name": store.GetSagatableName()}).

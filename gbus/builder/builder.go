@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/saga/stores"
 	"github.com/wework/grabbit/gbus/serialization"
-	"github.com/wework/grabbit/gbus/tx"
 	"github.com/wework/grabbit/gbus/tx/mysql"
 )
 
@@ -72,8 +70,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 	var (
 		sagaStore          saga.Store
-		requestTimeoutFunc func(svcName, sagaID string, duration time.Duration)
-		timeoutSagaFunc    func(tx *sql.Tx, sagaID string) error
+		timeoutManager gbus.TimeoutManager
 	)
 	if builder.txnl {
 		gb.IsTxnl = true
@@ -85,6 +82,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 				panic(err)
 			}
 			gb.TxProvider = mysqltx
+			//TODO move purge logic into the NewSagaStore factory method
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 			if builder.purgeOnStartup {
 				err := sagaStore.Purge()
@@ -93,14 +91,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 				}
 			}
 			gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
-
-			//setup timeout manager
-			baseTimeoutManager := &tx.TimeoutManager{
-				Bus: gb, Txp: gb.TxProvider, Log: gb.Log, SvcName: svcName,
-			}
-			tm := mysql.NewTimeoutManager(baseTimeoutManager, builder.purgeOnStartup)
-			requestTimeoutFunc = tm.RequestTimeout
-			tm.TimeoutSaga = timeoutSagaFunc
+			timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
 
 		default:
 			err := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
@@ -108,12 +99,14 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		}
 	} else {
 		sagaStore = stores.NewInMemoryStore()
+		timeoutManager = &saga.InMemoryTimeoutManager{}
 	}
 
 	if builder.usingPingTimeout {
 		gb.DbPingTimeout = builder.dbPingTimeout
 	}
 
+	//TODO move this into the NewSagaStore factory methods
 	if builder.purgeOnStartup {
 		err := sagaStore.Purge()
 		if err != nil {
@@ -121,8 +114,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		}
 	}
 
-	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, requestTimeoutFunc)
-	timeoutSagaFunc = glue.TimeoutSaga
+	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
+
 	gb.Glue = glue
 	return gb
 }
