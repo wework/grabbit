@@ -5,9 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"math/rand"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -236,22 +235,30 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	if txCreateErr != nil {
 		worker.log().WithError(txCreateErr).Error("failed creating new tx")
 		worker.span.LogFields(slog.Error(txCreateErr))
-		_ = worker.ack(delivery)
+		_ = worker.reject(true, delivery)
 		return
 	}
-	var fn func() error
 	err := worker.deadletterHandler(tx, delivery)
+	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")
 		worker.span.LogFields(slog.Error(err))
-		fn = tx.Rollback
+		err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
+		reject = true
 	} else {
-		fn = tx.Commit
+		err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 	}
-	err = worker.SafeWithRetries(fn, MaxRetryCount)
+
 	if err != nil {
 		worker.log().WithError(err).Error("Rollback/Commit deadletter handler message")
 		worker.span.LogFields(slog.Error(err))
+		reject = true
+	}
+
+	if reject {
+		_ = worker.reject(true, delivery)
+	} else {
+		_ = worker.ack(delivery)
 	}
 }
 
@@ -322,6 +329,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.ack(delivery)
 	} else {
 		_ = worker.reject(false, delivery)
+		metrics.ReportRejectedMessage()
 	}
 }
 
@@ -363,7 +371,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		var hspan opentracing.Span
 		var hsctx context.Context
 		for _, handler := range handlers {
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
+			hspan, hsctx = opentracing.StartSpanFromContext(sctx, handler.Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -378,8 +386,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 					MaxRetryCount: MaxRetryCount,
 				},
 			}
-			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
-			handlerErr = handler(ctx, message)
+			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
+			handlerErr = metrics.RunHandlerWithMetric(func() error {
+				return  handler(ctx, message)
+			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break

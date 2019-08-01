@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"sync"
 	"testing"
@@ -144,6 +145,10 @@ func TestSubscribingOnTopic(t *testing.T) {
 	<-proceed
 }
 
+var (
+	handlerRetryProceed = make(chan bool)
+	attempts = 0
+)
 func TestHandlerRetry(t *testing.T) {
 
 	c1 := Command1{}
@@ -153,34 +158,45 @@ func TestHandlerRetry(t *testing.T) {
 
 	bus := createBusForTest()
 
-	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		return invocation.Reply(noopTraceContext(), reply)
 	}
 
-	attempts := 0
-	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		if attempts == 0 {
-			attempts++
-			return fmt.Errorf("expecting retry on errors")
-		} else if attempts == 1 {
-			attempts++
-			panic("expecting retry on panics")
-		} else {
-			proceed <- true
-		}
-		return nil
-	}
-
 	bus.HandleMessage(c1, cmdHandler)
-	bus.HandleMessage(r1, replyHandler)
+	bus.HandleMessage(r1, handleRetry)
 
 	bus.Start()
 	defer bus.Shutdown()
 
 	bus.Send(noopTraceContext(), testSvc1, cmd)
-	<-proceed
+	<-handlerRetryProceed
 
+	hm := metrics.GetHandlerMetrics("handleRetry")
+	if hm == nil {
+		t.Error("Metrics for handleRetry should be initiated")
+	}
+	f, _ := hm.GetFailureCount()
+	s, _ := hm.GetSuccessCount()
+
+	if f != 2 {
+		t.Errorf("Failure count should be 2 but was %f", f)
+	}
+	if s != 1 {
+		t.Errorf("Success count should be 1 but was %f", s)
+	}
+}
+
+func handleRetry(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	if attempts == 0 {
+		attempts++
+		return fmt.Errorf("expecting retry on errors")
+	} else if attempts == 1 {
+		attempts++
+		panic("expecting retry on panics")
+	} else {
+		handlerRetryProceed <- true
+	}
+	return nil
 }
 
 func TestRPC(t *testing.T) {
@@ -239,6 +255,10 @@ func TestDeadlettering(t *testing.T) {
 	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
 
 	waitgroup.Wait()
+	count, _ := metrics.GetRejectedMessagesValue()
+	if count != 1 {
+		t.Error("Should have one rejected message")
+	}
 }
 
 func TestRegistrationAfterBusStarts(t *testing.T) {

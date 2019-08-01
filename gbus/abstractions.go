@@ -107,9 +107,6 @@ type HandlerRegister interface {
 	HandleEvent(exchange, topic string, event Message, handler MessageHandler) error
 }
 
-//MessageHandler signature for all command handlers
-type MessageHandler func(invocation Invocation, message *BusMessage) error
-
 //Saga is the base interface for all Sagas.
 type Saga interface {
 	//StartedBy returns the messages that when received should create a new saga instance
