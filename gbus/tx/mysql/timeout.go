@@ -20,7 +20,6 @@ type TimeoutManager struct {
 	TimeoutSaga func(*sql.Tx, string) error
 	Txp         gbus.TxProvider
 	SvcName     string
-	paramMarker func(int) string
 	exit        chan bool
 }
 
@@ -49,7 +48,9 @@ func (tm *TimeoutManager) ensureSchema() error {
       )`
 
 		if _, e := tx.Exec(createTableSQL); e != nil {
-			tx.Rollback()
+			if rbkErr := tx.Rollback(); rbkErr != nil {
+				tm.Log().Warn("timeout manager failed to rollback transaction")
+			}
 			return e
 		}
 
@@ -195,9 +196,13 @@ func NewTimeoutManager(bus gbus.Bus, txp gbus.TxProvider, logger func() logrus.F
 		Txp:     txp,
 		SvcName: svcName}
 
-	tm.ensureSchema()
+	if err := tm.ensureSchema(); err != nil {
+		panic(err)
+	}
 	if purge {
-		tm.purge()
+		if err := tm.purge(); err != nil {
+			panic(err)
+		}
 	}
 	tm.start()
 	return tm

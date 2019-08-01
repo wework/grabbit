@@ -11,7 +11,6 @@ var _ gbus.TimeoutManager = &InMemoryTimeoutManager{}
 
 //InMemoryTimeoutManager should not be used in production
 type InMemoryTimeoutManager struct {
-	bus  gbus.Bus
 	glue *Glue
 	txp  gbus.TxProvider
 }
