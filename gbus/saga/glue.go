@@ -24,9 +24,9 @@ func fqnsFromMessages(objs []gbus.Message) []string {
 //ErrInstanceNotFound is returned by the saga store if a saga lookup by saga id returns no valid instances
 var ErrInstanceNotFound = errors.New("saga  not be found")
 
-var _ gbus.SagaRegister = &Glue{}
+var _ gbus.SagaGlue = &Glue{}
 
-//Glue ties the incoming messages from the Bus with the needed Saga instances
+//Glue t/*  */ies the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
 	svcName          string
 	bus              gbus.Bus
@@ -265,6 +265,16 @@ func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 
 func (imsm *Glue) log() logrus.FieldLogger {
 	return imsm.getLog()
+}
+
+//Start starts the glue instance up
+func (imsm *Glue) Start() error {
+	return imsm.timeoutManager.Start()
+}
+
+//Stop starts the glue instance up
+func (imsm *Glue) Stop() error {
+	return imsm.timeoutManager.Stop()
 }
 
 //NewGlue creates a new Sagamanager

@@ -63,8 +63,16 @@ func (tm *TimeoutManager) purge() error {
 	return tx.Commit()
 }
 
-func (tm *TimeoutManager) start() {
+//Start starts the timeout manager
+func (tm *TimeoutManager) Start() error {
 	go tm.trackTimeouts()
+	return nil
+}
+
+//Stop shuts down the timeout manager
+func (tm *TimeoutManager) Stop() error {
+	tm.exit <- true
+	return nil
 }
 
 func (tm *TimeoutManager) trackTimeouts() {
@@ -179,7 +187,8 @@ func NewTimeoutManager(bus gbus.Bus, txp gbus.TxProvider, logger func() logrus.F
 		Log:     logger,
 		Bus:     bus,
 		Txp:     txp,
-		SvcName: svcName}
+		SvcName: svcName,
+		exit:    make(chan bool)}
 
 	if err := tm.ensureSchema(); err != nil {
 		panic(err)
@@ -189,6 +198,6 @@ func NewTimeoutManager(bus gbus.Bus, txp gbus.TxProvider, logger func() logrus.F
 			panic(err)
 		}
 	}
-	tm.start()
 	return tm
+
 }

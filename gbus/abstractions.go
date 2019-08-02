@@ -10,10 +10,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
+//Semantics reopresents the semantics of a grabbit message
 type Semantics string
 
 const (
+	//CMD represenst a messge with command semantics in grabbit
 	CMD Semantics = "cmd"
+	//EVT represenst a messge with event semantics in grabbit
 	EVT Semantics = "evt"
 )
 
@@ -143,6 +146,13 @@ type SagaRegister interface {
 	RegisterSaga(saga Saga, conf ...SagaConfFn) error
 }
 
+//SagaGlue glues together all the parts needed in order to orchistrate saga instances
+type SagaGlue interface {
+	SagaRegister
+	Start() error
+	Stop() error
+}
+
 //Builder is the main interface that should be used to create an instance of a Bus
 type Builder interface {
 	PurgeOnStartUp() Builder
@@ -223,8 +233,13 @@ type TimeoutManager interface {
 	ClearTimeout(tx *sql.Tx, sagaID string) error
 	//AcceptTimeoutFunction accepts the function that the TimeoutManager should invoke once a timeout expires
 	AcceptTimeoutFunction(func(tx *sql.Tx, sagaID string) error)
+	//Start starts the timeout manager
+	Start() error
+	//Stop shuts the timeout manager down
+	Stop() error
 }
 
+//Logged represents a grabbit component that can be logged
 type Logged interface {
 	SetLogger(entry logrus.FieldLogger)
 	Log() logrus.FieldLogger

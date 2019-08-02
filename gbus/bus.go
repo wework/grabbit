@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/wework/grabbit/gbus/metrics"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
 	"github.com/opentracing/opentracing-go"
@@ -51,7 +52,7 @@ type DefaultBus struct {
 	DelayedSubscriptions [][]string
 	PurgeOnStartup       bool
 	started              bool
-	Glue                 SagaRegister
+	Glue                 SagaGlue
 	TxProvider           TxProvider
 	IsTxnl               bool
 	WorkerNum            uint
@@ -263,6 +264,10 @@ func (b *DefaultBus) Start() error {
 
 		return createWorkersErr
 	}
+
+	if err := b.Glue.Start(); err != nil {
+		return err
+	}
 	b.workers = workers
 	b.started = true
 	//start monitoring on amqp related errors
@@ -335,6 +340,10 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		}
 	}
 	b.Outgoing.shutdown()
+
+	if err := b.Glue.Stop(); err != nil {
+		return err
+	}
 	b.started = false
 	if b.IsTxnl {
 
