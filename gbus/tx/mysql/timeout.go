@@ -36,8 +36,9 @@ func (tm *TimeoutManager) ensureSchema() error {
       rec_id INT PRIMARY KEY AUTO_INCREMENT,
       saga_id VARCHAR(255) UNIQUE NOT NULL,
 	  timeout DATETIME NOT NULL,
-	  INDEX ix_` + tm.timeoutsTableName + `_timeout_date(timeout)
-      )`
+	  INDEX (timeout),
+	  INDEX (saga_id)
+	 )`
 
 	if _, e := tx.Exec(createTableSQL); e != nil {
 		if rbkErr := tx.Rollback(); rbkErr != nil {
@@ -97,6 +98,7 @@ func (tm *TimeoutManager) trackTimeouts() {
 
 			sagaIDs := make([]string, 0)
 			for rows.Next() {
+
 				var sagaID string
 
 				if err := rows.Scan(&sagaID); err != nil {
@@ -111,6 +113,15 @@ func (tm *TimeoutManager) trackTimeouts() {
 	}
 }
 
+func (tm *TimeoutManager) lockTimeoutRecord(tx *sql.Tx, sagaID string) error {
+
+	selectTimeout := `SELECT saga_id FROM ` + tm.timeoutsTableName + ` WHERE saga_id = ? FOR UPDATE`
+	row := tx.QueryRow(selectTimeout, sagaID)
+	//scan the row so we can determine if the lock has been successfully acquired
+	var x string
+	return row.Scan(&x)
+}
+
 func (tm *TimeoutManager) executeTimeout(sagaIDs []string) {
 
 	for _, sagaID := range sagaIDs {
@@ -119,7 +130,12 @@ func (tm *TimeoutManager) executeTimeout(sagaIDs []string) {
 			tm.Log().WithError(txe).Warn("timeout manager failed to create a transaction")
 			return
 		}
-
+		lckErr := tm.lockTimeoutRecord(tx, sagaID)
+		if lckErr != nil {
+			tm.Log().WithField("saga_id", sagaID).Info("failed to obtain lock for saga timeout")
+			_ = tx.Rollback()
+			continue
+		}
 		callErr := tm.TimeoutSaga(tx, sagaID)
 		clrErr := tm.ClearTimeout(tx, sagaID)
 
@@ -163,7 +179,7 @@ func (tm *TimeoutManager) RegisterTimeout(tx *sql.Tx, sagaID string, duration ti
 //ClearTimeout clears a timeout for a specific saga
 func (tm *TimeoutManager) ClearTimeout(tx *sql.Tx, sagaID string) error {
 
-	deleteSQL := `delete from ` + tm.timeoutsTableName + ` where saga_id = ?`
+	deleteSQL := `delete from ` + tm.timeoutsTableName + ` where saga_id_id = ?`
 	_, err := tx.Exec(deleteSQL, sagaID)
 	return err
 }
