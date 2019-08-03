@@ -58,8 +58,8 @@ func (tm *InMemoryTimeoutManager) ClearTimeout(tx *sql.Tx, sagaID string) error 
 	return nil
 }
 
-//AcceptTimeoutFunction accepts the timeouting function
-func (tm *InMemoryTimeoutManager) AcceptTimeoutFunction(fun func(tx *sql.Tx, sagaID string) error) {}
+//SetTimeoutFunction accepts the timeouting function
+func (tm *InMemoryTimeoutManager) SetTimeoutFunction(fun func(tx *sql.Tx, sagaID string) error) {}
 
 //Start starts the timeout manager
 func (tm *InMemoryTimeoutManager) Start() error {

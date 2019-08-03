@@ -231,8 +231,8 @@ type TimeoutManager interface {
 	RegisterTimeout(tx *sql.Tx, sagaID string, duration time.Duration) error
 	//ClearTimeout clears a timeout for a specific saga
 	ClearTimeout(tx *sql.Tx, sagaID string) error
-	//AcceptTimeoutFunction accepts the function that the TimeoutManager should invoke once a timeout expires
-	AcceptTimeoutFunction(func(tx *sql.Tx, sagaID string) error)
+	//SetTimeoutFunction accepts the function that the TimeoutManager should invoke once a timeout expires
+	SetTimeoutFunction(func(tx *sql.Tx, sagaID string) error)
 	//Start starts the timeout manager
 	Start() error
 	//Stop shuts the timeout manager down

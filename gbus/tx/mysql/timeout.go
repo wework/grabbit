@@ -168,8 +168,8 @@ func (tm *TimeoutManager) ClearTimeout(tx *sql.Tx, sagaID string) error {
 	return err
 }
 
-//AcceptTimeoutFunction accepts the timeouting function
-func (tm *TimeoutManager) AcceptTimeoutFunction(timeoutFunc func(tx *sql.Tx, sagaID string) error) {
+//SetTimeoutFunction accepts the timeouting function
+func (tm *TimeoutManager) SetTimeoutFunction(timeoutFunc func(tx *sql.Tx, sagaID string) error) {
 	tm.TimeoutSaga = timeoutFunc
 }
 

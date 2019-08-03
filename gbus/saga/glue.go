@@ -291,6 +291,6 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		timeoutManager:   timeoutManager,
 	}
 
-	timeoutManager.AcceptTimeoutFunction(g.TimeoutSaga)
+	timeoutManager.SetTimeoutFunction(g.TimeoutSaga)
 	return g
 }
