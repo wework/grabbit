@@ -153,7 +153,7 @@ func (tm *TimeoutManager) RegisterTimeout(tx *sql.Tx, sagaID string, duration ti
 	insertSQL := "INSERT INTO " + tm.GetTimeoutsTableName() + " (saga_id, timeout) VALUES(?, ?)"
 	_, insertErr := tx.Exec(insertSQL, sagaID, timeoutTime)
 	if insertErr == nil {
-		tm.Log().Info("timout inserted into timeout manager")
+		tm.Log().WithField("timeout_duration", duration).Debug("timout inserted into timeout manager")
 	}
 
 	return insertErr
