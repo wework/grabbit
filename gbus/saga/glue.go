@@ -22,7 +22,7 @@ func fqnsFromMessages(objs []gbus.Message) []string {
 }
 
 //ErrInstanceNotFound is returned by the saga store if a saga lookup by saga id returns no valid instances
-var ErrInstanceNotFound = errors.New("saga  not be found")
+var ErrInstanceNotFound = errors.New("saga not be found")
 
 var _ gbus.SagaGlue = &Glue{}
 

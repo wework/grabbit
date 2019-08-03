@@ -69,7 +69,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		gb.WorkerNum = builder.workerNum
 	}
 	var (
-		sagaStore          saga.Store
+		sagaStore      saga.Store
 		timeoutManager gbus.TimeoutManager
 	)
 	if builder.txnl {
@@ -113,9 +113,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 	}
-
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
-
 	gb.Glue = glue
 	return gb
 }
