@@ -25,25 +25,25 @@ func (tm *InMemoryTimeoutManager) RegisterTimeout(tx *sql.Tx, sagaID string, dur
 		if tm.txp == nil {
 			tme := tm.glue.TimeoutSaga(nil, sagaID)
 			if tme != nil {
-				tm.glue.log().WithError(tme).WithField("sagaID", sagaID).Error("timing out a saga failed")
+				tm.glue.Log().WithError(tme).WithField("sagaID", sagaID).Error("timing out a saga failed")
 			}
 			return
 		}
 		tx, txe := tm.txp.New()
 		if txe != nil {
-			tm.glue.log().WithError(txe).Warn("timeout manager failed to create a transaction")
+			tm.glue.Log().WithError(txe).Warn("timeout manager failed to create a transaction")
 		} else {
 			callErr := tm.glue.TimeoutSaga(tx, sagaID)
 			if callErr != nil {
-				tm.glue.log().WithError(callErr).WithField("sagaID", sagaID).Error("timing out a saga failed")
+				tm.glue.Log().WithError(callErr).WithField("sagaID", sagaID).Error("timing out a saga failed")
 				rlbe := tx.Rollback()
 				if rlbe != nil {
-					tm.glue.log().WithError(rlbe).Warn("timeout manager failed to rollback transaction")
+					tm.glue.Log().WithError(rlbe).Warn("timeout manager failed to rollback transaction")
 				}
 			} else {
 				cmte := tx.Commit()
 				if cmte != nil {
-					tm.glue.log().WithError(cmte).Warn("timeout manager failed to rollback transaction")
+					tm.glue.Log().WithError(cmte).Warn("timeout manager failed to rollback transaction")
 				}
 			}
 		}

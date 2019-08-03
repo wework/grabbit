@@ -149,6 +149,7 @@ type SagaRegister interface {
 //SagaGlue glues together all the parts needed in order to orchistrate saga instances
 type SagaGlue interface {
 	SagaRegister
+	Logged
 	Start() error
 	Stop() error
 }

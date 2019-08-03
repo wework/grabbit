@@ -28,6 +28,7 @@ var _ gbus.SagaGlue = &Glue{}
 
 //Glue t/*  */ies the incoming messages from the Bus with the needed Saga instances
 type Glue struct {
+	*gbus.Glogged
 	svcName          string
 	bus              gbus.Bus
 	sagaDefs         []*Def
@@ -35,7 +36,6 @@ type Glue struct {
 	alreadyRegistred map[string]bool
 	msgToDefMap      map[string][]*Def
 	sagaStore        Store
-	getLog           func() logrus.FieldLogger
 	timeoutManager   gbus.TimeoutManager
 }
 
@@ -76,7 +76,7 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 		imsm.addMsgNameToDef(msgName, def)
 	}
 
-	imsm.log().
+	imsm.Log().
 		WithFields(logrus.Fields{"saga_type": def.sagaType.String(), "handles_messages": len(msgNames)}).
 		Info("registered saga with messages")
 
@@ -117,24 +117,24 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
 			newInstance := def.newInstance()
-			imsm.log().
+			imsm.Log().
 				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
 			if invkErr := imsm.invokeSagaInstance(newInstance, invocation, message); invkErr != nil {
-				imsm.log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
+				imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
 
 			if !newInstance.isComplete() {
-				imsm.log().WithField("saga_id", newInstance.ID).Info("saving new saga")
+				imsm.Log().WithField("saga_id", newInstance.ID).Info("saving new saga")
 
 				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
-					imsm.log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
+					imsm.Log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
 					return e
 				}
 
 				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
-					imsm.log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
+					imsm.Log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
 					if tme := imsm.timeoutManager.RegisterTimeout(invocation.Tx(), newInstance.ID, duration); tme != nil {
 						return tme
 					}
@@ -145,7 +145,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 
 			if getErr != nil {
-				imsm.log().WithError(getErr).WithField("saga_id", message.SagaCorrelationID).Error("failed to fetch saga by id")
+				imsm.Log().WithError(getErr).WithField("saga_id", message.SagaCorrelationID).Error("failed to fetch saga by id")
 				return getErr
 			}
 			if instance == nil {
@@ -154,7 +154,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			}
 			def.configureSaga(instance)
 			if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
-				imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+				imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
 
@@ -165,18 +165,18 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 			return e
 		} else {
 
-			imsm.log().WithFields(logrus.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
+			imsm.Log().WithFields(logrus.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				return e
 			}
-			imsm.log().WithFields(logrus.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
+			imsm.Log().WithFields(logrus.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
 
 			for _, instance := range instances {
 				def.configureSaga(instance)
 				if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
-					imsm.log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+					imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 					return invkErr
 				}
 				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance)
@@ -199,7 +199,7 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 		ctx:                 invocation.Ctx(),
 		invokingService:     imsm.svcName,
 	}
-	sginv.SetLogger(imsm.log().WithFields(logrus.Fields{
+	sginv.SetLogger(imsm.Log().WithFields(logrus.Fields{
 		"saga_id":      instance.ID,
 		"saga_type":    instance.String(),
 		"message_name": message.PayloadFQN,
@@ -212,7 +212,7 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 
 	if instance.isComplete() {
-		imsm.log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
+		imsm.Log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
 
 		deleteErr := imsm.sagaStore.DeleteSaga(tx, instance)
 		if deleteErr != nil {
@@ -257,14 +257,10 @@ func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 	}
 	timeoutErr := saga.timeout(tx, imsm.bus)
 	if timeoutErr != nil {
-		imsm.log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
+		imsm.Log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
 		return timeoutErr
 	}
 	return imsm.completeOrUpdateSaga(tx, saga)
-}
-
-func (imsm *Glue) log() logrus.FieldLogger {
-	return imsm.getLog()
 }
 
 //Start starts the glue instance up
@@ -287,7 +283,6 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		alreadyRegistred: make(map[string]bool),
 		msgToDefMap:      make(map[string][]*Def),
 		sagaStore:        sagaStore,
-		getLog:           getLog,
 		timeoutManager:   timeoutManager,
 	}
 
