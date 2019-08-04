@@ -118,7 +118,9 @@ func (tm *TimeoutManager) trackTimeouts() {
 
 func (tm *TimeoutManager) lockTimeoutRecord(tx *sql.Tx, sagaID string) error {
 
-	selectTimeout := `SELECT saga_id FROM ` + tm.timeoutsTableName + ` WHERE saga_id = ? FOR UPDATE`
+	// FOR UPDATE should create a lock on the row that we are processing and skip lock should ensure that we don't wait for a locked row but skip it.
+	// This is done in order to reduce contention and allow for parallel processing in case of multiple grabbit instances
+	selectTimeout := `SELECT saga_id FROM ` + tm.timeoutsTableName + ` WHERE saga_id = ? FOR UPDATE SKIP LOCKED`
 	row := tx.QueryRow(selectTimeout, sagaID)
 	//scan the row so we can determine if the lock has been successfully acquired
 	//in case the timeout has been already executed by a different instance of grabbit the scan will
