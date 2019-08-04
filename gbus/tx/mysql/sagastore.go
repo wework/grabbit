@@ -1,7 +1,6 @@
 package mysql
 
 import (
-	log "github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/tx"
@@ -10,10 +9,6 @@ import (
 //SagaStore implements the saga/store interface on top of MySQL
 type SagaStore struct {
 	*tx.SagaStore
-}
-
-func (store *SagaStore) log() *log.Entry {
-	return log.WithField("saga_store", "mysql")
 }
 
 //NewSagaStore creates a bew SagaStore
