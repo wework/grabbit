@@ -106,6 +106,9 @@ func (tm *TimeoutManager) trackTimeouts() {
 				}
 				sagaIDs = append(sagaIDs, sagaID)
 			}
+			if cmtErr := tx.Commit(); cmtErr != nil {
+				continue
+			}
 			tm.executeTimeout(sagaIDs)
 		case <-tm.exit:
 			return
@@ -118,6 +121,8 @@ func (tm *TimeoutManager) lockTimeoutRecord(tx *sql.Tx, sagaID string) error {
 	selectTimeout := `SELECT saga_id FROM ` + tm.timeoutsTableName + ` WHERE saga_id = ? FOR UPDATE`
 	row := tx.QueryRow(selectTimeout, sagaID)
 	//scan the row so we can determine if the lock has been successfully acquired
+	//in case the timeout has been already executed by a different instance of grabbit the scan will
+	//return an error and the timeout will not get processed
 	var x string
 	return row.Scan(&x)
 }
