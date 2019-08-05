@@ -25,13 +25,17 @@ func createBusForTest() gbus.Bus {
 }
 
 func createBusWithOptions(svcName string, deadletter string, txnl, pos bool) gbus.Bus {
+	return createBusWithRetries(svcName, deadletter, txnl, pos, 4, 15)
+}
+
+func createBusWithRetries(svcName string, deadletter string, txnl, pos bool, retries uint, retryDuration int) gbus.Bus {
 	busBuilder := builder.
 		New().
 		Bus(connStr).
 		WithPolicies(&policy.Durable{}, &policy.TTL{Duration: time.Second * 3600}).
 		WorkerNum(3, 1).
 		WithConfirms().
-		WithConfiguration(gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15})
+		WithConfiguration(gbus.BusConfiguration{MaxRetryCount: retries, BaseRetryDuration: retryDuration})
 
 	if txnl {
 		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")

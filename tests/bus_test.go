@@ -147,8 +147,9 @@ func TestSubscribingOnTopic(t *testing.T) {
 
 var (
 	handlerRetryProceed = make(chan bool)
-	attempts = 0
+	attempts            = 0
 )
+
 func TestHandlerRetry(t *testing.T) {
 
 	c1 := Command1{}
@@ -258,6 +259,49 @@ func TestDeadlettering(t *testing.T) {
 	count, _ := metrics.GetRejectedMessagesValue()
 	if count != 1 {
 		t.Error("Should have one rejected message")
+	}
+}
+
+func TestReturnDeadToQueue(t *testing.T) {
+
+	var visited bool
+	proceed := make(chan bool, 0)
+	poision := gbus.NewBusMessage(Command1{})
+	service1 := createBusWithRetries(testSvc1, "grabbit-dead", true, true, 0, 0)
+	deadletterSvc := createBusWithRetries("deadletterSvc", "grabbit-dead", true, true, 0, 0)
+
+	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
+		fmt.Println("WELCOME TO DEAD LETTER HANDLER")
+		pub := amqpDeliveryToPublishing(poision)
+		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		return nil
+	}
+
+	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		fmt.Println("WELCOME TO FAULTY HANDLER")
+		if visited {
+			proceed <- true
+			return nil
+		}
+		visited = true
+		return errors.New("fail")
+	}
+
+	deadletterSvc.HandleDeadletter(deadMessageHandler)
+	service1.HandleMessage(Command1{}, faultyHandler)
+
+	deadletterSvc.Start()
+	defer deadletterSvc.Shutdown()
+	service1.Start()
+	defer service1.Shutdown()
+
+	service1.Send(context.Background(), testSvc1, poision)
+
+	select {
+	case <-proceed:
+		fmt.Println("success!")
+		//case <-time.After(time.Duration(timeoutDurationMilli * 2) * time.Millisecond):
+		//	t.Fatal("timeout, failed to resend dead message to queue")
 	}
 }
 
@@ -372,6 +416,24 @@ func noopTraceContext() context.Context {
 	// span := tracer.StartSpan("test")
 	// ctx := opentracing.ContextWithSpan(context.Background(), span)
 	// return ctx
+}
+
+func amqpDeliveryToPublishing(del amqp.Delivery) (pub amqp.Publishing) {
+	pub.Headers = del.Headers
+	pub.ContentType = del.ContentType
+	pub.ContentEncoding = del.ContentEncoding
+	pub.DeliveryMode = del.DeliveryMode
+	pub.Priority = del.Priority
+	pub.CorrelationId = del.CorrelationId
+	pub.ReplyTo = del.ReplyTo
+	pub.Expiration = del.Expiration
+	pub.MessageId = del.MessageId
+	pub.Timestamp = del.Timestamp
+	pub.Type = del.Type
+	pub.UserId = del.UserId
+	pub.AppId = del.AppId
+	pub.Body = del.Body
+	return
 }
 
 type panicPolicy struct {
