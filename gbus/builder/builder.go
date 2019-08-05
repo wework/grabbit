@@ -179,7 +179,7 @@ func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Durati
 }
 
 func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) gbus.Builder {
-	if config.MaxRetryCount > 0 {
+	if config.MaxRetryCount >= 0 {
 		gbus.MaxRetryCount = config.MaxRetryCount
 	}
 	if config.BaseRetryDuration > 0 {
