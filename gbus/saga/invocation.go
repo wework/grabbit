@@ -3,7 +3,6 @@ package saga
 import (
 	"context"
 	"database/sql"
-	"github.com/streadway/amqp"
 	"time"
 
 	"github.com/wework/grabbit/gbus"
@@ -64,10 +63,6 @@ func (si *sagaInvocation) Send(ctx context.Context, toService string,
 	command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
 	si.setCorrelationIDs(command, false)
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
-}
-
-func (si *sagaInvocation) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
-	return si.decoratedBus.ReturnDeadToQueue(ctx, publishing)
 }
 
 func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string,

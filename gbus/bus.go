@@ -431,11 +431,6 @@ func (b *DefaultBus) Send(ctx context.Context, toService string, message *BusMes
 	return b.sendWithTx(ctx, nil, toService, message, policies...)
 }
 
-//ReturnDeadToQueue returns a message to its original destination
-func (b *DefaultBus) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
-	return b.returnDeadToQueue(ctx, nil, publishing)
-}
-
 //RPC implements  GBus.RPC
 func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *BusMessage, timeout time.Duration) (*BusMessage, error) {
 
@@ -570,6 +565,11 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 //HandleDeadletter implements GBus.HandleDeadletter
 func (b *DefaultBus) HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error) {
 	b.deadletterHandler = handler
+}
+
+//ReturnDeadToQueue returns a message to its original destination
+func (b *DefaultBus) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
+	return b.returnDeadToQueue(ctx, nil, publishing)
 }
 
 //RegisterSaga impements GBus.RegisterSaga

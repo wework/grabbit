@@ -47,11 +47,6 @@ type Messaging interface {
 	Send(ctx context.Context, toService string, command *BusMessage, policies ...MessagePolicy) error
 
 	/*
-		Returns a message from Deadletter queue to the original queue
-	*/
-	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
-
-	/*
 		Publish and event, one-to-many semantics
 	*/
 	Publish(ctx context.Context, exchange, topic string, event *BusMessage, policies ...MessagePolicy) error
@@ -131,6 +126,7 @@ type Saga interface {
 //RegisterDeadletterHandler provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
 type RegisterDeadletterHandler interface {
 	HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error)
+	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
