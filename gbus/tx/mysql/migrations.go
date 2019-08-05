@@ -59,6 +59,28 @@ func OutboxMigrations(svcName string) *migrator.Migration {
 	}
 }
 
+func TimoutTableMigration(svcName string) *migrator.Migration {
+	tblName := GetTimeoutsTableName(svcName)
+
+	createTableQuery := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
+      rec_id INT PRIMARY KEY AUTO_INCREMENT,
+      saga_id VARCHAR(255) UNIQUE NOT NULL,
+	  timeout DATETIME NOT NULL,
+	  INDEX (timeout),
+	  INDEX (saga_id)
+	 )`
+
+	return &migrator.Migration{
+		Name: "create timeout table",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(createTableQuery); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
 func EnsureSchema(db *sql.DB, svcName string) {
 
 	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
@@ -66,6 +88,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 	migrate := migrator.NewNamed(migrationsTable,
 		OutboxMigrations(svcName),
 		SagaStoreTableMigration(svcName),
+		TimoutTableMigration(svcName),
 	)
 	err := migrate.Migrate(db)
 	if err != nil {

@@ -24,31 +24,6 @@ type TimeoutManager struct {
 	exit              chan bool
 }
 
-func (tm *TimeoutManager) ensureSchema() error {
-	tblName := tm.timeoutsTableName
-	tx, e := tm.Txp.New()
-	if e != nil {
-		tm.Log().WithError(e).Error("failed to create schema for mysql timeout manager")
-		return e
-	}
-
-	createTableSQL := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
-      rec_id INT PRIMARY KEY AUTO_INCREMENT,
-      saga_id VARCHAR(255) UNIQUE NOT NULL,
-	  timeout DATETIME NOT NULL,
-	  INDEX (timeout),
-	  INDEX (saga_id)
-	 )`
-
-	if _, e := tx.Exec(createTableSQL); e != nil {
-		if rbkErr := tx.Rollback(); rbkErr != nil {
-			tm.Log().Warn("timeout manager failed to rollback transaction")
-		}
-		return e
-	}
-	return tx.Commit()
-}
-
 func (tm *TimeoutManager) purge() error {
 	purgeSQL := `DELETE FROM ` + tm.timeoutsTableName
 
@@ -197,7 +172,7 @@ func (tm *TimeoutManager) SetTimeoutFunction(timeoutFunc func(tx *sql.Tx, sagaID
 }
 
 //GetTimeoutsTableName returns the table name in which to store timeouts
-func getTimeoutsTableName(svcName string) string {
+func GetTimeoutsTableName(svcName string) string {
 
 	var re = regexp.MustCompile(`-|;|\\|`)
 	sanitized := re.ReplaceAllString(svcName, "")
@@ -208,7 +183,7 @@ func getTimeoutsTableName(svcName string) string {
 //NewTimeoutManager creates a new instance of a mysql based TimeoutManager
 func NewTimeoutManager(bus gbus.Bus, txp gbus.TxProvider, logger func() logrus.FieldLogger, svcName string, purge bool) *TimeoutManager {
 
-	timeoutsTableName := getTimeoutsTableName(svcName)
+	timeoutsTableName := GetTimeoutsTableName(svcName)
 	tm := &TimeoutManager{
 		Log:               logger,
 		Bus:               bus,
@@ -216,10 +191,6 @@ func NewTimeoutManager(bus gbus.Bus, txp gbus.TxProvider, logger func() logrus.F
 		SvcName:           svcName,
 		timeoutsTableName: timeoutsTableName,
 		exit:              make(chan bool)}
-
-	if err := tm.ensureSchema(); err != nil {
-		panic(err)
-	}
 	if purge {
 		if err := tm.purge(); err != nil {
 			panic(err)
