@@ -80,7 +80,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 				panic(err)
 			}
 			gb.TxProvider = mysqltx
-			mysql.EnsureSchema(mysqltx.GetDb(), gb.SvcName)
+			mysql.EnsureSchema(mysqltx.Database, gb.SvcName)
 			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 			if builder.purgeOnStartup {
 				err := sagaStore.Purge()

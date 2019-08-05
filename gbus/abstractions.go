@@ -205,7 +205,6 @@ type TxProvider interface {
 	New() (*sql.Tx, error)
 	Dispose()
 	Ping(timeoutInSeconds time.Duration) bool
-	GetDb() *sql.DB
 }
 
 //TxOutbox abstracts the transactional outgoing channel type

@@ -38,8 +38,3 @@ func (provider *Provider) Ping(timeoutInSeconds time.Duration) bool {
 
 	return hasPing
 }
-
-func (provider *Provider) GetDb() *sql.DB {
-	return provider.Database
-
-}
