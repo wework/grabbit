@@ -271,14 +271,12 @@ func TestReturnDeadToQueue(t *testing.T) {
 	deadletterSvc := createBusWithRetries("deadletterSvc", "grabbit-dead", true, true, 0, 0)
 
 	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
-		fmt.Println("WELCOME TO DEAD LETTER HANDLER")
 		pub := amqpDeliveryToPublishing(poision)
 		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
 		return nil
 	}
 
 	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		fmt.Println("WELCOME TO FAULTY HANDLER")
 		if visited {
 			proceed <- true
 			return nil
@@ -299,9 +297,9 @@ func TestReturnDeadToQueue(t *testing.T) {
 
 	select {
 	case <-proceed:
-		fmt.Println("success!")
-		//case <-time.After(time.Duration(timeoutDurationMilli * 2) * time.Millisecond):
-		//	t.Fatal("timeout, failed to resend dead message to queue")
+		fmt.Println("success")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout, failed to resend dead message to queue")
 	}
 }
 
