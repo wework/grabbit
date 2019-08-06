@@ -20,22 +20,14 @@ func init() {
 	testSvc3 = "testSvc3"
 }
 
-func createBusForTest() gbus.Bus {
-	return createNamedBusForTest(testSvc1)
-}
-
-func createBusWithOptions(svcName string, deadletter string, txnl, pos bool) gbus.Bus {
-	return createBusWithRetries(svcName, deadletter, txnl, pos, 4, 15)
-}
-
-func createBusWithRetries(svcName string, deadletter string, txnl, pos bool, retries uint, retryDuration int) gbus.Bus {
+func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration) gbus.Bus {
 	busBuilder := builder.
 		New().
 		Bus(connStr).
 		WithPolicies(&policy.Durable{}, &policy.TTL{Duration: time.Second * 3600}).
 		WorkerNum(3, 1).
 		WithConfirms().
-		WithConfiguration(gbus.BusConfiguration{MaxRetryCount: retries, BaseRetryDuration: retryDuration})
+		WithConfiguration(conf)
 
 	if txnl {
 		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")
@@ -50,6 +42,10 @@ func createBusWithRetries(svcName string, deadletter string, txnl, pos bool, ret
 	return busBuilder.Build(svcName)
 }
 
+func createBusForTest() gbus.Bus {
+	return createNamedBusForTest(testSvc1)
+}
+
 func createNamedBusForTest(svcName string) gbus.Bus {
-	return createBusWithOptions(svcName, "dead-grabbit", true, true)
+	return createBusWithConfig(svcName, "dead-grabbit", true, true, gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15})
 }

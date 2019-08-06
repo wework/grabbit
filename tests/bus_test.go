@@ -232,8 +232,8 @@ func TestDeadlettering(t *testing.T) {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(2)
 	poision := gbus.NewBusMessage(PoisionMessage{})
-	service1 := createBusWithOptions(testSvc1, "grabbit-dead", true, true)
-	deadletterSvc := createBusWithOptions("deadletterSvc", "grabbit-dead", true, true)
+	service1 := createNamedBusForTest(testSvc1)
+	deadletterSvc := createNamedBusForTest("deadletterSvc")
 
 	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
 		waitgroup.Done()
@@ -267,8 +267,12 @@ func TestReturnDeadToQueue(t *testing.T) {
 	var visited bool
 	proceed := make(chan bool, 0)
 	poision := gbus.NewBusMessage(Command1{})
-	service1 := createBusWithRetries(testSvc1, "grabbit-dead", true, true, 0, 0)
-	deadletterSvc := createBusWithRetries("deadletterSvc", "grabbit-dead", true, true, 0, 0)
+
+	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+
+	deadletterSvc := createBusWithConfig("deadletterSvc", "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
 	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
 		pub := amqpDeliveryToPublishing(poision)
