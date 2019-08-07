@@ -508,6 +508,25 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	return b.withTx(send, ambientTx)
 }
 
+func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
+	if !b.started {
+		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+	}
+	//publishing.Headers.
+	exchange := fmt.Sprintf("%v", publishing.Headers["x-first-death-exchange"])
+	routingKey := fmt.Sprintf("%v", publishing.Headers["x-first-death-queue"])
+
+	delete(publishing.Headers, "x-death")
+	delete(publishing.Headers, "x-first-death-queue")
+	delete(publishing.Headers, "x-first-death-reason")
+	delete(publishing.Headers, "x-first-death-exchange")
+
+	send := func(tx *sql.Tx) error {
+		return b.publish(tx, exchange, routingKey, publishing)
+	}
+	return b.withTx(send, ambientTx)
+}
+
 //Publish implements GBus.Publish(topic, message)
 func (b *DefaultBus) Publish(ctx context.Context, exchange, topic string, message *BusMessage, policies ...MessagePolicy) error {
 	return b.publishWithTx(ctx, nil, exchange, topic, message, policies...)
@@ -557,6 +576,11 @@ func (b *DefaultBus) HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Deli
 	b.deadletterHandler = handler
 }
 
+//ReturnDeadToQueue returns a message to its original destination
+func (b *DefaultBus) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
+	return b.returnDeadToQueue(ctx, nil, publishing)
+}
+
 //RegisterSaga impements GBus.RegisterSaga
 func (b *DefaultBus) RegisterSaga(saga Saga, conf ...SagaConfFn) error {
 	if b.Glue == nil {
@@ -596,6 +620,37 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 		}
 	}
+}
+
+func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg *amqp.Publishing) error {
+	publish := func() error {
+		//send to the transactional outbox if the bus is transactional
+		//otherwise send directly to amqp
+		if b.IsTxnl && tx != nil {
+			b.Log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
+			saveErr := b.Outbox.Save(tx, exchange, routingKey, *msg)
+			if saveErr != nil {
+				b.Log().WithError(saveErr).Error("failed to save to transactional outbox")
+			}
+			return saveErr
+		}
+		//do not attempt to contact the borker if backpressure is being applied
+		if b.backpressure {
+			return errors.New("can't send message due to backpressure from amqp broker")
+		}
+		_, outgoingErr := b.Outgoing.Post(exchange, routingKey, *msg)
+		return outgoingErr
+	}
+	//currently only one thread can publish at a time
+	//TODO:add a publishing workers
+
+	err := b.SafeWithRetries(publish, MaxRetryCount)
+
+	if err != nil {
+		b.Log().Printf("failed publishing message.\n error:%v", err)
+		return err
+	}
+	return err
 }
 
 func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
@@ -649,34 +704,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		key = topic
 	}
 
-	publish := func() error {
-		//send to the transactional outbox if the bus is transactional
-		//otherwise send directly to amqp
-		if b.IsTxnl && tx != nil {
-			b.Log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
-			saveErr := b.Outbox.Save(tx, exchange, key, msg)
-			if saveErr != nil {
-				b.Log().WithError(saveErr).Error("failed to save to transactional outbox")
-			}
-			return saveErr
-		}
-		//do not attempt to contact the borker if backpressure is being applied
-		if b.backpressure {
-			return errors.New("can't send message due to backpressure from amqp broker")
-		}
-		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
-		return outgoingErr
-	}
-	//currently only one thread can publish at a time
-	//TODO:add a publishing workers
-
-	err = b.SafeWithRetries(publish, MaxRetryCount)
-
-	if err != nil {
-		b.Log().Printf("failed publishing message.\n error:%v", err)
-		return err
-	}
-	return err
+	return b.publish(tx, exchange, key, &msg)
 }
 
 func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Message, handler MessageHandler) error {
