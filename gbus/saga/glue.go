@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/metrics"
 )
 
 func fqnsFromMessages(objs []gbus.Message) []string {
@@ -247,6 +248,7 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 
 	saga, err := imsm.sagaStore.GetSagaByID(tx, sagaID)
+
 	//we are assuming that if the TimeoutSaga has been called but no instance returned from the store the saga
 	//has been completed already and
 	if err == ErrInstanceNotFound {
@@ -260,6 +262,8 @@ func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 		imsm.Log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
 		return timeoutErr
 	}
+
+	metrics.SagaTimeoutCounter.Inc()
 	return imsm.completeOrUpdateSaga(tx, saga)
 }
 
