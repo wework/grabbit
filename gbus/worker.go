@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/wework/grabbit/gbus/metrics"
 	"math/rand"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
@@ -388,7 +389,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			}
 			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
 			handlerErr = metrics.RunHandlerWithMetric(func() error {
-				return  handler(ctx, message)
+				return handler(ctx, message)
 			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
@@ -410,7 +411,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		if worker.isTxnl {
 			cmtErr := tx.Commit()
 			if cmtErr != nil {
-				worker.log().WithError(cmtErr).Error("failed commiting transaction after invoking handlers")
+				worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
 				return cmtErr
 			}
 		}

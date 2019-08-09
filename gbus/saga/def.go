@@ -1,15 +1,17 @@
 package saga
 
 import (
-	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"sync"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/wework/grabbit/gbus"
 )
 
 var _ gbus.HandlerRegister = &Def{}
 
+//MsgToFuncPair helper struct
 type MsgToFuncPair struct {
 	Filter       *gbus.MessageFilter
 	SagaFuncName string

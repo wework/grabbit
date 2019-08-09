@@ -4,12 +4,14 @@ import (
 	"strings"
 )
 
+//MessageFilter matches rabbitmq topic patterns
 type MessageFilter struct {
 	Exchange   string
 	RoutingKey string
 	MsgName    string
 }
 
+//Matches the passed in exchange, routingKey, msgName with the defined filter
 func (filter *MessageFilter) Matches(exchange, routingKey, msgName string) bool {
 
 	targetExchange := strings.ToLower(exchange)
@@ -59,15 +61,18 @@ func matchWords(input, pattern []string) bool {
 	return false
 }
 
+//Registration represents a message handler's registration for a given exchange, topic and msg combination
 type Registration struct {
 	info    *MessageFilter
 	Handler MessageHandler
 }
 
+//Matches the registration with the given xchange, routingKey, msgName
 func (sub *Registration) Matches(exchange, routingKey, msgName string) bool {
 	return sub.info.Matches(exchange, routingKey, msgName)
 }
 
+//NewRegistration creates a new registration
 func NewRegistration(exchange, routingKey string, message Message, handler MessageHandler) *Registration {
 	reg := Registration{
 		info:    NewMessageFilter(exchange, routingKey, message),
@@ -75,6 +80,7 @@ func NewRegistration(exchange, routingKey string, message Message, handler Messa
 	return &reg
 }
 
+//NewMessageFilter creates a new MessageFilter
 func NewMessageFilter(exchange, routingKey string, message Message) *MessageFilter {
 	filter := &MessageFilter{
 		Exchange:   strings.ToLower(exchange),

@@ -736,6 +736,7 @@ func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RpcHeaderName] = p.rpcID
 }
 
+//Log returns the default logrus.FieldLogger for the bus via the Glogged helper
 func (b *DefaultBus) Log() logrus.FieldLogger {
 	if b.Glogged == nil {
 		b.Glogged = &Glogged{
