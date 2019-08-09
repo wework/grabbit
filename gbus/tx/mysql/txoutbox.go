@@ -195,8 +195,8 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 	recID := outbox.recordsPendingConfirms[deliveryTag]
 	outbox.gl.Unlock()
 	/*
-			since the messages get sent to rabbitmq and then the outbox table gets updated with the deilvery tag for teh record
-			it may be that we recived a acked deliveryTag that is not yet registered in the outbox table.
+			since the messages get sent to rabbitmq and then the outbox table gets updated with the deilvery tag for the record
+			it may be that we received a acked deliveryTag that is not yet registered in the outbox table.
 		  in that case we just place the deliveryTag back in the ack channel so it can be picked up and re processed later
 		  we place it in the channel using a new goroutine so to not deadlock if there is only a single goroutine draining the ack channel
 	*/
@@ -310,7 +310,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	if cmtErr := tx.Commit(); cmtErr != nil {
 		outbox.log().WithError(cmtErr).Error("Error committing outbox transaction")
 	} else {
-		//only after the tx has commited successfully add the recordids so they can be picked up by confirms
+		//only after the tx has committed successfully add the recordids so they can be picked up by confirms
 		outbox.gl.Lock()
 		defer outbox.gl.Unlock()
 		for deliveryTag, recID := range successfulDeliveries {

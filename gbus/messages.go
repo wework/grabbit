@@ -61,6 +61,7 @@ func (bm *BusMessage) SetPayload(payload Message) {
 	bm.Payload = payload
 }
 
+//GetTraceLog returns an array of log entires containing all of the message properties
 func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 	return []log.Field{
 		log.String("message", bm.PayloadFQN),

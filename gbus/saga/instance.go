@@ -3,10 +3,11 @@ package saga
 import (
 	"database/sql"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/rs/xid"
 	"github.com/wework/grabbit/gbus"
@@ -104,6 +105,7 @@ func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
 	return saga.Timeout(tx, bus)
 }
 
+//NewInstance creates a new saga instance
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instance {
 
 	var newSagaPtr interface{}
