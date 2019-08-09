@@ -127,8 +127,6 @@ func (worker *worker) consumeMessages() {
 		if shouldProceed {
 
 			worker.processMessage(delivery, isRPCreply)
-		} else {
-			worker.log().WithField("message_id", delivery.MessageId).Warn("no proceed")
 		}
 
 	}
