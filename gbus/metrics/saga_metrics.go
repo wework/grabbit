@@ -23,7 +23,7 @@ func newSagaTimeoutCounter() prometheus.Counter {
 	return promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: grabbitPrefix,
 		Subsystem: "saga",
-		Name:      "timeedout_sagas",
+		Name:      "timedout_sagas",
 		Help:      "counting the number of timedout saga instances",
 	})
 }
