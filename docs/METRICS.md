@@ -1,6 +1,6 @@
 # Metrics
 
-grabbit exposes and reports operational the following metrics to Prometheus
+grabbit exposes and reports the following metrics to Prometheus
 
 |  Namespace    | Subsystem     | Name                              | Description                                                                 |
 | ------------- | ------------- | ----------------------------------| --------------------------------------------------------------------------- |
