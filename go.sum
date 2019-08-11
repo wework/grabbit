@@ -13,6 +13,8 @@ github.com/adiweiss/migrator v0.1.1 h1:unnb8Z83UIOrjRPI/A8jS67EGQs3W8V0OtnzEJOhI
 github.com/adiweiss/migrator v0.1.1/go.mod h1:bpVAVPkWSvTw8ya2Pk7E/KiNAyDWNImgivQY79o8/8I=
 github.com/adiweiss/migrator v0.1.2-0.20190811073515-5f6b8b8a442c h1:PpqCVqD0zElK+k2jUfVF9boi5hCyvbv2r9aibLtjyUw=
 github.com/adiweiss/migrator v0.1.2-0.20190811073515-5f6b8b8a442c/go.mod h1:GKIATFD9JeEji4S4qLNuEIa4X247bQnMZo0iWuKQCpU=
+github.com/adiweiss/migrator v0.1.2 h1:iEE/PqGWWhv7gKc/OFxeCJSsVIcBLGSKLK+yT3J4Gu0=
+github.com/adiweiss/migrator v0.1.2/go.mod h1:GKIATFD9JeEji4S4qLNuEIa4X247bQnMZo0iWuKQCpU=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
@@ -78,8 +80,6 @@ github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/lib/pq v1.0.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
 github.com/linkedin/goavro v2.1.0+incompatible h1:DV2aUlj2xZiuxQyvag8Dy7zjY69ENjS66bWkSfdpddY=
 github.com/linkedin/goavro v2.1.0+incompatible/go.mod h1:bBCwI2eGYpUI/4820s67MElg9tdeLbINjLjiM2xZFYM=
-github.com/lopezator/migrator v0.1.0 h1:/HOmJGFTz2aEQLkTqbwP3weIo1xjNU84rGcC0X7BlG8=
-github.com/lopezator/migrator v0.1.0/go.mod h1:bpVAVPkWSvTw8ya2Pk7E/KiNAyDWNImgivQY79o8/8I=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
