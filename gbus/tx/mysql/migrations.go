@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"fmt"
-	"github.com/lopezator/migrator"
+	"github.com/adiweiss/migrator"
 	"github.com/wework/grabbit/gbus/tx"
 )
 

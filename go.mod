@@ -4,6 +4,7 @@ require (
 	github.com/DataDog/zstd v1.4.0 // indirect
 	github.com/Rican7/retry v0.1.0
 	github.com/Shopify/sarama v1.23.0 // indirect
+	github.com/adiweiss/migrator v0.1.2-0.20190811073515-5f6b8b8a442c
 	github.com/bsm/sarama-cluster v2.1.15+incompatible // indirect
 	github.com/dangkaka/go-kafka-avro v0.0.0-20181108134201-d57aece51a15
 	github.com/eapache/go-resiliency v1.2.0 // indirect
@@ -17,7 +18,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
-	github.com/lopezator/migrator v0.1.0
+	github.com/lopezator/migrator v0.1.0 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
