@@ -9,7 +9,6 @@ import (
 
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/saga"
-	"github.com/wework/grabbit/gbus/saga/stores"
 	"github.com/wework/grabbit/gbus/serialization"
 	"github.com/wework/grabbit/gbus/tx/mysql"
 )
@@ -37,9 +36,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	gb := &gbus.DefaultBus{
 		AmqpConnStr:   builder.connStr,
 		PrefetchCount: builder.PrefetchCount,
-		Outgoing: &gbus.AMQPOutbox{
-			SvcName: svcName,
-		},
+
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
 		DelayedSubscriptions: [][]string{},
@@ -47,7 +44,6 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		RPCLock:              &sync.Mutex{},
 		SenderLock:           &sync.Mutex{},
 		ConsumerLock:         &sync.Mutex{},
-		IsTxnl:               builder.txnl,
 		Registrations:        make([]*gbus.Registration, 0),
 		RPCHandlers:          make(map[string]gbus.MessageHandler),
 		Serializer:           builder.serializer,
@@ -72,36 +68,30 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		sagaStore      saga.Store
 		timeoutManager gbus.TimeoutManager
 	)
-	if builder.txnl {
-		gb.IsTxnl = true
-		switch builder.txnlProvider {
 
-		case "mysql":
-			mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
+	switch builder.txnlProvider {
+
+	case "mysql":
+		mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
+		if err != nil {
+			panic(err)
+		}
+		gb.TxProvider = mysqltx
+		//TODO move purge logic into the NewSagaStore factory method
+		sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
+		if builder.purgeOnStartup {
+			err := sagaStore.Purge()
 			if err != nil {
 				panic(err)
 			}
-			gb.TxProvider = mysqltx
-			//TODO move purge logic into the NewSagaStore factory method
-			sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
-			if builder.purgeOnStartup {
-				err := sagaStore.Purge()
-				if err != nil {
-					panic(err)
-				}
-			}
-			gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
-			timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
-
-		default:
-			err := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
-			panic(err)
 		}
-	} else {
-		sagaStore = stores.NewInMemoryStore()
-		timeoutManager = &saga.InMemoryTimeoutManager{}
-	}
+		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
+		timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
 
+	default:
+		err := fmt.Errorf("no provider found for passed in value %v", builder.txnlProvider)
+		panic(err)
+	}
 	if builder.usingPingTimeout {
 		gb.DbPingTimeout = builder.dbPingTimeout
 	}
