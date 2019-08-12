@@ -237,7 +237,7 @@ func (b *DefaultBus) Start() error {
 	bindErr := b.bindServiceQueue()
 	if bindErr != nil {
 		b.Log().WithError(err).Error("could not bind service to queue")
-		return err
+		return bindErr
 	}
 
 	//declare rpc queue
