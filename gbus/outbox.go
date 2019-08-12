@@ -51,7 +51,7 @@ func (out *AMQPOutbox) init(amqp *amqp.Channel, confirm, resendOnNack bool) erro
 }
 
 func (out *AMQPOutbox) Shutdown() {
-	out.stop <- true
+	close(out.stop)
 
 }
 
