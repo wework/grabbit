@@ -88,6 +88,7 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 
 //Stop forcess the transactional outbox to stop processing additional messages
 func (outbox *TxOutbox) Stop() error {
+	outbox.amqpOutbox.Shutdown()
 	close(outbox.exit)
 	return nil
 }
