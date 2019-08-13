@@ -40,6 +40,7 @@ type DefaultBus struct {
 	amqpErrors     chan *amqp.Error
 	amqpBlocks     chan amqp.Blocking
 	Registrations  []*Registration
+	amqpOutbox     *AMQPOutbox
 
 	RPCHandlers          map[string]MessageHandler
 	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
@@ -213,15 +214,15 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 	amqpChan.NotifyClose(b.amqpErrors)
-	amqpOutbox := &AMQPOutbox{
+	b.amqpOutbox = &AMQPOutbox{
 		SvcName: b.SvcName,
 	}
-	err := amqpOutbox.init(amqpChan, b.Confirm, false)
+	err := b.amqpOutbox.init(amqpChan, b.Confirm, false)
 	if err != nil {
 		b.Log().WithError(err).Error("failed initializing amqpOutbox")
 		return err
 	}
-	if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
+	if startErr := b.Outbox.Start(b.amqpOutbox); startErr != nil {
 		b.Log().WithError(startErr).Error("failed to start transactional outbox")
 		return startErr
 	}
@@ -339,6 +340,7 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 		b.Log().WithError(err).Error("could not shutdown outbox")
 		return err
 	}
+	b.amqpOutbox.Shutdown()
 	b.TxProvider.Dispose()
 
 	return nil
