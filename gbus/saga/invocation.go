@@ -83,7 +83,3 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 func (si *sagaInvocation) DeliveryInfo() gbus.DeliveryInfo {
 	return si.decoratedInvocation.DeliveryInfo()
 }
-
-//func (si *sagaInvocation) Log() logrus.FieldLogger {
-//	return si.decoratedInvocation.Log().WithField("saga_id", si.sagaID)
-//}
