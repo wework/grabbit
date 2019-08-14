@@ -572,8 +572,8 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 }
 
 //HandleDeadletter implements GBus.HandleDeadletter
-func (b *DefaultBus) HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error) {
-	b.deadletterHandler = handler
+func (b *DefaultBus) HandleDeadletter(handler DeadLetterMessageHandler) {
+	b.registerDeadLetterHandler(handler)
 }
 
 //ReturnDeadToQueue returns a message to its original destination
@@ -722,6 +722,11 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 		worker.AddRegistration(registration)
 	}
 	return nil
+}
+
+func (b *DefaultBus) registerDeadLetterHandler(handler DeadLetterMessageHandler) {
+	metrics.AddHandlerMetrics(handler.Name())
+	b.deadletterHandler = handler
 }
 
 func (b *DefaultBus) bindQueue(topic, exchange string) error {

@@ -36,7 +36,7 @@ type worker struct {
 	handlersLock      *sync.Mutex
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
-	deadletterHandler func(tx *sql.Tx, poision amqp.Delivery) error
+	deadletterHandler DeadLetterMessageHandler
 	isTxnl            bool
 	b                 *DefaultBus
 	serializer        Serializer
@@ -237,7 +237,9 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		_ = worker.reject(true, delivery)
 		return
 	}
-	err := worker.deadletterHandler(tx, delivery)
+	err := metrics.RunHandlerWithMetric(func() error {
+		return worker.deadletterHandler(tx, delivery)
+	}, worker.deadletterHandler.Name(), worker.log())
 	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")

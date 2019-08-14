@@ -260,6 +260,16 @@ func TestDeadlettering(t *testing.T) {
 	if count != 1 {
 		t.Error("Should have one rejected message")
 	}
+
+	// because deadMessageHandler is an anonymous function and is registered first its name will be "func1"
+	handlerMetrics := metrics.GetHandlerMetrics("func1")
+	if handlerMetrics == nil {
+		t.Fatal("DeadLetterHandler should be registered for metrics")
+	}
+	successCount, _ := handlerMetrics.GetSuccessCount()
+	if successCount != 2 {
+		t.Errorf("DeadLetterHandler should have succedded twice, got %f", successCount)
+	}
 }
 
 func TestReturnDeadToQueue(t *testing.T) {
