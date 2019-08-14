@@ -3,9 +3,11 @@ package saga
 import (
 	"database/sql"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"reflect"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/rs/xid"
 	"github.com/wework/grabbit/gbus"
@@ -45,12 +47,21 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 		invocation.Log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("invoking method on saga")
-		returns := method.Call(params)
 
-		val := returns[0]
-		if !val.IsNil() {
-			return val.Interface().(error)
+		err := metrics.RunHandlerWithMetric(func() error {
+			returns := method.Call(params)
+
+			val := returns[0]
+			if !val.IsNil() {
+				return val.Interface().(error)
+			}
+			return nil
+		}, methodName, invocation.Log())
+
+		if err != nil {
+			return err
 		}
+
 		invocation.Log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("saga instance invoked")
@@ -94,6 +105,7 @@ func (si *Instance) timeout(tx *sql.Tx, bus gbus.Messaging) error {
 	return saga.Timeout(tx, bus)
 }
 
+//NewInstance creates a new saga instance
 func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instance {
 
 	var newSagaPtr interface{}

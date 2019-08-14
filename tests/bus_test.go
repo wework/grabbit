@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
 	"sync"
 	"testing"
@@ -144,6 +145,11 @@ func TestSubscribingOnTopic(t *testing.T) {
 	<-proceed
 }
 
+var (
+	handlerRetryProceed = make(chan bool)
+	attempts            = 0
+)
+
 func TestHandlerRetry(t *testing.T) {
 
 	c1 := Command1{}
@@ -153,34 +159,45 @@ func TestHandlerRetry(t *testing.T) {
 
 	bus := createBusForTest()
 
-	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		return invocation.Reply(noopTraceContext(), reply)
 	}
 
-	attempts := 0
-	replyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		if attempts == 0 {
-			attempts++
-			return fmt.Errorf("expecting retry on errors")
-		} else if attempts == 1 {
-			attempts++
-			panic("expecting retry on panics")
-		} else {
-			proceed <- true
-		}
-		return nil
-	}
-
 	bus.HandleMessage(c1, cmdHandler)
-	bus.HandleMessage(r1, replyHandler)
+	bus.HandleMessage(r1, handleRetry)
 
 	bus.Start()
 	defer bus.Shutdown()
 
 	bus.Send(noopTraceContext(), testSvc1, cmd)
-	<-proceed
+	<-handlerRetryProceed
 
+	hm := metrics.GetHandlerMetrics("handleRetry")
+	if hm == nil {
+		t.Error("Metrics for handleRetry should be initiated")
+	}
+	f, _ := hm.GetFailureCount()
+	s, _ := hm.GetSuccessCount()
+
+	if f != 2 {
+		t.Errorf("Failure count should be 2 but was %f", f)
+	}
+	if s != 1 {
+		t.Errorf("Success count should be 1 but was %f", s)
+	}
+}
+
+func handleRetry(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	if attempts == 0 {
+		attempts++
+		return fmt.Errorf("expecting retry on errors")
+	} else if attempts == 1 {
+		attempts++
+		panic("expecting retry on panics")
+	} else {
+		handlerRetryProceed <- true
+	}
+	return nil
 }
 
 func TestRPC(t *testing.T) {
@@ -215,8 +232,8 @@ func TestDeadlettering(t *testing.T) {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(2)
 	poision := gbus.NewBusMessage(PoisionMessage{})
-	service1 := createBusWithOptions(testSvc1, "grabbit-dead", true, true)
-	deadletterSvc := createBusWithOptions("deadletterSvc", "grabbit-dead", true, true)
+	service1 := createNamedBusForTest(testSvc1)
+	deadletterSvc := createNamedBusForTest("deadletterSvc")
 
 	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
 		waitgroup.Done()
@@ -239,6 +256,55 @@ func TestDeadlettering(t *testing.T) {
 	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
 
 	waitgroup.Wait()
+	count, _ := metrics.GetRejectedMessagesValue()
+	if count != 1 {
+		t.Error("Should have one rejected message")
+	}
+}
+
+func TestReturnDeadToQueue(t *testing.T) {
+
+	var visited bool
+	proceed := make(chan bool, 0)
+	poision := gbus.NewBusMessage(Command1{})
+
+	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+
+	deadletterSvc := createBusWithConfig("deadletterSvc", "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+
+	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
+		pub := amqpDeliveryToPublishing(poision)
+		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		return nil
+	}
+
+	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		if visited {
+			proceed <- true
+			return nil
+		}
+		visited = true
+		return errors.New("fail")
+	}
+
+	deadletterSvc.HandleDeadletter(deadMessageHandler)
+	service1.HandleMessage(Command1{}, faultyHandler)
+
+	deadletterSvc.Start()
+	defer deadletterSvc.Shutdown()
+	service1.Start()
+	defer service1.Shutdown()
+
+	service1.Send(context.Background(), testSvc1, poision)
+
+	select {
+	case <-proceed:
+		fmt.Println("success")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout, failed to resend dead message to queue")
+	}
 }
 
 func TestRegistrationAfterBusStarts(t *testing.T) {
@@ -352,6 +418,24 @@ func noopTraceContext() context.Context {
 	// span := tracer.StartSpan("test")
 	// ctx := opentracing.ContextWithSpan(context.Background(), span)
 	// return ctx
+}
+
+func amqpDeliveryToPublishing(del amqp.Delivery) (pub amqp.Publishing) {
+	pub.Headers = del.Headers
+	pub.ContentType = del.ContentType
+	pub.ContentEncoding = del.ContentEncoding
+	pub.DeliveryMode = del.DeliveryMode
+	pub.Priority = del.Priority
+	pub.CorrelationId = del.CorrelationId
+	pub.ReplyTo = del.ReplyTo
+	pub.Expiration = del.Expiration
+	pub.MessageId = del.MessageId
+	pub.Timestamp = del.Timestamp
+	pub.Type = del.Type
+	pub.UserId = del.UserId
+	pub.AppId = del.AppId
+	pub.Body = del.Body
+	return
 }
 
 type panicPolicy struct {

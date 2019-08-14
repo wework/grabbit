@@ -3,16 +3,20 @@ package gbus
 import (
 	"context"
 	"database/sql"
-	"github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/streadway/amqp"
 )
 
+//Semantics reopresents the semantics of a grabbit message
 type Semantics string
 
 const (
+	//CMD represenst a messge with command semantics in grabbit
 	CMD Semantics = "cmd"
+	//EVT represenst a messge with event semantics in grabbit
 	EVT Semantics = "evt"
 )
 
@@ -25,7 +29,7 @@ type BusConfiguration struct {
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
-	RegisterDeadletterHandler
+	Deadlettering
 	BusSwitch
 	Messaging
 	SagaRegister
@@ -106,9 +110,6 @@ type HandlerRegister interface {
 	HandleEvent(exchange, topic string, event Message, handler MessageHandler) error
 }
 
-//MessageHandler signature for all command handlers
-type MessageHandler func(invocation Invocation, message *BusMessage) error
-
 //Saga is the base interface for all Sagas.
 type Saga interface {
 	//StartedBy returns the messages that when received should create a new saga instance
@@ -127,8 +128,9 @@ type Saga interface {
 }
 
 //RegisterDeadletterHandler provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
-type RegisterDeadletterHandler interface {
+type Deadlettering interface {
 	HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error)
+	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess
@@ -143,6 +145,14 @@ type SagaConfFn func(Saga) Saga
 //SagaRegister registers sagas to the bus
 type SagaRegister interface {
 	RegisterSaga(saga Saga, conf ...SagaConfFn) error
+}
+
+//SagaGlue glues together all the parts needed in order to orchistrate saga instances
+type SagaGlue interface {
+	SagaRegister
+	Logged
+	Start() error
+	Stop() error
 }
 
 //Builder is the main interface that should be used to create an instance of a Bus
@@ -217,6 +227,21 @@ type TxOutbox interface {
 	Stop() error
 }
 
+//TimeoutManager abstracts the implementation of determining when a saga should be timed out
+type TimeoutManager interface {
+	//RegisterTimeout requests the TimeoutManager to register a timeout for a specific saga instance
+	RegisterTimeout(tx *sql.Tx, sagaID string, duration time.Duration) error
+	//ClearTimeout clears a timeout for a specific saga
+	ClearTimeout(tx *sql.Tx, sagaID string) error
+	//SetTimeoutFunction accepts the function that the TimeoutManager should invoke once a timeout expires
+	SetTimeoutFunction(func(tx *sql.Tx, sagaID string) error)
+	//Start starts the timeout manager
+	Start() error
+	//Stop shuts the timeout manager down
+	Stop() error
+}
+
+//Logged represents a grabbit component that can be logged
 type Logged interface {
 	SetLogger(entry logrus.FieldLogger)
 	Log() logrus.FieldLogger

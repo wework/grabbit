@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -116,8 +117,16 @@ func (store *SagaStore) RegisterSagaType(saga gbus.Saga) {
 func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 	tblName := store.GetSagatableName()
 	deleteSQL := `DELETE FROM ` + tblName + ` WHERE saga_id= ?`
-	_, err := tx.Exec(deleteSQL, instance.ID)
-	return err
+	result, err := tx.Exec(deleteSQL, instance.ID)
+	if err != nil {
+		return err
+	}
+	rowsEffected, e := result.RowsAffected()
+	if rowsEffected == 0 || e != nil {
+		return errors.New("couldn't delete saga, saga not found orr an error occurred")
+	}
+
+	return nil
 }
 
 //GetSagaByID implements interface method store.GetSagaByID
@@ -133,6 +142,10 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 			store.log().WithError(err).Error("could not close rows")
 		}
 	}()
+
+	if err != nil && err == sql.ErrNoRows {
+		return nil, saga.ErrInstanceNotFound
+	}
 	if err != nil {
 		store.log().WithError(err).
 			WithFields(log.Fields{"saga_id": sagaID, "table_name": store.GetSagatableName()}).

@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
@@ -37,7 +37,6 @@ type worker struct {
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
 	deadletterHandler func(tx *sql.Tx, poision amqp.Delivery) error
-	isTxnl            bool
 	b                 *DefaultBus
 	serializer        Serializer
 	txProvider        TxProvider
@@ -127,8 +126,6 @@ func (worker *worker) consumeMessages() {
 		if shouldProceed {
 
 			worker.processMessage(delivery, isRPCreply)
-		} else {
-			worker.log().WithField("message_id", delivery.MessageId).Warn("no proceed")
 		}
 
 	}
@@ -236,22 +233,30 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	if txCreateErr != nil {
 		worker.log().WithError(txCreateErr).Error("failed creating new tx")
 		worker.span.LogFields(slog.Error(txCreateErr))
-		_ = worker.ack(delivery)
+		_ = worker.reject(true, delivery)
 		return
 	}
-	var fn func() error
 	err := worker.deadletterHandler(tx, delivery)
+	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")
 		worker.span.LogFields(slog.Error(err))
-		fn = tx.Rollback
+		err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
+		reject = true
 	} else {
-		fn = tx.Commit
+		err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
 	}
-	err = worker.SafeWithRetries(fn, MaxRetryCount)
+
 	if err != nil {
 		worker.log().WithError(err).Error("Rollback/Commit deadletter handler message")
 		worker.span.LogFields(slog.Error(err))
+		reject = true
+	}
+
+	if reject {
+		_ = worker.reject(true, delivery)
+	} else {
+		_ = worker.ack(delivery)
 	}
 }
 
@@ -322,6 +327,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.ack(delivery)
 	} else {
 		_ = worker.reject(false, delivery)
+		metrics.ReportRejectedMessage()
 	}
 }
 
@@ -331,16 +337,13 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 	// each retry should run a new and separate transaction which should end with a commit or rollback
 
 	action := func(attempt uint) (actionErr error) {
-		var tx *sql.Tx
-		var txCreateErr error
-		if worker.isTxnl {
-			tx, txCreateErr = worker.txProvider.New()
+		
+		tx, txCreateErr := worker.txProvider.New()
 			if txCreateErr != nil {
 				worker.log().WithError(txCreateErr).Error("failed creating new tx")
 				worker.span.LogFields(slog.Error(txCreateErr))
 				return txCreateErr
 			}
-		}
 
 		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
 		worker.span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
@@ -349,12 +352,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 				actionErr = errors.New(pncMsg)
-				if worker.isTxnl {
-					rbkErr := tx.Rollback()
+				rbkErr := tx.Rollback()
 					if rbkErr != nil {
 						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
 					}
-				}
 				worker.span.LogFields(slog.Error(actionErr))
 			}
 			worker.span.Finish()
@@ -363,7 +364,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		var hspan opentracing.Span
 		var hsctx context.Context
 		for _, handler := range handlers {
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name())
+			hspan, hsctx = opentracing.StartSpanFromContext(sctx, handler.Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -378,8 +379,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 					MaxRetryCount: MaxRetryCount,
 				},
 			}
-			ctx.SetLogger(worker.log().WithField("handler", runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()))
-			handlerErr = handler(ctx, message)
+			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
+			handlerErr = metrics.RunHandlerWithMetric(func() error {
+				return handler(ctx, message)
+			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break
@@ -388,22 +391,18 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		}
 		if handlerErr != nil {
 			hspan.LogFields(slog.Error(handlerErr))
-			if worker.isTxnl {
-				rbkErr := tx.Rollback()
+			rbkErr := tx.Rollback()
 				if rbkErr != nil {
 					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
 				}
-			}
 			hspan.Finish()
 			return handlerErr
 		}
-		if worker.isTxnl {
-			cmtErr := tx.Commit()
+		cmtErr := tx.Commit()
 			if cmtErr != nil {
-				worker.log().WithError(cmtErr).Error("failed commiting transaction after invoking handlers")
+				worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
 				return cmtErr
 			}
-		}
 		return nil
 	}
 

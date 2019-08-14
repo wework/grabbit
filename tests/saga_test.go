@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/metrics"
 )
 
 /*
@@ -225,6 +226,10 @@ func TestSagaTimeout(t *testing.T) {
 	}
 
 	<-proceed
+	timeoutCounter, e := metrics.GetSagaTimeoutCounterValue()
+	if timeoutCounter != 1 || e != nil {
+		t.Errorf("saga timeout counter expected to be 1 actual %v", timeoutCounter)
+	}
 }
 
 func TestSagaSelfMessaging(t *testing.T) {
