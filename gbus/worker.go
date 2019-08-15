@@ -143,7 +143,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poison pill message
-		worker.log().WithFields(logrus.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
+		worker.log().WithFields(logrus.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
 	}
@@ -151,7 +151,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	var decErr error
 	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 	if decErr != nil {
-		worker.log().WithError(decErr).WithField("message", delivery).Error("failed to decode message. rejected as poison")
+		worker.log().WithError(decErr).WithField("message_name", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
 		return nil, decErr
 	}
 	return bm, nil
@@ -337,13 +337,13 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 	// each retry should run a new and separate transaction which should end with a commit or rollback
 
 	action := func(attempt uint) (actionErr error) {
-		
+
 		tx, txCreateErr := worker.txProvider.New()
-			if txCreateErr != nil {
-				worker.log().WithError(txCreateErr).Error("failed creating new tx")
-				worker.span.LogFields(slog.Error(txCreateErr))
-				return txCreateErr
-			}
+		if txCreateErr != nil {
+			worker.log().WithError(txCreateErr).Error("failed creating new tx")
+			worker.span.LogFields(slog.Error(txCreateErr))
+			return txCreateErr
+		}
 
 		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
 		worker.span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
@@ -353,9 +353,9 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 				actionErr = errors.New(pncMsg)
 				rbkErr := tx.Rollback()
-					if rbkErr != nil {
-						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
-					}
+				if rbkErr != nil {
+					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
+				}
 				worker.span.LogFields(slog.Error(actionErr))
 			}
 			worker.span.Finish()
@@ -392,17 +392,17 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		if handlerErr != nil {
 			hspan.LogFields(slog.Error(handlerErr))
 			rbkErr := tx.Rollback()
-				if rbkErr != nil {
-					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
-				}
+			if rbkErr != nil {
+				worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
+			}
 			hspan.Finish()
 			return handlerErr
 		}
 		cmtErr := tx.Commit()
-			if cmtErr != nil {
-				worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
-				return cmtErr
-			}
+		if cmtErr != nil {
+			worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
+			return cmtErr
+		}
 		return nil
 	}
 

@@ -75,7 +75,7 @@ func (as *Proto) Decode(buffer []byte, schemaName string) (msg gbus.Message, err
 	msg, ok = tmsg.(gbus.Message)
 	if !ok {
 		err = fmt.Errorf("could not cast obj to gbus.Message")
-		as.logger.WithError(err).WithField("msg", tmsg).Errorf("could not cast %v to gbus.Message", tmsg)
+		as.logger.WithError(err).Errorf("could not cast %v to gbus.Message", tmsg)
 		return nil, err
 	}
 
