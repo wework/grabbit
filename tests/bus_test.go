@@ -266,9 +266,9 @@ func TestDeadlettering(t *testing.T) {
 	if handlerMetrics == nil {
 		t.Fatal("DeadLetterHandler should be registered for metrics")
 	}
-	successCount, _ := handlerMetrics.GetSuccessCount()
-	if successCount != 2 {
-		t.Errorf("DeadLetterHandler should have succedded twice, got %f", successCount)
+	failureCount, _ := handlerMetrics.GetFailureCount()
+	if failureCount != 0 {
+		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", failureCount)
 	}
 }
 

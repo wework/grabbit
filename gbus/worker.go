@@ -2,7 +2,6 @@ package gbus
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
