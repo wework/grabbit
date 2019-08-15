@@ -143,7 +143,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poison pill message
-		worker.log().WithFields(logrus.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
+		worker.log().WithFields(logrus.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
 	}
@@ -151,7 +151,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	var decErr error
 	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 	if decErr != nil {
-		worker.log().WithError(decErr).WithField("fqn", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
+		worker.log().WithError(decErr).WithField("message_name", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
 		return nil, decErr
 	}
 	return bm, nil
