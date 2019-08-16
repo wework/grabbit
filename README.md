@@ -21,6 +21,7 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
 7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
+8) Reporting [metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
 
 Planned:
 

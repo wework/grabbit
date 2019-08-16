@@ -29,7 +29,7 @@ type BusConfiguration struct {
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
-	RegisterDeadletterHandler
+	Deadlettering
 	BusSwitch
 	Messaging
 	SagaRegister
@@ -128,8 +128,9 @@ type Saga interface {
 }
 
 //RegisterDeadletterHandler provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
-type RegisterDeadletterHandler interface {
+type Deadlettering interface {
 	HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error)
+	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
 //RequestSagaTimeout is the interface a saga needs to implement to get timeout servicess

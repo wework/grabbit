@@ -161,7 +161,7 @@ func (tm *TimeoutManager) RegisterTimeout(tx *sql.Tx, sagaID string, duration ti
 //ClearTimeout clears a timeout for a specific saga
 func (tm *TimeoutManager) ClearTimeout(tx *sql.Tx, sagaID string) error {
 
-	deleteSQL := `delete from ` + tm.timeoutsTableName + ` where saga_id_id = ?`
+	deleteSQL := `delete from ` + tm.timeoutsTableName + ` where saga_id = ?`
 	_, err := tx.Exec(deleteSQL, sagaID)
 	return err
 }

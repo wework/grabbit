@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/wework/grabbit/gbus/metrics"
 	"math/rand"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
@@ -36,7 +37,6 @@ type worker struct {
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
 	deadletterHandler func(tx *sql.Tx, poision amqp.Delivery) error
-	isTxnl            bool
 	b                 *DefaultBus
 	serializer        Serializer
 	txProvider        TxProvider
@@ -126,8 +126,6 @@ func (worker *worker) consumeMessages() {
 		if shouldProceed {
 
 			worker.processMessage(delivery, isRPCreply)
-		} else {
-			worker.log().WithField("message_id", delivery.MessageId).Warn("no proceed")
 		}
 
 	}
@@ -145,7 +143,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	}
 	if bm.PayloadFQN == "" || bm.Semantics == "" {
 		//TODO: Log poison pill message
-		worker.log().WithFields(logrus.Fields{"fqn": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
+		worker.log().WithFields(logrus.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
 
 		return nil, errors.New("missing critical headers")
 	}
@@ -153,7 +151,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	var decErr error
 	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 	if decErr != nil {
-		worker.log().WithError(decErr).WithField("message", delivery).Error("failed to decode message. rejected as poison")
+		worker.log().WithError(decErr).WithField("message_name", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
 		return nil, decErr
 	}
 	return bm, nil
@@ -339,15 +337,12 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 	// each retry should run a new and separate transaction which should end with a commit or rollback
 
 	action := func(attempt uint) (actionErr error) {
-		var tx *sql.Tx
-		var txCreateErr error
-		if worker.isTxnl {
-			tx, txCreateErr = worker.txProvider.New()
-			if txCreateErr != nil {
-				worker.log().WithError(txCreateErr).Error("failed creating new tx")
-				worker.span.LogFields(slog.Error(txCreateErr))
-				return txCreateErr
-			}
+
+		tx, txCreateErr := worker.txProvider.New()
+		if txCreateErr != nil {
+			worker.log().WithError(txCreateErr).Error("failed creating new tx")
+			worker.span.LogFields(slog.Error(txCreateErr))
+			return txCreateErr
 		}
 
 		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
@@ -357,11 +352,9 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
 				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 				actionErr = errors.New(pncMsg)
-				if worker.isTxnl {
-					rbkErr := tx.Rollback()
-					if rbkErr != nil {
-						worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
-					}
+				rbkErr := tx.Rollback()
+				if rbkErr != nil {
+					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
 				}
 				worker.span.LogFields(slog.Error(actionErr))
 			}
@@ -388,7 +381,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			}
 			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
 			handlerErr = metrics.RunHandlerWithMetric(func() error {
-				return  handler(ctx, message)
+				return handler(ctx, message)
 			}, handler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
@@ -398,21 +391,17 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		}
 		if handlerErr != nil {
 			hspan.LogFields(slog.Error(handlerErr))
-			if worker.isTxnl {
-				rbkErr := tx.Rollback()
-				if rbkErr != nil {
-					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
-				}
+			rbkErr := tx.Rollback()
+			if rbkErr != nil {
+				worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
 			}
 			hspan.Finish()
 			return handlerErr
 		}
-		if worker.isTxnl {
-			cmtErr := tx.Commit()
-			if cmtErr != nil {
-				worker.log().WithError(cmtErr).Error("failed commiting transaction after invoking handlers")
-				return cmtErr
-			}
+		cmtErr := tx.Commit()
+		if cmtErr != nil {
+			worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
+			return cmtErr
 		}
 		return nil
 	}

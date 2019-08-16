@@ -26,7 +26,6 @@ var _ Bus = &DefaultBus{}
 type DefaultBus struct {
 	*Safety
 	*Glogged
-	Outgoing       *AMQPOutbox
 	Outbox         TxOutbox
 	PrefetchCount  uint
 	AmqpConnStr    string
@@ -41,6 +40,7 @@ type DefaultBus struct {
 	amqpErrors     chan *amqp.Error
 	amqpBlocks     chan amqp.Blocking
 	Registrations  []*Registration
+	amqpOutbox     *AMQPOutbox
 
 	RPCHandlers          map[string]MessageHandler
 	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
@@ -54,16 +54,16 @@ type DefaultBus struct {
 	started              bool
 	Glue                 SagaGlue
 	TxProvider           TxProvider
-	IsTxnl               bool
-	WorkerNum            uint
-	Serializer           Serializer
-	DLX                  string
-	DefaultPolicies      []MessagePolicy
-	Confirm              bool
-	healthChan           chan error
-	backpressure         bool
-	DbPingTimeout        time.Duration
-	amqpConnected        bool
+
+	WorkerNum       uint
+	Serializer      Serializer
+	DLX             string
+	DefaultPolicies []MessagePolicy
+	Confirm         bool
+	healthChan      chan error
+	backpressure    bool
+	DbPingTimeout   time.Duration
+	amqpConnected   bool
 }
 
 var (
@@ -203,37 +203,28 @@ func (b *DefaultBus) Start() error {
 	b.egressConn.NotifyClose(b.amqpErrors)
 	b.egressConn.NotifyBlocked(b.amqpBlocks)
 	b.egressChannel.NotifyClose(b.amqpErrors)
-	//TODO:Figure out what should be done
 
-	//init the outbox that sends the messages to the amqp transport and handles publisher confirms
-	if e := b.Outgoing.init(b.egressChannel, b.Confirm, true); e != nil {
-		return e
-	}
 	/*
 		start the transactional outbox, make sure calling b.TxOutgoing.Start() is done only after b.Outgoing.init is called
 		TODO://the design is crap and needs to be refactored
 	*/
-	if b.IsTxnl {
-
-		var amqpChan *amqp.Channel
-		if amqpChan, e = b.createAMQPChannel(b.egressConn); e != nil {
-			b.Log().WithError(e).Error("failed to create amqp channel for transactional outbox")
-			return e
-		}
-		amqpChan.NotifyClose(b.amqpErrors)
-		amqpOutbox := &AMQPOutbox{
-			SvcName: b.SvcName,
-		}
-		err := amqpOutbox.init(amqpChan, b.Confirm, false)
-		if err != nil {
-			b.Log().WithError(err).Error("failed initializing amqpOutbox")
-			return err
-		}
-		if startErr := b.Outbox.Start(amqpOutbox); startErr != nil {
-			b.Log().WithError(startErr).Error("failed to start transactional outbox")
-			return startErr
-		}
-
+	var amqpChan *amqp.Channel
+	if amqpChan, e = b.createAMQPChannel(b.egressConn); e != nil {
+		b.Log().WithError(e).Error("failed to create amqp channel for transactional outbox")
+		return e
+	}
+	amqpChan.NotifyClose(b.amqpErrors)
+	b.amqpOutbox = &AMQPOutbox{
+		SvcName: b.SvcName,
+	}
+	err := b.amqpOutbox.init(amqpChan, b.Confirm, false)
+	if err != nil {
+		b.Log().WithError(err).Error("failed initializing amqpOutbox")
+		return err
+	}
+	if startErr := b.Outbox.Start(b.amqpOutbox); startErr != nil {
+		b.Log().WithError(startErr).Error("failed to start transactional outbox")
+		return startErr
 	}
 
 	//declare queue
@@ -244,10 +235,10 @@ func (b *DefaultBus) Start() error {
 	b.serviceQueue = q
 
 	//bind queue
-	err := b.bindServiceQueue()
-	if err != nil {
+	bindErr := b.bindServiceQueue()
+	if bindErr != nil {
 		b.Log().WithError(err).Error("could not bind service to queue")
-		return err
+		return bindErr
 	}
 
 	//declare rpc queue
@@ -299,7 +290,6 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			q:                 b.serviceQueue,
 			rpcq:              b.rpcQueue,
 			svcName:           b.SvcName,
-			isTxnl:            b.IsTxnl,
 			txProvider:        b.TxProvider,
 			rpcLock:           b.RPCLock,
 			rpcHandlers:       b.RPCHandlers,
@@ -339,23 +329,19 @@ func (b *DefaultBus) Shutdown() (shutdwonErr error) {
 			return err
 		}
 	}
-	b.Outgoing.shutdown()
 
 	if err := b.Glue.Stop(); err != nil {
 		return err
 	}
 	b.started = false
-	if b.IsTxnl {
+	err := b.Outbox.Stop()
 
-		err := b.Outbox.Stop()
-
-		if err != nil {
-			b.Log().WithError(err).Error("could not shutdown outbox")
-			return err
-		}
-		b.TxProvider.Dispose()
-
+	if err != nil {
+		b.Log().WithError(err).Error("could not shutdown outbox")
+		return err
 	}
+	b.amqpOutbox.Shutdown()
+	b.TxProvider.Dispose()
 
 	return nil
 }
@@ -370,11 +356,8 @@ func (b *DefaultBus) NotifyHealth(health chan error) {
 
 //GetHealth implements Health.GetHealth
 func (b *DefaultBus) GetHealth() HealthCard {
-	var dbConnected bool
 
-	if b.IsTxnl {
-		dbConnected = b.TxProvider.Ping(b.DbPingTimeout)
-	}
+	dbConnected := b.TxProvider.Ping(b.DbPingTimeout)
 
 	return HealthCard{
 		DbConnected:        dbConnected,
@@ -387,11 +370,11 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 	var shouldCommitTx bool
 	var activeTx *sql.Tx
 	//create a new transaction only if there is no active one already passed in
-	if b.IsTxnl && ambientTx == nil {
+	if ambientTx == nil {
 
 		/*
 			if the passed in ambient transaction is not nil it means that some caller has created the transaction
-			and knows when should this transaction bee committed or rolledback.
+			and knows when should this transaction be committed or rolledback.
 			In these cases we only invoke the passed in action with the passed in transaction
 			and do not commit/rollback the transaction.action
 			If no ambient transaction is passed in then we create a new transaction and commit or rollback after
@@ -414,11 +397,7 @@ func (b *DefaultBus) withTx(action func(tx *sql.Tx) error, ambientTx *sql.Tx) er
 	}
 	actionErr := b.SafeWithRetries(retryAction, MaxRetryCount)
 
-	/*
-		if the bus is transactional and there is no ambient transaction then create a new one else use the ambient tranaction.
-		if the bus is not transactional a nil transaction reference  will be passed
-	*/
-	if b.IsTxnl && shouldCommitTx {
+	if shouldCommitTx {
 		if actionErr != nil {
 			err := activeTx.Rollback()
 			if err != nil {
@@ -464,7 +443,12 @@ func (b *DefaultBus) RPC(ctx context.Context, service string, request, reply *Bu
 		rpcID: rpcID}
 
 	b.Serializer.Register(reply.Payload)
-	err := b.sendImpl(ctx, nil, service, b.rpcQueue.Name, "", "", request, rpc)
+
+	sendRPC := func(tx *sql.Tx) error {
+		return b.sendImpl(ctx, tx, service, b.rpcQueue.Name, "", "", request, rpc)
+	}
+
+	err := b.withTx(sendRPC, nil)
 	if err != nil {
 		b.Log().WithError(err).Error("could not send message")
 		return nil, err
@@ -504,6 +488,25 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 	message.Semantics = CMD
 	send := func(tx *sql.Tx) error {
 		return b.sendImpl(ctx, tx, toService, b.SvcName, "", "", message, policies...)
+	}
+	return b.withTx(send, ambientTx)
+}
+
+func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
+	if !b.started {
+		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+	}
+	//publishing.Headers.
+	exchange := fmt.Sprintf("%v", publishing.Headers["x-first-death-exchange"])
+	routingKey := fmt.Sprintf("%v", publishing.Headers["x-first-death-queue"])
+
+	delete(publishing.Headers, "x-death")
+	delete(publishing.Headers, "x-first-death-queue")
+	delete(publishing.Headers, "x-first-death-reason")
+	delete(publishing.Headers, "x-first-death-exchange")
+
+	send := func(tx *sql.Tx) error {
+		return b.publish(tx, exchange, routingKey, publishing)
 	}
 	return b.withTx(send, ambientTx)
 }
@@ -557,6 +560,11 @@ func (b *DefaultBus) HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Deli
 	b.deadletterHandler = handler
 }
 
+//ReturnDeadToQueue returns a message to its original destination
+func (b *DefaultBus) ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error {
+	return b.returnDeadToQueue(ctx, nil, publishing)
+}
+
 //RegisterSaga impements GBus.RegisterSaga
 func (b *DefaultBus) RegisterSaga(saga Saga, conf ...SagaConfFn) error {
 	if b.Glue == nil {
@@ -596,6 +604,28 @@ func (b *DefaultBus) monitorAMQPErrors() {
 			}
 		}
 	}
+}
+
+func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg *amqp.Publishing) error {
+	publish := func() error {
+
+		b.Log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
+		saveErr := b.Outbox.Save(tx, exchange, routingKey, *msg)
+		if saveErr != nil {
+			b.Log().WithError(saveErr).Error("failed to save to transactional outbox")
+		}
+		return saveErr
+	}
+	//currently only one thread can publish at a time
+	//TODO:add a publishing workers
+
+	err := b.SafeWithRetries(publish, MaxRetryCount)
+
+	if err != nil {
+		b.Log().Printf("failed publishing message.\n error:%v", err)
+		return err
+	}
+	return err
 }
 
 func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
@@ -649,34 +679,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		key = topic
 	}
 
-	publish := func() error {
-		//send to the transactional outbox if the bus is transactional
-		//otherwise send directly to amqp
-		if b.IsTxnl && tx != nil {
-			b.Log().WithField("message_id", msg.MessageId).Debug("sending message to outbox")
-			saveErr := b.Outbox.Save(tx, exchange, key, msg)
-			if saveErr != nil {
-				b.Log().WithError(saveErr).Error("failed to save to transactional outbox")
-			}
-			return saveErr
-		}
-		//do not attempt to contact the borker if backpressure is being applied
-		if b.backpressure {
-			return errors.New("can't send message due to backpressure from amqp broker")
-		}
-		_, outgoingErr := b.Outgoing.Post(exchange, key, msg)
-		return outgoingErr
-	}
-	//currently only one thread can publish at a time
-	//TODO:add a publishing workers
-
-	err = b.SafeWithRetries(publish, MaxRetryCount)
-
-	if err != nil {
-		b.Log().Printf("failed publishing message.\n error:%v", err)
-		return err
-	}
-	return err
+	return b.publish(tx, exchange, key, &msg)
 }
 
 func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Message, handler MessageHandler) error {
@@ -708,6 +711,7 @@ func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RpcHeaderName] = p.rpcID
 }
 
+//Log returns the default logrus.FieldLogger for the bus via the Glogged helper
 func (b *DefaultBus) Log() logrus.FieldLogger {
 	if b.Glogged == nil {
 		b.Glogged = &Glogged{
