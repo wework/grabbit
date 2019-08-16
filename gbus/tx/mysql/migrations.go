@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"fmt"
-	"github.com/adiweiss/migrator"
+	"github.com/lopezator/migrator"
 	"github.com/wework/grabbit/gbus/tx"
 )
 
@@ -82,15 +82,17 @@ func TimoutTableMigration(svcName string) *migrator.Migration {
 }
 
 func EnsureSchema(db *sql.DB, svcName string) {
-
 	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
 
-	migrate := migrator.NewNamed(migrationsTable,
+	migrate, err := migrator.New(migrator.TableName(migrationsTable), migrator.Migrations(
 		OutboxMigrations(svcName),
 		SagaStoreTableMigration(svcName),
 		TimoutTableMigration(svcName),
-	)
-	err := migrate.Migrate(db)
+	))
+	if err != nil {
+		panic(err)
+	}
+	err = migrate.Migrate(db)
 	if err != nil {
 		panic(err)
 	}
