@@ -43,7 +43,7 @@ type DefaultBus struct {
 	amqpOutbox     *AMQPOutbox
 
 	RPCHandlers          map[string]MessageHandler
-	deadletterHandler    func(tx *sql.Tx, poision amqp.Delivery) error
+	deadletterHandler    DeadLetterMessageHandler
 	HandlersLock         *sync.Mutex
 	RPCLock              *sync.Mutex
 	SenderLock           *sync.Mutex

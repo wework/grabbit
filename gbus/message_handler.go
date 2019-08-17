@@ -11,7 +11,8 @@ import (
 //MessageHandler signature for all command handlers
 type MessageHandler func(invocation Invocation, message *BusMessage) error
 
-type DeadLetterMessageHandler func(tx *sql.Tx, poision amqp.Delivery) error
+//DeadLetterMessageHandler signature for dead letter handler
+type DeadLetterMessageHandler func(tx *sql.Tx, poison amqp.Delivery) error
 
 func (mg MessageHandler) Name() string {
 	return nameFromFunc(mg)
