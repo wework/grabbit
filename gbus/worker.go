@@ -66,7 +66,7 @@ func (worker *worker) Start() error {
 	worker.rpcMessages = rpcmsgs
 
 	go worker.consumeMessages()
-
+	go worker.consumeRPC()
 	return nil
 }
 
@@ -93,43 +93,22 @@ func (worker *worker) createMessagesChannel(q amqp.Queue, consumerTag string) (<
 
 func (worker *worker) consumeMessages() {
 
-	//TODO:Handle panics due to tx errors so the consumption of messages will continue
-	for {
-
-		var isRPCreply bool
-		var delivery amqp.Delivery
-		var shouldProceed bool
-
-		select {
-
-		case <-worker.stop:
-			worker.log().Info("stopped consuming messages")
-			return
-		case msgDelivery, ok := <-worker.messages:
-			if ok {
-				shouldProceed = true
-			}
-			delivery = msgDelivery
-			isRPCreply = false
-		case rpcDelivery, ok := <-worker.rpcMessages:
-			if ok {
-				shouldProceed = true
-			}
-			delivery = rpcDelivery
-			isRPCreply = true
+	for msg := range worker.messages {
+		if msg.Body == nil || len(msg.Body) == 0 {
+			continue
 		}
-
-		/*
-			as the bus shuts down and amqp connection is killed the messages channel (b.msgs) gets closed
-			and delivery is a zero value so in order not to panic down the road we return if bus is shutdown
-		*/
-		if shouldProceed {
-
-			worker.processMessage(delivery, isRPCreply)
-		}
-
+		worker.processMessage(msg, false)
 	}
+}
 
+func (worker *worker) consumeRPC() {
+
+	for msg := range worker.rpcMessages {
+		if msg.Body == nil || len(msg.Body) == 0 {
+			continue
+		}
+		worker.processMessage(msg, true)
+	}
 }
 
 func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, error) {
