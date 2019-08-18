@@ -8,6 +8,9 @@ import (
 	"github.com/wework/grabbit/gbus/tx"
 )
 
+/*
+	Migration for creating the service saga store table
+*/
 func SagaStoreTableMigration(svcName string) *migrator.Migration {
 	tblName := tx.GetSagatableName(svcName)
 
@@ -31,6 +34,9 @@ func SagaStoreTableMigration(svcName string) *migrator.Migration {
 	}
 }
 
+/*
+	Migration for creating the service outbox table
+*/
 func OutboxMigrations(svcName string) *migrator.Migration {
 
 	query := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
@@ -59,6 +65,9 @@ func OutboxMigrations(svcName string) *migrator.Migration {
 	}
 }
 
+/*
+	Migration for creating the service timeout table, where timeouts are persisted
+*/
 func TimoutTableMigration(svcName string) *migrator.Migration {
 	tblName := GetTimeoutsTableName(svcName)
 
@@ -81,6 +90,9 @@ func TimoutTableMigration(svcName string) *migrator.Migration {
 	}
 }
 
+/*
+	EnsureSchema implements Grabbit's migrations strategy and manages Grabbit's required migrations.
+*/
 func EnsureSchema(db *sql.DB, svcName string) {
 	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
 
