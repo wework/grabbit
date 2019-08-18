@@ -2,7 +2,6 @@ package gbus
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -36,7 +35,7 @@ type worker struct {
 	handlersLock      *sync.Mutex
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
-	deadletterHandler func(tx *sql.Tx, poision amqp.Delivery) error
+	deadletterHandler DeadLetterMessageHandler
 	b                 *DefaultBus
 	serializer        Serializer
 	txProvider        TxProvider
@@ -215,7 +214,9 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		_ = worker.reject(true, delivery)
 		return
 	}
-	err := worker.deadletterHandler(tx, delivery)
+	err := metrics.RunHandlerWithMetric(func() error {
+		return worker.deadletterHandler(tx, delivery)
+	}, worker.deadletterHandler.Name(), worker.log())
 	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")

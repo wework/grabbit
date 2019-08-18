@@ -2,8 +2,9 @@ package mysql
 
 import (
 	"database/sql"
+	"regexp"
+	"strings"
 
-	"fmt"
 	"github.com/lopezator/migrator"
 	"github.com/wework/grabbit/gbus/tx"
 )
@@ -86,7 +87,7 @@ func TimoutTableMigration(svcName string) *migrator.Migration {
 
 //EnsureSchema implements Grabbit's migrations strategy
 func EnsureSchema(db *sql.DB, svcName string) {
-	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
+	migrationsTable := sanitizedMigrationsTable(svcName)
 
 	migrate, err := migrator.New(migrator.TableName(migrationsTable), migrator.Migrations(
 		OutboxMigrations(svcName),
@@ -100,4 +101,11 @@ func EnsureSchema(db *sql.DB, svcName string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func sanitizedMigrationsTable(svcName string) string {
+	var re = regexp.MustCompile(`-|;|\\|`)
+	sanitized := re.ReplaceAllString(svcName, "")
+
+	return strings.ToLower("grabbitMigrations_" + sanitized)
 }
