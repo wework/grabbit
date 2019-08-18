@@ -2,10 +2,11 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_model/go"
-	"github.com/sirupsen/logrus"
 	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
+	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -20,7 +21,7 @@ const (
 	grabbitPrefix = "grabbit"
 )
 
-type HandlerMetrics struct {
+type handlerMetrics struct {
 	result  *prometheus.CounterVec
 	latency prometheus.Summary
 }
@@ -62,17 +63,17 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger
 	return err
 }
 
-func GetHandlerMetrics(handlerName string) *HandlerMetrics {
+func GetHandlerMetrics(handlerName string) *handlerMetrics {
 	entry, ok := handlerMetricsByHandlerName.Load(handlerName)
 	if ok {
-		return entry.(*HandlerMetrics)
+		return entry.(*handlerMetrics)
 	}
 
 	return nil
 }
 
-func newHandlerMetrics(handlerName string) *HandlerMetrics {
-	return &HandlerMetrics{
+func newHandlerMetrics(handlerName string) *handlerMetrics {
+	return &handlerMetrics{
 		result: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: grabbitPrefix,
@@ -98,15 +99,15 @@ func trackTime(functionToTrack func() error, observer prometheus.Observer) error
 	return functionToTrack()
 }
 
-func (hm *HandlerMetrics) GetSuccessCount() (float64, error) {
+func (hm *handlerMetrics) GetSuccessCount() (float64, error) {
 	return hm.getLabeledCounterValue(success)
 }
 
-func (hm *HandlerMetrics) GetFailureCount() (float64, error) {
+func (hm *handlerMetrics) GetFailureCount() (float64, error) {
 	return hm.getLabeledCounterValue(failure)
 }
 
-func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
+func (hm *handlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := hm.latency.Write(m)
 	if err != nil {
@@ -116,7 +117,7 @@ func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	return m.GetSummary().SampleCount, nil
 }
 
-func (hm *HandlerMetrics) getLabeledCounterValue(label string) (float64, error) {
+func (hm *handlerMetrics) getLabeledCounterValue(label string) (float64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := hm.result.WithLabelValues(label).Write(m)
 
