@@ -5,12 +5,11 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" //blank import
-	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/tx"
 )
 
 //NewTxProvider returns a new PgProvider
-func NewTxProvider(connStr string) (gbus.TxProvider, error) {
+func NewTxProvider(connStr string) (*tx.Provider, error) {
 	db, err := sql.Open("mysql", connStr)
 	db.SetConnMaxLifetime(time.Second)
 	if err != nil {
