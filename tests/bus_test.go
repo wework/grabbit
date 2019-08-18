@@ -430,6 +430,17 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
+func TestSanitizingSvcName(t *testing.T) {
+	svc4 := createNamedBusForTest(testSvc4)
+	err := svc4.Start()
+	if err != nil {
+		t.Error(err.Error())
+	}
+	defer svc4.Shutdown()
+
+	fmt.Println("succeeded sanitizing service name")
+}
+
 func noopTraceContext() context.Context {
 	return context.Background()
 	// tracer := opentracing.NoopTracer{}
