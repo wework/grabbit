@@ -26,6 +26,7 @@ type handlerMetrics struct {
 	latency prometheus.Summary
 }
 
+//AddHandlerMetrics adds a handlere to be tracked with metrics
 func AddHandlerMetrics(handlerName string) {
 	handlerMetrics := newHandlerMetrics(handlerName)
 	_, exists := handlerMetricsByHandlerName.LoadOrStore(handlerName, handlerMetrics)
@@ -35,6 +36,7 @@ func AddHandlerMetrics(handlerName string) {
 	}
 }
 
+//RunHandlerWithMetric runs a specific handler with metrics being collected and reported to prometheus
 func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger logrus.FieldLogger) error {
 	handlerMetrics := GetHandlerMetrics(handlerName)
 	defer func() {
@@ -63,6 +65,7 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName string, logger
 	return err
 }
 
+//GetHandlerMetrics gets the metrics handler associated with the handlerName
 func GetHandlerMetrics(handlerName string) *handlerMetrics {
 	entry, ok := handlerMetricsByHandlerName.Load(handlerName)
 	if ok {
@@ -99,14 +102,17 @@ func trackTime(functionToTrack func() error, observer prometheus.Observer) error
 	return functionToTrack()
 }
 
+//GetSuccessCount gets the value of the handlers success value
 func (hm *handlerMetrics) GetSuccessCount() (float64, error) {
 	return hm.getLabeledCounterValue(success)
 }
 
+//GetFailureCount gets the value of the handlers failure value
 func (hm *handlerMetrics) GetFailureCount() (float64, error) {
 	return hm.getLabeledCounterValue(failure)
 }
 
+//GetLatencySampleCount gets the value of the handlers latency value
 func (hm *handlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := hm.latency.Write(m)
