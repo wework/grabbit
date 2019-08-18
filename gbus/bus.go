@@ -168,14 +168,6 @@ func (b *DefaultBus) bindServiceQueue() error {
 	return nil
 }
 
-func (b *DefaultBus) createAMQPChannel(conn *amqp.Connection) (*amqp.Channel, error) {
-	channel, e := conn.Channel()
-	if e != nil {
-		return nil, e
-	}
-	return channel, nil
-}
-
 //Start implements GBus.Start()
 func (b *DefaultBus) Start() error {
 
@@ -188,10 +180,10 @@ func (b *DefaultBus) Start() error {
 		return e
 	}
 
-	if b.ingressChannel, e = b.createAMQPChannel(b.ingressConn); e != nil {
+	if b.ingressChannel, e = b.ingressConn.Channel(); e != nil {
 		return e
 	}
-	if b.egressChannel, e = b.createAMQPChannel(b.egressConn); e != nil {
+	if b.egressChannel, e = b.egressConn.Channel(); e != nil {
 		return e
 	}
 
@@ -209,7 +201,7 @@ func (b *DefaultBus) Start() error {
 		TODO://the design is crap and needs to be refactored
 	*/
 	var amqpChan *amqp.Channel
-	if amqpChan, e = b.createAMQPChannel(b.egressConn); e != nil {
+	if amqpChan, e = b.egressConn.Channel(); e != nil {
 		b.Log().WithError(e).Error("failed to create amqp channel for transactional outbox")
 		return e
 	}
@@ -272,7 +264,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 	workers := make([]*worker, 0)
 	for i := uint(0); i < workerNum; i++ {
 		//create a channel per worker as we can't share channels across go routines
-		amqpChan, createChanErr := b.createAMQPChannel(b.ingressConn)
+		amqpChan, createChanErr := b.ingressConn.Channel()
 		if createChanErr != nil {
 			return nil, createChanErr
 		}

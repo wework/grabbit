@@ -5,15 +5,14 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/wework/grabbit/gbus"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 var (
@@ -54,13 +53,6 @@ func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
 	tx, e := outbox.txProv.New()
 	if e != nil {
 		panic(fmt.Sprintf("passed in transaction provider failed with the following error\n%s", e))
-	}
-	if ensureErr := outbox.ensureSchema(tx, outbox.svcName); ensureErr != nil {
-		err := tx.Rollback()
-		if err != nil {
-			outbox.log().WithError(err).Error("could not rollback the transaction for creation of schemas")
-		}
-		return ensureErr
 	}
 	if outbox.purgeOnStartup {
 		if purgeErr := outbox.purge(tx); purgeErr != nil {
@@ -318,75 +310,6 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		}
 	}
 
-	return nil
-}
-
-func (outbox *TxOutbox) ensureSchema(tx *sql.Tx, svcName string) error {
-
-	schemaExists := outbox.outBoxTablesExists(tx, svcName)
-
-	if schemaExists {
-		/*
-			The following  performs an alter schema to accommodate for breaking change introduced in commit 6a9f5df
-			so that earlier consumers of grabbit will not break once the upgrade to the 1.0.0 release.
-			Once a proper DB migration stratagy will be in place and implemented (post 1.0.0) the following code
-			will be deleted.
-		*/
-
-		return outbox.migrate0_9To1_0(tx, svcName)
-	}
-
-	createTablesSQL := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
-	rec_id int NOT NULL AUTO_INCREMENT,
-	message_id varchar(50) NOT NULL UNIQUE,
-	message_type varchar(50) NOT NULL,
-	exchange	varchar(50) NOT NULL,
-	routing_key	varchar(50) NOT NULL,
-	publishing	longblob NOT NULL,
-	status	int(11) NOT NULL,
-	relay_id varchar(50)  NULL,
-	delivery_tag	bigint(20) NOT NULL,
-	delivery_attempts int NOT NULL DEFAULT 0,
-	insert_date	timestamp DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(rec_id),
-	INDEX status_delivery (rec_id, status, delivery_attempts))`
-
-	_, createErr := tx.Exec(createTablesSQL)
-
-	return createErr
-
-}
-
-func (outbox *TxOutbox) outBoxTablesExists(tx *sql.Tx, svcName string) bool {
-
-	tblName := getOutboxName(svcName)
-
-	selectSQL := `SELECT 1 FROM ` + tblName + ` LIMIT 1;`
-
-	outbox.log().Info(selectSQL)
-
-	row := tx.QueryRow(selectSQL)
-	var exists int
-	err := row.Scan(&exists)
-	if err != nil && err != sql.ErrNoRows {
-		return false
-	}
-
-	return true
-}
-
-func (outbox *TxOutbox) migrate0_9To1_0(tx *sql.Tx, svcName string) error {
-	tblName := getOutboxName(svcName)
-	alter := `ALTER TABLE ` + tblName + ` CHANGE COLUMN delivery_attemtps delivery_attempts int NOT NULL DEFAULT 0;`
-	_, execErr := tx.Exec(alter)
-	if execErr != nil {
-		outbox.log().WithField("sql_err", execErr).Info("migration:renaming column")
-	}
-	addIndex := `ALTER TABLE ` + tblName + ` ADD INDEX status_delivery (rec_id, status, delivery_attempts);`
-	_, indexErr := tx.Exec(addIndex)
-	if indexErr != nil {
-		outbox.log().WithField("sql_err", execErr).Info("migration:adding index column")
-	}
 	return nil
 }
 

@@ -6,8 +6,10 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+//SagaTimeoutCounter is the prometheus counter counting timed out saga instances
 var SagaTimeoutCounter = newSagaTimeoutCounter()
 
+//GetSagaTimeoutCounterValue gets the counter value of timed out sagas reported to prometheus
 func GetSagaTimeoutCounterValue() (float64, error) {
 	m := &io_prometheus_client.Metric{}
 	err := SagaTimeoutCounter.Write(m)
