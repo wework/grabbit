@@ -23,6 +23,7 @@ type defaultInvocationContext struct {
 	deliveryInfo DeliveryInfo
 }
 
+//DeliveryInfo provdes information as to the attempted deilvery of the invocation
 type DeliveryInfo struct {
 	Attempt       uint
 	MaxRetryCount uint

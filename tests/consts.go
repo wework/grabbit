@@ -12,12 +12,14 @@ var connStr string
 var testSvc1 string
 var testSvc2 string
 var testSvc3 string
+var testSvc4 string
 
 func init() {
 	connStr = "amqp://rabbitmq:rabbitmq@localhost"
 	testSvc1 = "testSvc1"
 	testSvc2 = "testSvc2"
 	testSvc3 = "testSvc3"
+	testSvc4 = "test-svc4"
 }
 
 func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration) gbus.Bus {

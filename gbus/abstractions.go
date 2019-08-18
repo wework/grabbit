@@ -127,9 +127,9 @@ type Saga interface {
 	New() Saga
 }
 
-//RegisterDeadletterHandler provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
+//Deadlettering provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
 type Deadlettering interface {
-	HandleDeadletter(handler func(tx *sql.Tx, poision amqp.Delivery) error)
+	HandleDeadletter(handler DeadLetterMessageHandler)
 	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
