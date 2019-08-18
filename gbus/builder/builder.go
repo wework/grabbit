@@ -77,7 +77,9 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			panic(err)
 		}
 		gb.TxProvider = mysqltx
+
 		mysql.EnsureSchema(mysqltx.Database, gb.SvcName)
+
 		//TODO move purge logic into the NewSagaStore factory method
 		sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
 		if builder.purgeOnStartup {
