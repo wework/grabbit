@@ -91,7 +91,7 @@ func TimoutTableMigration(svcName string) *migrator.Migration {
 }
 
 /*
-	EnsureSchema implements Grabbit's migrations strategy and manages Grabbit's required migrations.
+	EnsureSchema implements Grabbit's migrations strategy
 */
 func EnsureSchema(db *sql.DB, svcName string) {
 	migrationsTable := fmt.Sprintf("grabbitMigrations_%s", svcName)
