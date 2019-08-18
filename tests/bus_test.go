@@ -231,11 +231,11 @@ func TestDeadlettering(t *testing.T) {
 
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(2)
-	poision := gbus.NewBusMessage(PoisionMessage{})
+	poison := gbus.NewBusMessage(PoisonMessage{})
 	service1 := createNamedBusForTest(testSvc1)
 	deadletterSvc := createNamedBusForTest("deadletterSvc")
 
-	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
+	deadMessageHandler := func(tx *sql.Tx, poison amqp.Delivery) error {
 		waitgroup.Done()
 		return nil
 	}
@@ -252,7 +252,7 @@ func TestDeadlettering(t *testing.T) {
 	service1.Start()
 	defer service1.Shutdown()
 
-	service1.Send(context.Background(), testSvc1, poision)
+	service1.Send(context.Background(), testSvc1, poison)
 	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
 
 	waitgroup.Wait()
@@ -260,13 +260,31 @@ func TestDeadlettering(t *testing.T) {
 	if count != 1 {
 		t.Error("Should have one rejected message")
 	}
+
+	//because deadMessageHandler is an anonymous function and is registered first its name will be "func1"
+	handlerMetrics := metrics.GetHandlerMetrics("func1")
+	if handlerMetrics == nil {
+		t.Fatal("DeadLetterHandler should be registered for metrics")
+	}
+	failureCount, _ := handlerMetrics.GetFailureCount()
+	if failureCount != 0 {
+		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", failureCount)
+	}
+	handlerMetrics = metrics.GetHandlerMetrics("func2")
+	if handlerMetrics == nil {
+		t.Fatal("faulty should be registered for metrics")
+	}
+	failureCount, _ = handlerMetrics.GetFailureCount()
+	if failureCount == 1 {
+		t.Errorf("faulty should have failed once, but it failed %f times", failureCount)
+	}
 }
 
 func TestReturnDeadToQueue(t *testing.T) {
 
 	var visited bool
 	proceed := make(chan bool, 0)
-	poision := gbus.NewBusMessage(Command1{})
+	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
@@ -274,8 +292,8 @@ func TestReturnDeadToQueue(t *testing.T) {
 	deadletterSvc := createBusWithConfig("deadletterSvc", "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
-	deadMessageHandler := func(tx *sql.Tx, poision amqp.Delivery) error {
-		pub := amqpDeliveryToPublishing(poision)
+	deadMessageHandler := func(tx *sql.Tx, poison amqp.Delivery) error {
+		pub := amqpDeliveryToPublishing(poison)
 		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
 		return nil
 	}
@@ -297,7 +315,7 @@ func TestReturnDeadToQueue(t *testing.T) {
 	service1.Start()
 	defer service1.Shutdown()
 
-	service1.Send(context.Background(), testSvc1, poision)
+	service1.Send(context.Background(), testSvc1, poison)
 
 	select {
 	case <-proceed:
