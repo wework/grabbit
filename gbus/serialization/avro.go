@@ -87,7 +87,7 @@ func (as *Avro) Encode(obj gbus.Message) (msg []byte, err error) {
 	tobj, ok := obj.(AvroMessageGenerated)
 	if !ok {
 		err := fmt.Errorf("could not convert obj to AvroMessageGenerated")
-		logrus.WithError(err).WithField("obj", obj).Error("could not convert object")
+		logrus.WithError(err).Error("could not convert object")
 		return nil, err
 	}
 

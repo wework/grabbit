@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	logger  logrus.FieldLogger
+	logger       logrus.FieldLogger
 	runningTries = 5
 )
 
