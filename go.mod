@@ -17,6 +17,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/lopezator/migrator v0.2.0
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
