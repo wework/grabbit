@@ -194,6 +194,7 @@ func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
 		worker.log().WithError(err).Error("could not reject the message")
 		worker.span.LogFields(slog.Error(err))
 	}
+	metrics.ReportRejectedMessage()
 	worker.log().WithFields(logrus.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("message rejected")
 	return err
 }
@@ -207,22 +208,6 @@ func (worker *worker) isDead(delivery amqp.Delivery) bool {
 }
 
 func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
-	defer func() {
-		if r := recover(); r != nil {
-			logEntry := worker.log().WithField("worker", worker.consumerTag)
-			if err, ok := r.(error); ok {
-				worker.span.LogFields(slog.Error(err))
-				logEntry = logEntry.WithError(err)
-			} else {
-				logEntry = logEntry.WithField("panic", r)
-			}
-			worker.span.LogFields(slog.String("panic", "failed to process message"))
-			logEntry.Error("failed to process message")
-			_ = worker.reject(false, delivery)
-			metrics.ReportRejectedMessage()
-		}
-		worker.span.Finish()
-	}()
 	tx, txCreateErr := worker.txProvider.New()
 	if txCreateErr != nil {
 		worker.log().WithError(txCreateErr).Error("failed creating new tx")
@@ -280,6 +265,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 			}
 			worker.span.LogFields(slog.String("panic", "failed to process message"))
 			logEntry.Error("failed to process message")
+			_ = worker.reject(false, delivery)
 		}
 		worker.span.Finish()
 	}()
@@ -323,7 +309,6 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.ack(delivery)
 	} else {
 		_ = worker.reject(false, delivery)
-		metrics.ReportRejectedMessage()
 	}
 }
 
