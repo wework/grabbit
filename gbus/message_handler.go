@@ -13,7 +13,7 @@ import (
 type MessageHandler func(invocation Invocation, message *BusMessage) error
 
 //RawMessageHandler signature for handlers that handle raw amqp deliveries
-type RawMessageHandler func(tx *sql.Tx, poison amqp.Delivery) error
+type RawMessageHandler func(tx *sql.Tx, delivery *amqp.Delivery) error
 
 //Name is a helper function returning the runtime name of the function bound to an instance of the MessageHandler type
 func (mg MessageHandler) Name() string {

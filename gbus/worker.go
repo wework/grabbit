@@ -2,6 +2,7 @@ package gbus
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -36,6 +37,7 @@ type worker struct {
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
 	deadletterHandler RawMessageHandler
+	globalRawHandler  RawMessageHandler
 	b                 *DefaultBus
 	serializer        Serializer
 	txProvider        TxProvider
@@ -208,7 +210,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		return
 	}
 	err := metrics.RunHandlerWithMetric(func() error {
-		return worker.deadletterHandler(tx, delivery)
+		return worker.deadletterHandler(tx, &delivery)
 	}, worker.deadletterHandler.Name(), worker.log())
 
 	var reject bool
@@ -264,6 +266,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 			worker.span.LogFields(slog.String("panic", "failed to process message"))
 			logEntry.Error("failed to process message")
 		}
+		//always finish the span once the stack winds down
 		worker.span.Finish()
 	}()
 
@@ -275,6 +278,28 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		worker.log().Info("invoking deadletter handler")
 		worker.invokeDeadletterHandler(delivery)
 		return
+	}
+
+	if worker.globalRawHandler != nil {
+		handlerName := worker.globalRawHandler.Name()
+		retryAction := func() error {
+
+			metricsWrapper := func() error {
+				txWrapper := func(tx *sql.Tx) error {
+					return worker.globalRawHandler(tx, &delivery)
+				}
+				//run the global handler inside a  transactions
+				return worker.withTx(txWrapper)
+			}
+			//run the global handler with metrics
+			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, worker.log())
+		}
+
+		//when the global handler fails terminate executation and reject the message
+		if err := worker.SafeWithRetries(retryAction, MaxRetryCount); err != nil {
+			_ = worker.reject(false, delivery)
+		}
+
 	}
 
 	//TODO:Dedup message
@@ -312,86 +337,107 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}
 }
 
-func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery) (err error) {
+func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr error) {
 
-	//this is the action that will get retried
-	// each retry should run a new and separate transaction which should end with a commit or rollback
-
-	action := func(attempt uint) (actionErr error) {
-
-		tx, txCreateErr := worker.txProvider.New()
-		if txCreateErr != nil {
-			worker.log().WithError(txCreateErr).Error("failed creating new tx")
-			worker.span.LogFields(slog.Error(txCreateErr))
-			return txCreateErr
-		}
-
-		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
-		worker.span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
-		defer func() {
-			if p := recover(); p != nil {
-				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
-				worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
-				actionErr = errors.New(pncMsg)
+	var tx *sql.Tx
+	defer func() {
+		if p := recover(); p != nil {
+			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
+			worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
+			actionErr = errors.New(pncMsg)
+			if tx != nil {
 				rbkErr := tx.Rollback()
 				if rbkErr != nil {
 					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
 				}
-				worker.span.LogFields(slog.Error(actionErr))
 			}
-			worker.span.Finish()
-		}()
-		var handlerErr error
-		var hspan opentracing.Span
-		var hsctx context.Context
-		for _, handler := range handlers {
-			pinedHandler := handler //https://github.com/kyoh86/scopelint
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, pinedHandler.Name())
+			worker.span.LogFields(slog.Error(actionErr))
+		}
+	}()
+	tx, txCreateErr := worker.txProvider.New()
+	if txCreateErr != nil {
+		worker.log().WithError(txCreateErr).Error("failed creating new tx")
+		worker.span.LogFields(slog.Error(txCreateErr))
+		return txCreateErr
+	}
+	//execute the wrapper that eventually calls the handler
+	handlerErr := handlerWrapper(tx)
+	if handlerErr != nil {
+		rbkErr := tx.Rollback()
+		if rbkErr != nil {
+			worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
+			return rbkErr
+		}
+		return handlerErr
+	}
+	cmtErr := tx.Commit()
+	if cmtErr != nil {
+		worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
+		return cmtErr
+	}
+	return nil
+}
 
-			ctx := &defaultInvocationContext{
-				invocingSvc: delivery.ReplyTo,
-				bus:         worker.b,
-				inboundMsg:  message,
-				tx:          tx,
-				ctx:         hsctx,
-				exchange:    delivery.Exchange,
-				routingKey:  delivery.RoutingKey,
-				deliveryInfo: DeliveryInfo{
-					Attempt:       attempt,
-					MaxRetryCount: MaxRetryCount,
-				},
+func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage) *defaultInvocationContext {
+	invocation := &defaultInvocationContext{
+		invocingSvc: delivery.ReplyTo,
+		bus:         worker.b,
+		inboundMsg:  message,
+		tx:          tx,
+		ctx:         ctx,
+		exchange:    delivery.Exchange,
+		routingKey:  delivery.RoutingKey,
+		deliveryInfo: DeliveryInfo{
+			Attempt:       attempt,
+			MaxRetryCount: MaxRetryCount,
+		},
+	}
+	return invocation
+}
+
+func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery) (err error) {
+
+	//this is the action that will get retried
+	// each retry should run a new and separate transaction which should end with a commit or rollback
+	retryAction := func(attempt uint) (actionErr error) {
+
+		span, sctx := opentracing.StartSpanFromContext(sctx, "invokeHandlers")
+		span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
+
+		for _, handler := range handlers {
+			//this function accepets the scoped transaction and executes the handler with metrics
+			handlerWrapper := func(tx *sql.Tx) error {
+
+				pinedHandler := handler //https://github.com/kyoh86/scopelint
+				handlerName := pinedHandler.Name()
+				hspan, hsctx := opentracing.StartSpanFromContext(sctx, handlerName)
+				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message)
+				invocation.SetLogger(worker.log().WithField("handler", handlerName))
+				//execute the handler with metrics
+				handlerErr := metrics.RunHandlerWithMetric(func() error {
+					return pinedHandler(invocation, message)
+				}, handlerName, worker.log())
+
+				if handlerErr != nil {
+					hspan.LogFields(slog.Error(handlerErr))
+				}
+				hspan.Finish()
+				return handlerErr
 			}
-			ctx.SetLogger(worker.log().WithField("handler", pinedHandler.Name()))
-			handlerErr = metrics.RunHandlerWithMetric(func() error {
-				return pinedHandler(ctx, message)
-			}, pinedHandler.Name(), worker.log())
-			if handlerErr != nil {
-				hspan.LogFields(slog.Error(handlerErr))
-				break
+
+			err := worker.withTx(handlerWrapper)
+			if err != nil {
+				return err
 			}
-			hspan.Finish()
 		}
-		if handlerErr != nil {
-			hspan.LogFields(slog.Error(handlerErr))
-			rbkErr := tx.Rollback()
-			if rbkErr != nil {
-				worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
-			}
-			hspan.Finish()
-			return handlerErr
-		}
-		cmtErr := tx.Commit()
-		if cmtErr != nil {
-			worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
-			return cmtErr
-		}
+		span.Finish()
 		return nil
 	}
 
 	//retry for MaxRetryCount, back off by a jittered strategy
 	seed := time.Now().UnixNano()
 	random := rand.New(rand.NewSource(seed))
-	return retry.Retry(action,
+	return retry.Retry(retryAction,
 		strategy.Limit(MaxRetryCount),
 		strategy.BackoffWithJitter(
 			backoff.BinaryExponential(BaseRetryDuration),

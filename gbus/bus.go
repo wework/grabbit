@@ -44,6 +44,7 @@ type DefaultBus struct {
 
 	RPCHandlers          map[string]MessageHandler
 	deadletterHandler    RawMessageHandler
+	globalRawHandler     RawMessageHandler
 	HandlersLock         *sync.Mutex
 	RPCLock              *sync.Mutex
 	SenderLock           *sync.Mutex
@@ -286,6 +287,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			rpcLock:           b.RPCLock,
 			rpcHandlers:       b.RPCHandlers,
 			deadletterHandler: b.deadletterHandler,
+			globalRawHandler:  b.globalRawHandler,
 			handlersLock:      &sync.Mutex{},
 			registrations:     b.Registrations,
 			serializer:        b.Serializer,
@@ -547,9 +549,15 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 	return b.registerHandlerImpl(exchange, topic, event, handler)
 }
 
-//HandleDeadletter implements GBus.HandleDeadletter
+//HandleDeadletter implements Deadlettering.HandleDeadletter
 func (b *DefaultBus) HandleDeadletter(handler RawMessageHandler) {
 	b.registerDeadLetterHandler(handler)
+}
+
+//HandleDeadletter implements RawMessageHandling.SetGlobalRawMessageHandler
+func (b *DefaultBus) SetGlobalRawMessageHandler(handler RawMessageHandler) {
+	metrics.AddHandlerMetrics(handler.Name())
+	b.globalRawHandler = handler
 }
 
 //ReturnDeadToQueue returns a message to its original destination
