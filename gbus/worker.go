@@ -35,7 +35,7 @@ type worker struct {
 	handlersLock      *sync.Mutex
 	registrations     []*Registration
 	rpcHandlers       map[string]MessageHandler
-	deadletterHandler DeadLetterMessageHandler
+	deadletterHandler RawMessageHandler
 	b                 *DefaultBus
 	serializer        Serializer
 	txProvider        TxProvider
@@ -129,7 +129,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) []MessageHandler {
 	handlers := make([]MessageHandler, 0)
 	if isRPCreply {
-		rpcID, rpcHeaderFound := delivery.Headers[RpcHeaderName].(string)
+		rpcID, rpcHeaderFound := delivery.Headers[RPCHeaderName].(string)
 		if !rpcHeaderFound {
 			worker.log().Warn("rpc message received but no rpc header found...rejecting message")
 			return handlers

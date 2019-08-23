@@ -43,7 +43,7 @@ type DefaultBus struct {
 	amqpOutbox     *AMQPOutbox
 
 	RPCHandlers          map[string]MessageHandler
-	deadletterHandler    DeadLetterMessageHandler
+	deadletterHandler    RawMessageHandler
 	HandlersLock         *sync.Mutex
 	RPCLock              *sync.Mutex
 	SenderLock           *sync.Mutex
@@ -548,7 +548,7 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 }
 
 //HandleDeadletter implements GBus.HandleDeadletter
-func (b *DefaultBus) HandleDeadletter(handler DeadLetterMessageHandler) {
+func (b *DefaultBus) HandleDeadletter(handler RawMessageHandler) {
 	b.registerDeadLetterHandler(handler)
 }
 
@@ -691,7 +691,7 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 	return nil
 }
 
-func (b *DefaultBus) registerDeadLetterHandler(handler DeadLetterMessageHandler) {
+func (b *DefaultBus) registerDeadLetterHandler(handler RawMessageHandler) {
 	metrics.AddHandlerMetrics(handler.Name())
 	b.deadletterHandler = handler
 }
