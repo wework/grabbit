@@ -111,19 +111,10 @@ func (worker *worker) consumeRPC() {
 }
 
 func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, error) {
-	bm := NewFromAMQPHeaders(delivery.Headers)
-	bm.ID = delivery.MessageId
-	bm.CorrelationID = delivery.CorrelationId
-	if delivery.Exchange != "" {
-		bm.Semantics = EVT
-	} else {
-		bm.Semantics = CMD
-	}
-	if bm.PayloadFQN == "" || bm.Semantics == "" {
-		//TODO: Log poison pill message
-		worker.log().WithFields(logrus.Fields{"message_name": bm.PayloadFQN, "semantics": bm.Semantics}).Warn("message received but no headers found...rejecting message")
-
-		return nil, errors.New("missing critical headers")
+	bm, err := NewFromDelivery(delivery)
+	if err != nil {
+		worker.log().Warn("failed creating BusMessage from AMQP delivery")
+		return nil, err
 	}
 
 	var decErr error
@@ -135,7 +126,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, er
 	return bm, nil
 }
 
-func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery amqp.Delivery) []MessageHandler {
+func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) []MessageHandler {
 	handlers := make([]MessageHandler, 0)
 	if isRPCreply {
 		rpcID, rpcHeaderFound := delivery.Headers[RpcHeaderName].(string)
@@ -157,15 +148,17 @@ func (worker *worker) resolveHandlers(isRPCreply bool, bm *BusMessage, delivery 
 	} else {
 		worker.handlersLock.Lock()
 		defer worker.handlersLock.Unlock()
-
+		msgName := GetMessageName(delivery)
 		for _, registration := range worker.registrations {
-			if registration.Matches(delivery.Exchange, delivery.RoutingKey, bm.PayloadFQN) {
+			if registration.Matches(delivery.Exchange, delivery.RoutingKey, msgName) {
 				handlers = append(handlers, registration.Handler)
 			}
 		}
 	}
+	if len(handlers) > 0 {
+		worker.log().WithFields(logrus.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
+	}
 
-	worker.log().WithFields(logrus.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 	return handlers
 }
 
@@ -217,6 +210,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	err := metrics.RunHandlerWithMetric(func() error {
 		return worker.deadletterHandler(tx, delivery)
 	}, worker.deadletterHandler.Name(), worker.log())
+
 	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")
@@ -240,8 +234,8 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	}
 }
 
-func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
-	var ctx context.Context
+func (worker *worker) extractOpenTracingSpan(delivery amqp.Delivery) (opentracing.Span, context.Context) {
+
 	var spanOptions []opentracing.StartSpanOption
 
 	spCtx, err := amqptracer.Extract(delivery.Headers)
@@ -250,8 +244,13 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	} else {
 		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
 	}
-	worker.span, ctx = opentracing.StartSpanFromContext(context.Background(), "processMessage", spanOptions...)
+	return opentracing.StartSpanFromContext(context.Background(), "processMessage", spanOptions...)
 
+}
+
+func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
+	span, ctx := worker.extractOpenTracingSpan(delivery)
+	worker.span = span
 	//catch all error handling so goroutine will not crash
 	defer func() {
 		if r := recover(); r != nil {
@@ -271,34 +270,36 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	worker.log().WithFields(logrus.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
 
 	//handle a message that originated from a deadletter exchange
-	if worker.isDead(delivery) {
+	if worker.isDead(delivery) && worker.deadletterHandler != nil {
 		worker.span.LogFields(slog.Error(errors.New("handling dead-letter delivery")))
 		worker.log().Info("invoking deadletter handler")
 		worker.invokeDeadletterHandler(delivery)
 		return
 	}
 
+	//TODO:Dedup message
+	msgName := GetMessageName(delivery)
+	handlers := worker.resolveHandlers(isRPCreply, delivery)
+	if len(handlers) == 0 {
+		worker.log().
+			WithFields(
+				logrus.Fields{"message-name": msgName}).
+			Warn("Message received but no handlers found")
+		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
+		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
+		_ = worker.ack(delivery)
+		return
+	}
+	/*
+		extract the bus message only after we are sure there are registered handlers since
+		it includes deserializing the amqp payload which we want to avoid if no handlers are found
+		(for instance if a reply message arrives but bo handler is registered for that type of message)
+	*/
 	bm, err := worker.extractBusMessage(delivery)
 	if err != nil {
 		worker.span.LogFields(slog.Error(err), slog.String("grabbit", "message is poison"))
 		//reject poison message
 		_ = worker.reject(false, delivery)
-		return
-	}
-	worker.span.LogFields(bm.GetTraceLog()...)
-
-	//TODO:Dedup message
-	handlers := worker.resolveHandlers(isRPCreply, bm, delivery)
-	if len(handlers) == 0 {
-		worker.log().
-			WithFields(
-				logrus.Fields{"message-name": bm.PayloadFQN,
-					"message-type": bm.Semantics}).
-			Warn("Message received but no handlers found")
-		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
-		// worker.log("Message received but no handlers found\nMessage name:%v\nMessage Type:%v\nRejecting message", bm.PayloadFQN, bm.Semantics)
-		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
-		_ = worker.ack(delivery)
 		return
 	}
 
@@ -344,7 +345,8 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		var hspan opentracing.Span
 		var hsctx context.Context
 		for _, handler := range handlers {
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, handler.Name())
+			pinedHandler := handler //https://github.com/kyoh86/scopelint
+			hspan, hsctx = opentracing.StartSpanFromContext(sctx, pinedHandler.Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -359,10 +361,10 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 					MaxRetryCount: MaxRetryCount,
 				},
 			}
-			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
+			ctx.SetLogger(worker.log().WithField("handler", pinedHandler.Name()))
 			handlerErr = metrics.RunHandlerWithMetric(func() error {
-				return handler(ctx, message)
-			}, handler.Name(), worker.log())
+				return pinedHandler(ctx, message)
+			}, pinedHandler.Name(), worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break

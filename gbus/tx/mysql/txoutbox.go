@@ -5,14 +5,15 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"github.com/rs/xid"
-	log "github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
-	"github.com/wework/grabbit/gbus"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/xid"
+	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
+	"github.com/wework/grabbit/gbus"
 )
 
 var (

@@ -2,10 +2,11 @@ package gbus
 
 import (
 	"database/sql"
-	"github.com/streadway/amqp"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/streadway/amqp"
 )
 
 //MessageHandler signature for all command handlers

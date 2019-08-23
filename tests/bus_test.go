@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/wework/grabbit/gbus/metrics"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/opentracing/opentracing-go"
 	olog "github.com/opentracing/opentracing-go/log"
@@ -229,14 +229,13 @@ func TestRPC(t *testing.T) {
 
 func TestDeadlettering(t *testing.T) {
 
-	var waitgroup sync.WaitGroup
-	waitgroup.Add(2)
+	proceed := make(chan bool)
 	poison := gbus.NewBusMessage(PoisonMessage{})
 	service1 := createNamedBusForTest(testSvc1)
 	deadletterSvc := createNamedBusForTest("deadletterSvc")
 
 	deadMessageHandler := func(tx *sql.Tx, poison amqp.Delivery) error {
-		waitgroup.Done()
+		proceed <- true
 		return nil
 	}
 
@@ -255,7 +254,7 @@ func TestDeadlettering(t *testing.T) {
 	service1.Send(context.Background(), testSvc1, poison)
 	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
 
-	waitgroup.Wait()
+	<-proceed
 	count, _ := metrics.GetRejectedMessagesValue()
 	if count != 1 {
 		t.Error("Should have one rejected message")
