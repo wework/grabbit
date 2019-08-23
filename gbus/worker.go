@@ -250,6 +250,25 @@ func (worker *worker) extractOpenTracingSpan(delivery amqp.Delivery) (opentracin
 
 }
 
+func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
+	if worker.globalRawHandler != nil {
+		handlerName := worker.globalRawHandler.Name()
+		retryAction := func() error {
+			metricsWrapper := func() error {
+				txWrapper := func(tx *sql.Tx) error {
+					return worker.globalRawHandler(tx, delivery)
+				}
+				//run the global handler inside a  transactions
+				return worker.withTx(txWrapper)
+			}
+			//run the global handler with metrics
+			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, worker.log())
+		}
+		return worker.SafeWithRetries(retryAction, MaxRetryCount)
+	}
+	return nil
+}
+
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	span, ctx := worker.extractOpenTracingSpan(delivery)
 	worker.span = span
@@ -280,26 +299,9 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 
-	if worker.globalRawHandler != nil {
-		handlerName := worker.globalRawHandler.Name()
-		retryAction := func() error {
-
-			metricsWrapper := func() error {
-				txWrapper := func(tx *sql.Tx) error {
-					return worker.globalRawHandler(tx, &delivery)
-				}
-				//run the global handler inside a  transactions
-				return worker.withTx(txWrapper)
-			}
-			//run the global handler with metrics
-			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, worker.log())
-		}
-
+	if err := worker.runGlobalHandler(&delivery); err != nil {
 		//when the global handler fails terminate executation and reject the message
-		if err := worker.SafeWithRetries(retryAction, MaxRetryCount); err != nil {
-			_ = worker.reject(false, delivery)
-		}
-
+		worker.reject(true, delivery)
 	}
 
 	//TODO:Dedup message
