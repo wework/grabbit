@@ -30,7 +30,7 @@ func NewBusMessage(payload Message) *BusMessage {
 	return bm
 }
 
-//NewFromAMQPHeaders creates a BusMessage from headers of an amqp message
+//NewFromDelivery creates a BusMessage from an amqp delivery
 func NewFromDelivery(delivery amqp.Delivery) (*BusMessage, error) {
 	bm := &BusMessage{}
 	bm.SetFromAMQPHeaders(delivery)
@@ -49,6 +49,7 @@ func NewFromDelivery(delivery amqp.Delivery) (*BusMessage, error) {
 	return bm, nil
 }
 
+//GetMessageName extracts the valuee of the custom x-msg-name header from an amq delivery
 func GetMessageName(delivery amqp.Delivery) string {
 	return castToString(delivery.Headers["x-msg-name"])
 }

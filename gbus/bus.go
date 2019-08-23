@@ -73,8 +73,8 @@ var (
 	//BaseRetryDuration defines the basic milliseconds that the retry algorithm uses
 	//for a random retry time. Default is 10 but it is configurable.
 	BaseRetryDuration = 10 * time.Millisecond
-	//RpcHeaderName used to define the header in grabbit for RPC
-	RpcHeaderName = "x-grabbit-msg-rpc-id"
+	//RPCHeaderName used to define the header in grabbit for RPC
+	RPCHeaderName = "x-grabbit-msg-rpc-id"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -705,7 +705,7 @@ type rpcPolicy struct {
 }
 
 func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
-	publishing.Headers[RpcHeaderName] = p.rpcID
+	publishing.Headers[RPCHeaderName] = p.rpcID
 }
 
 //Log returns the default logrus.FieldLogger for the bus via the Glogged helper
