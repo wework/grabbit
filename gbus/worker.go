@@ -301,7 +301,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 
 	if err := worker.runGlobalHandler(&delivery); err != nil {
 		//when the global handler fails terminate executation and reject the message
-		worker.reject(true, delivery)
+		_ = worker.reject(true, delivery)
 	}
 
 	//TODO:Dedup message
