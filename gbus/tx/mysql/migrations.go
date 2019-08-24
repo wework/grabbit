@@ -2,16 +2,14 @@ package mysql
 
 import (
 	"database/sql"
-	"regexp"
 	"strings"
 
 	"github.com/lopezator/migrator"
 	"github.com/wework/grabbit/gbus/tx"
 )
 
-//SagaStoreTableMigration creates the service saga store table
-func SagaStoreTableMigration(svcName string) *migrator.Migration {
-	tblName := tx.GetSagatableName(svcName)
+func sagaStoreTableMigration(svcName string) *migrator.Migration {
+	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
 
 	createTableQuery := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
 		rec_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -33,10 +31,10 @@ func SagaStoreTableMigration(svcName string) *migrator.Migration {
 	}
 }
 
-//OutboxMigrations creates service outbox table
-func OutboxMigrations(svcName string) *migrator.Migration {
+func outboxMigrations(svcName string) *migrator.Migration {
 
-	query := `CREATE TABLE IF NOT EXISTS ` + getOutboxName(svcName) + ` (
+	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
+	query := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
 	rec_id int NOT NULL AUTO_INCREMENT,
 	message_id varchar(50) NOT NULL UNIQUE,
 	message_type varchar(50) NOT NULL,
@@ -62,8 +60,7 @@ func OutboxMigrations(svcName string) *migrator.Migration {
 	}
 }
 
-//TimoutTableMigration creates the service timeout table, where timeouts are persisted
-func TimoutTableMigration(svcName string) *migrator.Migration {
+func timoutTableMigration(svcName string) *migrator.Migration {
 	tblName := GetTimeoutsTableName(svcName)
 
 	createTableQuery := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
@@ -85,14 +82,31 @@ func TimoutTableMigration(svcName string) *migrator.Migration {
 	}
 }
 
+func legacyMigrationsTable(svcName string) *migrator.Migration {
+
+	query := `DROP TABLE IF EXISTS grabbitmigrations_` + sanitizeSvcName(svcName)
+
+	return &migrator.Migration{
+		Name: "drop legacy migrations table",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(query); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
 //EnsureSchema implements Grabbit's migrations strategy
 func EnsureSchema(db *sql.DB, svcName string) {
-	migrationsTable := sanitizedMigrationsTable(svcName)
 
-	migrate, err := migrator.New(migrator.TableName(migrationsTable), migrator.Migrations(
-		OutboxMigrations(svcName),
-		SagaStoreTableMigration(svcName),
-		TimoutTableMigration(svcName),
+	tblName := tx.GrabbitTableNameTemplate(svcName, "migrations")
+
+	migrate, err := migrator.New(migrator.TableName(tblName), migrator.Migrations(
+		outboxMigrations(svcName),
+		sagaStoreTableMigration(svcName),
+		timoutTableMigration(svcName),
+		legacyMigrationsTable(svcName),
 	))
 	if err != nil {
 		panic(err)
@@ -103,9 +117,8 @@ func EnsureSchema(db *sql.DB, svcName string) {
 	}
 }
 
-func sanitizedMigrationsTable(svcName string) string {
-	var re = regexp.MustCompile(`-|;|\\|`)
-	sanitized := re.ReplaceAllString(svcName, "")
+func sanitizeSvcName(svcName string) string {
 
-	return strings.ToLower("grabbitMigrations_" + sanitized)
+	sanitized := tx.SanitizeTableName(svcName)
+	return strings.ToLower(sanitized)
 }

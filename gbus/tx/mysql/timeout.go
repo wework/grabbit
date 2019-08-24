@@ -2,13 +2,12 @@ package mysql
 
 import (
 	"database/sql"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/tx"
 )
 
 var _ gbus.TimeoutManager = &TimeoutManager{}
@@ -173,11 +172,7 @@ func (tm *TimeoutManager) SetTimeoutFunction(timeoutFunc func(tx *sql.Tx, sagaID
 
 //GetTimeoutsTableName returns the table name in which to store timeouts
 func GetTimeoutsTableName(svcName string) string {
-
-	var re = regexp.MustCompile(`-|;|\\|`)
-	sanitized := re.ReplaceAllString(svcName, "")
-
-	return strings.ToLower("grabbit_" + sanitized + "_timeouts")
+	return tx.GrabbitTableNameTemplate(svcName, "timeouts")
 }
 
 //NewTimeoutManager creates a new instance of a mysql based TimeoutManager
