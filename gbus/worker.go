@@ -241,16 +241,20 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 }
 
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
-	var ctx context.Context
+
+	rootCtx := context.Background()
 	var spanOptions []opentracing.StartSpanOption
 
 	spCtx, err := amqptracer.Extract(delivery.Headers)
+
 	if err != nil {
 		worker.log().WithError(err).Debug("could not extract SpanContext from headers")
 	} else {
 		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
 	}
-	worker.span, ctx = opentracing.StartSpanFromContext(context.Background(), "processMessage", spanOptions...)
+	span, ctx := opentracing.StartSpanFromContext(rootCtx, "processMessage", spanOptions...)
+	worker.span = span
+	defer worker.span.Finish()
 
 	//catch all error handling so goroutine will not crash
 	defer func() {
@@ -325,8 +329,9 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			return txCreateErr
 		}
 
-		worker.span, sctx = opentracing.StartSpanFromContext(sctx, "invokeHandlers")
-		worker.span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
+		span, sctx := opentracing.StartSpanFromContext(sctx, "invokeHandlers")
+		defer span.Finish()
+		span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
 		defer func() {
 			if p := recover(); p != nil {
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
