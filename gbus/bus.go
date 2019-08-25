@@ -43,7 +43,8 @@ type DefaultBus struct {
 	amqpOutbox     *AMQPOutbox
 
 	RPCHandlers          map[string]MessageHandler
-	deadletterHandler    DeadLetterMessageHandler
+	deadletterHandler    RawMessageHandler
+	globalRawHandler     RawMessageHandler
 	HandlersLock         *sync.Mutex
 	RPCLock              *sync.Mutex
 	SenderLock           *sync.Mutex
@@ -73,8 +74,8 @@ var (
 	//BaseRetryDuration defines the basic milliseconds that the retry algorithm uses
 	//for a random retry time. Default is 10 but it is configurable.
 	BaseRetryDuration = 10 * time.Millisecond
-	//RpcHeaderName used to define the header in grabbit for RPC
-	RpcHeaderName = "x-grabbit-msg-rpc-id"
+	//RPCHeaderName used to define the header in grabbit for RPC
+	RPCHeaderName = "x-grabbit-msg-rpc-id"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -286,6 +287,7 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			rpcLock:           b.RPCLock,
 			rpcHandlers:       b.RPCHandlers,
 			deadletterHandler: b.deadletterHandler,
+			globalRawHandler:  b.globalRawHandler,
 			handlersLock:      &sync.Mutex{},
 			registrations:     b.Registrations,
 			serializer:        b.Serializer,
@@ -547,9 +549,15 @@ func (b *DefaultBus) HandleEvent(exchange, topic string, event Message, handler 
 	return b.registerHandlerImpl(exchange, topic, event, handler)
 }
 
-//HandleDeadletter implements GBus.HandleDeadletter
-func (b *DefaultBus) HandleDeadletter(handler DeadLetterMessageHandler) {
+//HandleDeadletter implements Deadlettering.HandleDeadletter
+func (b *DefaultBus) HandleDeadletter(handler RawMessageHandler) {
 	b.registerDeadLetterHandler(handler)
+}
+
+//HandleDeadletter implements RawMessageHandling.SetGlobalRawMessageHandler
+func (b *DefaultBus) SetGlobalRawMessageHandler(handler RawMessageHandler) {
+	metrics.AddHandlerMetrics(handler.Name())
+	b.globalRawHandler = handler
 }
 
 //ReturnDeadToQueue returns a message to its original destination
@@ -692,7 +700,7 @@ func (b *DefaultBus) registerHandlerImpl(exchange, routingKey string, msg Messag
 	return nil
 }
 
-func (b *DefaultBus) registerDeadLetterHandler(handler DeadLetterMessageHandler) {
+func (b *DefaultBus) registerDeadLetterHandler(handler RawMessageHandler) {
 	metrics.AddHandlerMetrics(handler.Name())
 	b.deadletterHandler = handler
 }
@@ -706,7 +714,7 @@ type rpcPolicy struct {
 }
 
 func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
-	publishing.Headers[RpcHeaderName] = p.rpcID
+	publishing.Headers[RPCHeaderName] = p.rpcID
 }
 
 //Log returns the default logrus.FieldLogger for the bus via the Glogged helper
