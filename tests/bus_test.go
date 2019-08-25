@@ -260,7 +260,7 @@ func TestDeadlettering(t *testing.T) {
 
 	waitgroup.Wait()
 	count, _ := metrics.GetRejectedMessagesValue()
-	if count != rejectedMessages+1 {
+	if count != rejectedMessages+2 {
 		t.Error("Should have one rejected message")
 	}
 
