@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/opentracing/opentracing-go"
+	slog "github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/metrics"
@@ -98,7 +101,8 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 	return defs
 }
 
-func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) error {
+//SagaHandler is the generic handler invoking saga instances
+func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 	imsm.lock.Lock()
 	defer imsm.lock.Unlock()
@@ -117,11 +121,12 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 		*/
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
+
 			newInstance := def.newInstance()
 			imsm.Log().
 				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
-			if invkErr := imsm.invokeSagaInstance(newInstance, invocation, message); invkErr != nil {
+			if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
 				imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
@@ -154,7 +159,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 				return e
 			}
 			def.configureSaga(instance)
-			if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
+			if invkErr := imsm.invokeSagaInstance(def, instance, invocation, message); invkErr != nil {
 				imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 				return invkErr
 			}
@@ -176,7 +181,7 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 
 			for _, instance := range instances {
 				def.configureSaga(instance)
-				if invkErr := imsm.invokeSagaInstance(instance, invocation, message); invkErr != nil {
+				if invkErr := imsm.invokeSagaInstance(def, instance, invocation, message); invkErr != nil {
 					imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
 					return invkErr
 				}
@@ -191,13 +196,16 @@ func (imsm *Glue) handler(invocation gbus.Invocation, message *gbus.BusMessage) 
 	return nil
 }
 
-func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+	span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), def.String())
+	defer span.Finish()
 	sginv := &sagaInvocation{
 		decoratedBus:        invocation.Bus(),
 		decoratedInvocation: invocation,
 		inboundMsg:          message,
 		sagaID:              instance.ID,
-		ctx:                 invocation.Ctx(),
+		ctx:                 sctx,
 		invokingService:     imsm.svcName,
 	}
 	sginv.SetLogger(imsm.Log().WithFields(logrus.Fields{
@@ -207,7 +215,11 @@ func (imsm *Glue) invokeSagaInstance(instance *Instance, invocation gbus.Invocat
 	}))
 
 	exchange, routingKey := invocation.Routing()
-	return instance.invoke(exchange, routingKey, sginv, message)
+	err := instance.invoke(exchange, routingKey, sginv, message)
+	if err != nil {
+		span.LogFields(slog.Error(err))
+	}
+	return err
 }
 
 func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
@@ -232,7 +244,7 @@ func (imsm *Glue) registerMessage(message gbus.Message) error {
 		return nil
 	}
 	imsm.alreadyRegistred[message.SchemaName()] = true
-	return imsm.bus.HandleMessage(message, imsm.handler)
+	return imsm.bus.HandleMessage(message, imsm.SagaHandler)
 }
 
 func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) error {
@@ -241,7 +253,7 @@ func (imsm *Glue) registerEvent(exchange, topic string, event gbus.Message) erro
 		return nil
 	}
 	imsm.alreadyRegistred[event.SchemaName()] = true
-	return imsm.bus.HandleEvent(exchange, topic, event, imsm.handler)
+	return imsm.bus.HandleEvent(exchange, topic, event, imsm.SagaHandler)
 }
 
 //TimeoutSaga fetches a saga instance and calls its timeout interface
@@ -257,7 +269,12 @@ func (imsm *Glue) TimeoutSaga(tx *sql.Tx, sagaID string) error {
 	if err != nil {
 		return err
 	}
+
+	span, _ := opentracing.StartSpanFromContext(context.Background(), "SagaTimeout")
+	span.SetTag("saga_type", saga.String())
+	defer span.Finish()
 	timeoutErr := saga.timeout(tx, imsm.bus)
+
 	if timeoutErr != nil {
 		imsm.Log().WithError(timeoutErr).WithField("sagaID", sagaID).Error("failed to timeout saga")
 		return timeoutErr

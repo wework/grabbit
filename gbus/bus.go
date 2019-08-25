@@ -623,7 +623,8 @@ func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg *amqp.
 func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, replyTo, exchange, topic string, message *BusMessage, policies ...MessagePolicy) (er error) {
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
-	span, _ := opentracing.StartSpanFromContext(sctx, "sendImpl")
+	span, _ := opentracing.StartSpanFromContext(sctx, "SendMessage")
+
 	defer func() {
 		if err := recover(); err != nil {
 			errMsg := fmt.Sprintf("panic recovered panicking err:\n%v\n%s", err, debug.Stack())
