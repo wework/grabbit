@@ -21,11 +21,8 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
 6) Deadlettering
 7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
-8) Reporting [metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
-
-Planned:
-
-1) Deduplication of inbound messages
+8) Reporting [Metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
+9) Distributed [Tracing](https://github.com/wework/grabbit/blob/master/docs/TRACING.md) via OpenTracing
 
 ## Stable release
 the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates.
