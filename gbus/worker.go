@@ -252,9 +252,9 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	} else {
 		spanOptions = append(spanOptions, opentracing.FollowsFrom(spCtx))
 	}
-	span, ctx := opentracing.StartSpanFromContext(rootCtx, "processMessage", spanOptions...)
+	span, ctx := opentracing.StartSpanFromContext(rootCtx, "ProcessMessage", spanOptions...)
 	worker.span = span
-	defer worker.span.Finish()
+	//defer worker.span.Finish()
 
 	//catch all error handling so goroutine will not crash
 	defer func() {
@@ -269,7 +269,6 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 			worker.span.LogFields(slog.String("panic", "failed to process message"))
 			logEntry.Error("failed to process message")
 		}
-		worker.span.Finish()
 	}()
 
 	worker.log().WithFields(logrus.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
@@ -322,16 +321,17 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 
 	action := func(attempt uint) (actionErr error) {
 
+		attemptSpan, sctx := opentracing.StartSpanFromContext(sctx, "InvokeHandler")
+		defer attemptSpan.Finish()
+
 		tx, txCreateErr := worker.txProvider.New()
 		if txCreateErr != nil {
 			worker.log().WithError(txCreateErr).Error("failed creating new tx")
-			worker.span.LogFields(slog.Error(txCreateErr))
+			attemptSpan.LogFields(slog.Error(txCreateErr))
 			return txCreateErr
 		}
 
-		span, sctx := opentracing.StartSpanFromContext(sctx, "invokeHandlers")
-		defer span.Finish()
-		span.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
+		attemptSpan.LogFields(slog.Uint64("attempt", uint64(attempt+1)))
 		defer func() {
 			if p := recover(); p != nil {
 				pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
@@ -346,10 +346,9 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			worker.span.Finish()
 		}()
 		var handlerErr error
-		var hspan opentracing.Span
-		var hsctx context.Context
+
 		for _, handler := range handlers {
-			hspan, hsctx = opentracing.StartSpanFromContext(sctx, handler.Name())
+			hspan, hsctx := opentracing.StartSpanFromContext(sctx, handler.Name())
 
 			ctx := &defaultInvocationContext{
 				invocingSvc: delivery.ReplyTo,
@@ -369,22 +368,22 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				return handler(ctx, message)
 			}, handler.Name(), worker.log())
 			if handlerErr != nil {
-				hspan.LogFields(slog.Error(handlerErr))
 				break
 			}
 			hspan.Finish()
 		}
 		if handlerErr != nil {
-			hspan.LogFields(slog.Error(handlerErr))
+			attemptSpan.LogFields(slog.Error(handlerErr))
 			rbkErr := tx.Rollback()
 			if rbkErr != nil {
+				attemptSpan.LogFields(slog.Error(rbkErr))
 				worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
 			}
-			hspan.Finish()
 			return handlerErr
 		}
 		cmtErr := tx.Commit()
 		if cmtErr != nil {
+			attemptSpan.LogFields(slog.Error(cmtErr))
 			worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
 			return cmtErr
 		}
