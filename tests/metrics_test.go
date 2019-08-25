@@ -59,7 +59,7 @@ func TestRunHandlerWithMetric_FailureCounter(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		err := metrics.RunHandlerWithMetric(failure, name, logger)
+		err := metrics.RunHandlerWithMetric(failure, name, name, logger)
 
 		if err == nil {
 			t.Error("Failed handler run should return an error")
@@ -90,7 +90,7 @@ func TestRunHandlerWithMetric_SuccessCounter(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		err := metrics.RunHandlerWithMetric(success, name, logger)
+		err := metrics.RunHandlerWithMetric(success, name, name, logger)
 
 		if err != nil {
 			t.Error("Successful handler run shouldn't return an error")
@@ -121,17 +121,23 @@ func TestRunHandlerWithMetric_Latency(t *testing.T) {
 	}
 
 	for i := 1; i < runningTries; i++ {
-		_ = metrics.RunHandlerWithMetric(success, name, logger)
+		_ = metrics.RunHandlerWithMetric(success, name, name, logger)
 		sc, err := hm.GetLatencySampleCount()
 
-		if err != nil {
-			t.Errorf("Failed to get latency value: %e", err)
-		}
-		if sc == nil {
-			t.Errorf("Expected latency sample count not be nil")
-		}
-		if *sc != uint64(i) {
-			t.Errorf("Expected to get %d as the value of the latency sample count, but got %d", uint64(i), *sc)
-		}
+		checkLatency(t, sc, uint64(i), err)
+		mtsc, err := metrics.GetLatencySampleCountByMessageType(name)
+		checkLatency(t, mtsc, uint64(i), err)
+	}
+}
+
+func checkLatency(t *testing.T, sc  *uint64, expected uint64, err error) {
+	if err != nil {
+		t.Errorf("Failed to get latency value: %e", err)
+	}
+	if sc == nil {
+		t.Errorf("Expected latency sample count not be nil")
+	}
+	if *sc != expected {
+		t.Errorf("Expected to get %d as the value of the latency sample count, but got %d", expected, *sc)
 	}
 }

@@ -216,7 +216,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 	}
 	err := metrics.RunHandlerWithMetric(func() error {
 		return worker.deadletterHandler(tx, delivery)
-	}, worker.deadletterHandler.Name(), worker.log())
+	}, worker.deadletterHandler.Name(), fmt.Sprintf("deadletter_%s", delivery.Type), worker.log())
 	var reject bool
 	if err != nil {
 		worker.log().WithError(err).Error("failed handling deadletter")
@@ -362,7 +362,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 			ctx.SetLogger(worker.log().WithField("handler", handler.Name()))
 			handlerErr = metrics.RunHandlerWithMetric(func() error {
 				return handler(ctx, message)
-			}, handler.Name(), worker.log())
+			}, handler.Name(), message.PayloadFQN, worker.log())
 			if handlerErr != nil {
 				hspan.LogFields(slog.Error(handlerErr))
 				break
