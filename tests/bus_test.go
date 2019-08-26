@@ -463,7 +463,7 @@ func TestSendingEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Millisecond)
 	count, _ := metrics.GetRejectedMessagesValue()
 	if count != rejectedMessages+1 {
 		t.Error("Should have one rejected message")
