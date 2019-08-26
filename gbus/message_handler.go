@@ -2,17 +2,18 @@ package gbus
 
 import (
 	"database/sql"
-	"github.com/streadway/amqp"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/streadway/amqp"
 )
 
 //MessageHandler signature for all command handlers
 type MessageHandler func(invocation Invocation, message *BusMessage) error
 
-//DeadLetterMessageHandler signature for dead letter handler
-type DeadLetterMessageHandler func(tx *sql.Tx, poison amqp.Delivery) error
+//RawMessageHandler signature for handlers that handle raw amqp deliveries
+type RawMessageHandler func(tx *sql.Tx, delivery *amqp.Delivery) error
 
 //Name is a helper function returning the runtime name of the function bound to an instance of the MessageHandler type
 func (mg MessageHandler) Name() string {
@@ -20,7 +21,7 @@ func (mg MessageHandler) Name() string {
 }
 
 //Name is a helper function returning the runtime name of the function bound to an instance of the DeadLetterMessageHandler type
-func (dlmg DeadLetterMessageHandler) Name() string {
+func (dlmg RawMessageHandler) Name() string {
 	return nameFromFunc(dlmg)
 }
 
