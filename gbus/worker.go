@@ -273,6 +273,7 @@ func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
 func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	span, ctx := worker.extractOpenTracingSpan(delivery, "ProcessMessage")
 	worker.span = span
+	defer worker.span.Finish()
 	//catch all error handling so goroutine will not crash
 	defer func() {
 		if r := recover(); r != nil {
