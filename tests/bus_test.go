@@ -433,6 +433,43 @@ func TestSendingPanic(t *testing.T) {
 	}
 }
 
+func TestSendingEmptyBody(t *testing.T) {
+	rejectedMessages, err := metrics.GetRejectedMessagesValue()
+	if err != nil {
+		t.Error("failed to get rejected messages value")
+	}
+
+	b := createBusForTest()
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer b.Shutdown()
+
+	conn, err := amqp.Dial(connStr)
+	if err != nil {
+		t.Error("couldnt connect to rabbitmq")
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Error("couldnt open rabbitmq channel for publishing")
+	}
+	defer ch.Close()
+
+	cmd := amqp.Publishing{}
+	err = ch.Publish("", testSvc1, true, false, cmd)
+	if err != nil {
+		t.Error("couldnt send message on rabbitmq channel")
+	}
+	time.Sleep(1 * time.Second)
+	count, _ := metrics.GetRejectedMessagesValue()
+	if count != rejectedMessages+1 {
+		t.Error("Should have one rejected message")
+	}
+}
+
 func TestHealthCheck(t *testing.T) {
 	svc1 := createNamedBusForTest(testSvc1)
 	err := svc1.Start()

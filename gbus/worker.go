@@ -96,6 +96,7 @@ func (worker *worker) consumeMessages() {
 
 	for msg := range worker.messages {
 		if msg.Body == nil || len(msg.Body) == 0 {
+			worker.reject(false, msg)
 			continue
 		}
 		worker.processMessage(msg, false)
