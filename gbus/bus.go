@@ -632,6 +632,7 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 	b.SenderLock.Lock()
 	defer b.SenderLock.Unlock()
 	span, _ := opentracing.StartSpanFromContext(sctx, "SendMessage")
+	defer span.Finish()
 
 	defer func() {
 		if err := recover(); err != nil {
