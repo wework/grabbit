@@ -434,14 +434,14 @@ func TestSendingPanic(t *testing.T) {
 }
 
 func TestSendingEmptyBody(t *testing.T) {
-	rejectedMessages, err := metrics.GetRejectedMessagesValue()
-	if err != nil {
-		t.Error("failed to get rejected messages value")
-	}
-
 	b := createBusForTest()
+	proceed := make(chan bool)
+	b.SetGlobalRawMessageHandler(func(tx *sql.Tx, delivery *amqp.Delivery) error {
+		proceed <- true
+		return nil
+	})
 
-	err = b.Start()
+	err := b.Start()
 	if err != nil {
 		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
@@ -463,11 +463,58 @@ func TestSendingEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
-	time.Sleep(1 * time.Millisecond)
+
+	select {
+	case <-proceed:
+		fmt.Println("success")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout, failed to consume message with missing body")
+	}
+}
+
+func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+	b := createBusForTest()
+
+	err := b.HandleMessage(&Command1{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		t.Error("handler invoked for non-grabbit message")
+		return nil
+	})
+	if err != nil {
+		t.Errorf("could not register handler for bus %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer b.Shutdown()
+
+	conn, err := amqp.Dial(connStr)
+	if err != nil {
+		t.Error("couldnt connect to rabbitmq")
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Error("couldnt open rabbitmq channel for publishing")
+	}
+	defer ch.Close()
+
+	headersMap := make(map[string]interface{})
+	headersMap["x-msg-name"] = "grabbit.tests.command1"
+	cmd := amqp.Publishing{Headers: headersMap}
+	err = ch.Publish("", testSvc1, true, false, cmd)
+	if err != nil {
+		t.Error("couldnt send message on rabbitmq channel")
+	}
+
+	time.Sleep(1 * time.Second)
+
 	count, _ := metrics.GetRejectedMessagesValue()
-	if count != rejectedMessages+1 {
+	if count != 1 {
 		t.Error("Should have one rejected message")
 	}
+
 }
 
 func TestHealthCheck(t *testing.T) {

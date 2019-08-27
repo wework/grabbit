@@ -95,10 +95,6 @@ func (worker *worker) createMessagesChannel(q amqp.Queue, consumerTag string) (<
 func (worker *worker) consumeMessages() {
 
 	for msg := range worker.messages {
-		if msg.Body == nil || len(msg.Body) == 0 {
-			worker.reject(false, msg)
-			continue
-		}
 		worker.processMessage(msg, false)
 	}
 }
@@ -106,9 +102,6 @@ func (worker *worker) consumeMessages() {
 func (worker *worker) consumeRPC() {
 
 	for msg := range worker.rpcMessages {
-		if msg.Body == nil || len(msg.Body) == 0 {
-			continue
-		}
 		worker.processMessage(msg, true)
 	}
 }
@@ -316,6 +309,17 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
 		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
 		_ = worker.ack(delivery)
+		return
+	}
+
+	if delivery.Body == nil || len(delivery.Body) == 0 {
+		worker.log().
+			WithFields(
+				logrus.Fields{"message-name": msgName}).
+			Warn("body is missing for message. Cannot invoke handlers.")
+		worker.span.LogFields(slog.String("grabbit", "no body found"))
+		// if there are handlers registered for this type of message, it's a bug and the message must be rejected.
+		_ = worker.reject(false, delivery)
 		return
 	}
 	/*
