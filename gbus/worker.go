@@ -199,6 +199,7 @@ func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
 	if !requeue {
 		metrics.ReportRejectedMessage()
 	}
+
 	worker.log().WithFields(logrus.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("message rejected")
 	return err
 }
