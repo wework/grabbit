@@ -487,7 +487,7 @@ func TestSendingPanic(t *testing.T) {
 	}
 }
 
-func TestSendingEmptyBody(t *testing.T) {
+func TestEmptyBody(t *testing.T) {
 	b := createBusForTest()
 	proceed := make(chan bool)
 	b.SetGlobalRawMessageHandler(func(tx *sql.Tx, delivery *amqp.Delivery) error {
@@ -526,10 +526,54 @@ func TestSendingEmptyBody(t *testing.T) {
 	}
 }
 
-func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
-	b := createBusForTest()
+func TestDeadEmptyBody(t *testing.T) {
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
-	err := b.HandleMessage(&Command1{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	proceed := make(chan bool)
+	b.HandleDeadletter(func(tx *sql.Tx, delivery *amqp.Delivery) error {
+		proceed <- true
+		return nil
+	})
+
+	err := b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer b.Shutdown()
+
+	conn, err := amqp.Dial(connStr)
+	if err != nil {
+		t.Error("couldnt connect to rabbitmq")
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Error("couldnt open rabbitmq channel for publishing")
+	}
+	defer ch.Close()
+
+	headersMap := make(map[string]interface{})
+	headersMap["x-death"] = make([]interface{}, 0)
+	cmd := amqp.Publishing{Headers: headersMap}
+	err = ch.Publish("", testSvc1, true, false, cmd)
+	if err != nil {
+		t.Error("couldnt send message on rabbitmq channel")
+	}
+
+	select {
+	case <-proceed:
+		fmt.Println("success")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout, failed to consume message with missing body")
+	}
+}
+
+func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+
+	err := b.HandleMessage(&Command2{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		t.Error("handler invoked for non-grabbit message")
 		return nil
 	})
@@ -555,14 +599,14 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	defer ch.Close()
 
 	headersMap := make(map[string]interface{})
-	headersMap["x-msg-name"] = "grabbit.tests.command1"
+	headersMap["x-msg-name"] = Command2{}.SchemaName()
 	cmd := amqp.Publishing{Headers: headersMap}
 	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	count, _ := metrics.GetRejectedMessagesValue()
 	if count != 1 {
