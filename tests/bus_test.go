@@ -228,6 +228,7 @@ func TestRPC(t *testing.T) {
 }
 
 func TestDeadlettering(t *testing.T) {
+	metrics.ResetRejectedMessagesCounter()
 	rejectedMessages, err := metrics.GetRejectedMessagesValue()
 	if err != nil {
 		t.Error("failed to get rejected messages value")
