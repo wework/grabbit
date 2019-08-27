@@ -348,7 +348,7 @@ func TestReturnDeadToQueue(t *testing.T) {
 
 func TestDeadLetterHandlerPanic(t *testing.T) {
 	proceed := make(chan bool)
-
+	metrics.ResetRejectedMessagesCounter()
 	poison := gbus.NewBusMessage(Command1{})
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
