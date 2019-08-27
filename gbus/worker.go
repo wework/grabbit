@@ -73,7 +73,14 @@ func (worker *worker) Start() error {
 
 func (worker *worker) Stop() error {
 	worker.log().Info("stopping worker")
-	close(worker.stop) // worker.stop <- true
+	e1 := worker.channel.Cancel(worker.consumerTag, false)
+	e2 := worker.channel.Cancel(worker.consumerTag+"_rpc", false)
+	if e1 != nil {
+		return e1
+	}
+	if e2 != nil {
+		return e2
+	}
 	return nil
 }
 
@@ -205,37 +212,18 @@ func (worker *worker) isDead(delivery amqp.Delivery) bool {
 }
 
 func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
-	tx, txCreateErr := worker.txProvider.New()
-	if txCreateErr != nil {
-		worker.log().WithError(txCreateErr).Error("failed creating new tx")
-		worker.span.LogFields(slog.Error(txCreateErr))
-		_ = worker.reject(true, delivery)
-		return
+	txWrapper := func(tx *sql.Tx) error {
+		handlerWrapper := func() error {
+			return worker.deadletterHandler(tx, &delivery)
+		}
+		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), worker.log())
 	}
-	err := metrics.RunHandlerWithMetric(func() error {
-		return worker.deadletterHandler(tx, &delivery)
-	}, worker.deadletterHandler.Name(), worker.log())
 
-	var reject bool
+	err := worker.withTx(txWrapper)
 	if err != nil {
-		worker.log().WithError(err).Error("failed handling deadletter")
-		worker.span.LogFields(slog.Error(err))
-		err = worker.SafeWithRetries(tx.Rollback, MaxRetryCount)
-		reject = true
+		worker.reject(true, delivery)
 	} else {
-		err = worker.SafeWithRetries(tx.Commit, MaxRetryCount)
-	}
-
-	if err != nil {
-		worker.log().WithError(err).Error("Rollback/Commit deadletter handler message")
-		worker.span.LogFields(slog.Error(err))
-		reject = true
-	}
-
-	if reject {
-		_ = worker.reject(true, delivery)
-	} else {
-		_ = worker.ack(delivery)
+		worker.ack(delivery)
 	}
 }
 
