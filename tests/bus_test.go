@@ -488,7 +488,7 @@ func TestSendingPanic(t *testing.T) {
 }
 
 func TestEmptyBody(t *testing.T) {
-	b := createBusForTest()
+	b := createNamedBusForTest(testSvc5)
 	proceed := make(chan bool)
 	b.SetGlobalRawMessageHandler(func(tx *sql.Tx, delivery *amqp.Delivery) error {
 		proceed <- true
@@ -519,7 +519,7 @@ func TestEmptyBody(t *testing.T) {
 	defer ch.Close()
 
 	cmd := amqp.Publishing{}
-	err = ch.Publish("", testSvc1, true, false, cmd)
+	err = ch.Publish("", testSvc5, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
@@ -533,7 +533,7 @@ func TestEmptyBody(t *testing.T) {
 }
 
 func TestDeadEmptyBody(t *testing.T) {
-	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+	b := createBusWithConfig(testSvc5, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
 	proceed := make(chan bool)
@@ -568,7 +568,7 @@ func TestDeadEmptyBody(t *testing.T) {
 	headersMap := make(map[string]interface{})
 	headersMap["x-death"] = make([]interface{}, 0)
 	cmd := amqp.Publishing{Headers: headersMap}
-	err = ch.Publish("", testSvc1, true, false, cmd)
+	err = ch.Publish("", testSvc5, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
@@ -582,9 +582,14 @@ func TestDeadEmptyBody(t *testing.T) {
 }
 
 func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
-	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+	b := createBusWithConfig(testSvc5, "grabbit-dead1", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
+	proceed := make(chan bool)
+	b.HandleDeadletter(func(tx *sql.Tx, delivery *amqp.Delivery) error {
+		proceed <- true
+		return nil
+	})
 	err := b.HandleMessage(&Command3{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		t.Error("handler invoked for non-grabbit message")
 		return nil
@@ -620,18 +625,20 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	headersMap := make(map[string]interface{})
 	headersMap["x-msg-name"] = Command3{}.SchemaName()
 	cmd := amqp.Publishing{Headers: headersMap}
-	err = ch.Publish("", testSvc1, true, false, cmd)
+	err = ch.Publish("", testSvc5, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
 
-	time.Sleep(500 * time.Millisecond)
-
-	count, _ := metrics.GetRejectedMessagesValue()
-	if count != 1 {
-		t.Error("Should have one rejected message")
+	select {
+	case <-proceed:
+		count, _ := metrics.GetRejectedMessagesValue()
+		if count != 1 {
+			t.Error("Should have one rejected message")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout, failed to consume message with missing body")
 	}
-
 }
 
 func TestHealthCheck(t *testing.T) {
