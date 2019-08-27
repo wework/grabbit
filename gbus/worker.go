@@ -221,6 +221,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 
 	err := worker.withTx(txWrapper)
 	if err != nil {
+		//we reject the deelivery but requeue it so the message will not be lost and recovered to the dlq
 		worker.reject(true, delivery)
 	} else {
 		worker.ack(delivery)
