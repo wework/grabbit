@@ -510,6 +510,7 @@ func TestEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Error("couldnt connect to rabbitmq")
 	}
+	defer conn.Close()
 
 	ch, err := conn.Channel()
 	if err != nil {
