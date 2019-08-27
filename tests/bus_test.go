@@ -499,7 +499,12 @@ func TestEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
-	defer b.Shutdown()
+	defer func() {
+		err := b.Shutdown()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
@@ -540,7 +545,13 @@ func TestDeadEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
-	defer b.Shutdown()
+
+	defer func() {
+		err := b.Shutdown()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
@@ -573,7 +584,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
-	err := b.HandleMessage(&Command2{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	err := b.HandleMessage(&Command3{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		t.Error("handler invoked for non-grabbit message")
 		return nil
 	})
@@ -585,7 +596,13 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
-	defer b.Shutdown()
+
+	defer func() {
+		err := b.Shutdown()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
@@ -599,7 +616,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	defer ch.Close()
 
 	headersMap := make(map[string]interface{})
-	headersMap["x-msg-name"] = Command2{}.SchemaName()
+	headersMap["x-msg-name"] = Command3{}.SchemaName()
 	cmd := amqp.Publishing{Headers: headersMap}
 	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {

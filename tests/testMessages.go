@@ -33,6 +33,14 @@ func (Command2) SchemaName() string {
 	return "grabbit.tests.Command2"
 }
 
+type Command3 struct {
+	Data string
+}
+
+func (Command3) SchemaName() string {
+	return "grabbit.tests.Command3"
+}
+
 type Reply1 struct {
 	Data string
 }
