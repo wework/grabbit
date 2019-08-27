@@ -558,7 +558,7 @@ func TestDeadEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Error("couldnt connect to rabbitmq")
 	}
-
+	defer conn.Close()
 	ch, err := conn.Channel()
 	if err != nil {
 		t.Error("couldnt open rabbitmq channel for publishing")
@@ -609,6 +609,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	if err != nil {
 		t.Error("couldnt connect to rabbitmq")
 	}
+	defer conn.Close()
 
 	ch, err := conn.Channel()
 	if err != nil {
