@@ -582,6 +582,7 @@ func TestDeadEmptyBody(t *testing.T) {
 }
 
 func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+	rejected, _ := metrics.GetRejectedMessagesValue()
 	b := createBusWithConfig(testSvc5, "grabbit-dead1", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
@@ -633,7 +634,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	select {
 	case <-proceed:
 		count, _ := metrics.GetRejectedMessagesValue()
-		if count != 1 {
+		if count != rejected+1 {
 			t.Error("Should have one rejected message")
 		}
 	case <-time.After(2 * time.Second):
