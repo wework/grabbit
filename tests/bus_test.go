@@ -228,10 +228,8 @@ func TestRPC(t *testing.T) {
 }
 
 func TestDeadlettering(t *testing.T) {
-	rejectedMessages, err := metrics.GetRejectedMessagesValue()
-	if err != nil {
-		t.Error("failed to get rejected messages value")
-	}
+	metrics.ResetRejectedMessagesCounter()
+
 	proceed := make(chan bool)
 	poison := gbus.NewBusMessage(PoisonMessage{})
 	service1 := createNamedBusForTest(testSvc1)
@@ -259,7 +257,7 @@ func TestDeadlettering(t *testing.T) {
 
 	<-proceed
 	count, _ := metrics.GetRejectedMessagesValue()
-	if count != rejectedMessages+1 {
+	if count != 1 {
 		t.Error("Should have one rejected message")
 	}
 
@@ -348,11 +346,7 @@ func TestReturnDeadToQueue(t *testing.T) {
 
 func TestDeadLetterHandlerPanic(t *testing.T) {
 	proceed := make(chan bool)
-	rejectedMessages, err := metrics.GetRejectedMessagesValue()
-	if err != nil {
-		t.Error("failed to get rejected messages value")
-	}
-
+	metrics.ResetRejectedMessagesCounter()
 	poison := gbus.NewBusMessage(Command1{})
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
@@ -361,6 +355,14 @@ func TestDeadLetterHandlerPanic(t *testing.T) {
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 	visited := false
 	deadMessageHandler := func(tx *sql.Tx, poison *amqp.Delivery) error {
+		/*
+			this handler will be called more than once since when grabbit rejects
+			a message from a deadletter queue to rejects it with the requeu option set to
+			true and that is why this will be called more than once even though the retry count
+			is set to 0
+
+		*/
+
 		if !visited {
 			visited = true
 			panic("PANIC DEAD HANDLER aaahhh!!!!!!")
@@ -374,7 +376,7 @@ func TestDeadLetterHandlerPanic(t *testing.T) {
 	}
 
 	deadletterSvc.HandleDeadletter(deadMessageHandler)
-	err = service1.HandleMessage(Command1{}, faultyHandler)
+	err := service1.HandleMessage(Command1{}, faultyHandler)
 	if err != nil {
 		t.Error("failed to register faultyhandler")
 	}
@@ -388,8 +390,12 @@ func TestDeadLetterHandlerPanic(t *testing.T) {
 	select {
 	case <-proceed:
 		count, _ := metrics.GetRejectedMessagesValue()
-		if count != rejectedMessages+2 {
-			t.Error("Should have 2 rejected messages")
+		//we expect only 1 rejcted meessage from the counter since rejected messages that get
+		//requeued are not reported to the metric so the counter won't be increment when the message
+		//in the dlq gets rejected as it is rejected with the requeue option set to true
+		if count != 1 {
+
+			t.Errorf("Should have 1 rejected messages but was %v", count)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout, dlq failed to reject message after handler panicked")
