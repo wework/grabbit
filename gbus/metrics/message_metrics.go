@@ -10,6 +10,13 @@ var (
 	rejectedMessages = newRejectedMessagesCounter()
 )
 
+//ResetRejectedMessagesCounter resets the counter intended to be used in tests only
+func ResetRejectedMessagesCounter() {
+
+	prometheus.Unregister(rejectedMessages)
+	rejectedMessages = newRejectedMessagesCounter()
+}
+
 //ReportRejectedMessage reports a message being rejected to the metrics counter
 func ReportRejectedMessage() {
 	rejectedMessages.Inc()
@@ -28,6 +35,7 @@ func GetRejectedMessagesValue() (float64, error) {
 }
 
 func newRejectedMessagesCounter() prometheus.Counter {
+
 	return promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: grabbitPrefix,
 		Subsystem: "messages",
