@@ -229,10 +229,7 @@ func TestRPC(t *testing.T) {
 
 func TestDeadlettering(t *testing.T) {
 	metrics.ResetRejectedMessagesCounter()
-	rejectedMessages, err := metrics.GetRejectedMessagesValue()
-	if err != nil {
-		t.Error("failed to get rejected messages value")
-	}
+
 	proceed := make(chan bool)
 	poison := gbus.NewBusMessage(PoisonMessage{})
 	service1 := createNamedBusForTest(testSvc1)
@@ -260,7 +257,7 @@ func TestDeadlettering(t *testing.T) {
 
 	<-proceed
 	count, _ := metrics.GetRejectedMessagesValue()
-	if count != rejectedMessages+1 {
+	if count != 1 {
 		t.Error("Should have one rejected message")
 	}
 
