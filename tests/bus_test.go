@@ -552,7 +552,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 		If a "normal" handler is registered for this type of message, the bus must reject this message.
 	*/
 	metrics.ResetRejectedMessagesCounter()
-	b := createBusWithConfig(testSvc5, "grabbit-dead1", true, true,
+	b := createBusWithConfig(testSvc1, "grabbit-dead1", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
 	proceed := make(chan bool)
@@ -589,7 +589,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	headersMap := make(map[string]interface{})
 	headersMap["x-msg-name"] = Command3{}.SchemaName()
 	cmd := amqp.Publishing{Headers: headersMap}
-	err = ch.Publish("", testSvc5, true, false, cmd)
+	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
