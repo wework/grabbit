@@ -523,7 +523,6 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 		t.Errorf("could not start bus for test error: %s", err.Error())
 	}
 	defer assertBusShutdown(b, t)
-	//defer assertBusShutdown(b, t)
 
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
