@@ -471,7 +471,7 @@ func TestSendingPanic(t *testing.T) {
 }
 
 func TestEmptyBody(t *testing.T) {
-	b := createNamedBusForTest(testSvc5)
+	b := createNamedBusForTest(testSvc1)
 	proceed := make(chan bool)
 	b.SetGlobalRawMessageHandler(func(tx *sql.Tx, delivery *amqp.Delivery) error {
 		proceed <- true
@@ -496,7 +496,7 @@ func TestEmptyBody(t *testing.T) {
 	defer ch.Close()
 
 	cmd := amqp.Publishing{}
-	err = ch.Publish("", testSvc5, true, false, cmd)
+	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
@@ -509,7 +509,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 		should handle the message successfully.
 	*/
 
-	b := createBusWithConfig(testSvc5, "grabbit-dead", true, true,
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
 		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
 
 	proceed := make(chan bool)
@@ -538,7 +538,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	headersMap := make(map[string]interface{})
 	headersMap["x-death"] = make([]interface{}, 0)
 	cmd := amqp.Publishing{Headers: headersMap}
-	err = ch.Publish("", testSvc5, true, false, cmd)
+	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {
 		t.Error("couldnt send message on rabbitmq channel")
 	}
@@ -560,7 +560,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 		proceed <- true
 		return nil
 	})
-	err := b.HandleMessage(&Command3{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	err := b.HandleMessage(Command1{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		t.Error("handler invoked for non-grabbit message")
 		return nil
 	})
@@ -587,7 +587,7 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 	defer ch.Close()
 
 	headersMap := make(map[string]interface{})
-	headersMap["x-msg-name"] = Command3{}.SchemaName()
+	headersMap["x-msg-name"] = Command1{}.SchemaName()
 	cmd := amqp.Publishing{Headers: headersMap}
 	err = ch.Publish("", testSvc1, true, false, cmd)
 	if err != nil {
