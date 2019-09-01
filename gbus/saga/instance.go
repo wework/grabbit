@@ -6,11 +6,11 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/wework/grabbit/gbus/metrics"
-
+	"github.com/opentracing/opentracing-go"
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/metrics"
 )
 
 //Instance represent a living instance of a saga of a particular definition
@@ -22,7 +22,7 @@ type Instance struct {
 	Log                logrus.FieldLogger
 }
 
-func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocation, message *gbus.BusMessage) error {
 
 	methodsToInvoke := si.getSagaMethodNameToInvoke(exchange, routingKey, message)
 
@@ -47,6 +47,13 @@ func (si *Instance) invoke(exchange, routingKey string, invocation gbus.Invocati
 		invocation.Log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("invoking method on saga")
+
+		span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), methodName)
+		// replace the original context with the conext built arround the span so we ca
+		// trace the saga handler that is invoked
+		invocation.ctx = sctx
+
+		defer span.Finish()
 
 		err := metrics.RunHandlerWithMetric(func() error {
 			returns := method.Call(params)
