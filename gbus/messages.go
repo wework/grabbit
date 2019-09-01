@@ -1,6 +1,9 @@
 package gbus
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
 	"github.com/streadway/amqp"
@@ -27,11 +30,28 @@ func NewBusMessage(payload Message) *BusMessage {
 	return bm
 }
 
-//NewFromAMQPHeaders creates a BusMessage from headers of an amqp message
-func NewFromAMQPHeaders(headers amqp.Table) *BusMessage {
+//NewFromDelivery creates a BusMessage from an amqp delivery
+func NewFromDelivery(delivery amqp.Delivery) (*BusMessage, error) {
 	bm := &BusMessage{}
-	bm.SetFromAMQPHeaders(headers)
-	return bm
+	bm.SetFromAMQPHeaders(delivery)
+
+	bm.ID = delivery.MessageId
+	bm.CorrelationID = delivery.CorrelationId
+	if delivery.Exchange != "" {
+		bm.Semantics = EVT
+	} else {
+		bm.Semantics = CMD
+	}
+	if bm.PayloadFQN == "" || bm.Semantics == "" {
+		errMsg := fmt.Sprintf("missing critical headers. message_name:%s semantics: %s", bm.PayloadFQN, bm.Semantics)
+		return nil, errors.New(errMsg)
+	}
+	return bm, nil
+}
+
+//GetMessageName extracts the valuee of the custom x-msg-name header from an amq delivery
+func GetMessageName(delivery amqp.Delivery) string {
+	return castToString(delivery.Headers["x-msg-name"])
 }
 
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
@@ -46,12 +66,12 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 }
 
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
-func (bm *BusMessage) SetFromAMQPHeaders(headers amqp.Table) {
-
+func (bm *BusMessage) SetFromAMQPHeaders(delivery amqp.Delivery) {
+	headers := delivery.Headers
 	bm.SagaID = castToString(headers["x-msg-saga-id"])
 	bm.SagaCorrelationID = castToString(headers["x-msg-saga-correlation-id"])
 	bm.RPCID = castToString(headers["x-grabbit-msg-rpc-id"])
-	bm.PayloadFQN = castToString(headers["x-msg-name"])
+	bm.PayloadFQN = GetMessageName(delivery)
 
 }
 

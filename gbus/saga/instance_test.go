@@ -1,6 +1,7 @@
 package saga
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -19,7 +20,9 @@ func TestInstanceInvocationReturnsErrors(t *testing.T) {
 	m2 := TestMsg2{}
 
 	exchange, routingKey := "", "kong"
-	invocationStub := &sagaInvocation{}
+	invocationStub := &sagaInvocation{
+		ctx: context.Background(),
+	}
 
 	failName := gbus.MessageHandler(s.Fail).Name()
 	failFilter := gbus.NewMessageFilter(exchange, routingKey, m1)
