@@ -5,14 +5,15 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/wework/grabbit/gbus"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+	"github.com/wework/grabbit/gbus/tx"
 )
 
 var (
@@ -315,5 +316,5 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 
 func getOutboxName(svcName string) string {
 
-	return strings.ToLower("grabbit_" + sanitizeTableName(svcName) + "_outbox")
+	return tx.GrabbitTableNameTemplate(svcName, "outbox")
 }
