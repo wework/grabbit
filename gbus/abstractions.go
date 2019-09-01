@@ -138,10 +138,7 @@ type Deadlettering interface {
 	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
-/*
-	RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees
-	that the bus provides
-*/
+//RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees that the bus provides
 type RawMessageHandling interface {
 	/*
 				SetGlobalRawMessageHandler registers a handler that gets called for each amqp.Delivery that is delivered
