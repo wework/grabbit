@@ -138,25 +138,23 @@ type Deadlettering interface {
 	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
-/*
-	RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees
-	that the bus provides
-*/
+
+//RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees that the bus provides
 type RawMessageHandling interface {
 	/*
 				SetGlobalRawMessageHandler registers a handler that gets called for each amqp.Delivery that is delivered
-		        to the service queue.
-		        The handler will get called with a scoped transaction that is a different transaction than the ones that
-		        regular message handlers are scoped by as we want the RawMessage handler to get executed even if the amqp.Delivery
-		        can not be serialized by the bus to one of the registered schemas
+		        to the service queue.
+		        The handler will get called with a scoped transaction that is a different transaction than the ones that
+		        regular message handlers are scoped by as we want the RawMessage handler to get executed even if the amqp.Delivery
+		        can not be serialized by the bus to one of the registered schemas
 
-		        In case a bus has both a raw message handler and regular ones the bus will first call the raw message handler
-		        and afterward will call any registered message handlers.
-		        if the global raw handler returns an error the message gets rejected and any additional
-		        handlers will not be called.
-		        You should not use the global raw message handler to drive business logic as it breaks the local transactivity
-		        guarantees grabbit provides and should only be used in specialized cases.
-		        If you do decide to use this feature try not shooting yourself in the foot.
+		        In case a bus has both a raw message handler and regular ones the bus will first call the raw message handler
+		        and afterward will call any registered message handlers.
+		        if the global raw handler returns an error the message gets rejected and any additional
+		        handlers will not be called.
+		        You should not use the global raw message handler to drive business logic as it breaks the local transactivity
+		        guarantees grabbit provides and should only be used in specialized cases.
+		        If you do decide to use this feature try not shooting yourself in the foot.
 	*/
 	SetGlobalRawMessageHandler(handler RawMessageHandler)
 }
