@@ -554,6 +554,7 @@ func (b *DefaultBus) HandleDeadletter(handler RawMessageHandler) {
 	b.registerDeadLetterHandler(handler)
 }
 
+
 //SetGlobalRawMessageHandler implements RawMessageHandling.SetGlobalRawMessageHandler
 func (b *DefaultBus) SetGlobalRawMessageHandler(handler RawMessageHandler) {
 	metrics.AddHandlerMetrics(handler.Name())
