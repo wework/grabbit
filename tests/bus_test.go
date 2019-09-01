@@ -150,9 +150,9 @@ var (
 func TestHandlerRetry(t *testing.T) {
 
 	c1 := Command1{}
-	r3 := Reply3{}
+	r1 := Reply1{}
 	cmd := gbus.NewBusMessage(c1)
-	reply := gbus.NewBusMessage(r3)
+	reply := gbus.NewBusMessage(r1)
 
 	bus := createBusForTest()
 
@@ -161,7 +161,7 @@ func TestHandlerRetry(t *testing.T) {
 	}
 
 	bus.HandleMessage(c1, cmdHandler)
-	bus.HandleMessage(r3, handleRetry)
+	bus.HandleMessage(r1, handleRetry)
 
 	bus.Start()
 	defer assertBusShutdown(bus, t)
@@ -174,9 +174,9 @@ func TestHandlerRetry(t *testing.T) {
 		t.Error("Metrics for handleRetry should be initiated")
 	}
 	f, _ := hm.GetFailureCount()
-	mtf, _ := metrics.GetFailureCountByMessageType(reply.PayloadFQN)
+	mtf, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 	s, _ := hm.GetSuccessCount()
-	mts, _ := metrics.GetSuccessCountByMessageType(reply.PayloadFQN)
+	mts, _ := metrics.GetSuccessCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 
 	if f != 2 {
 		t.Errorf("Failure count should be 2 but was %f", f)
@@ -200,7 +200,6 @@ func handleRetry(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		attempts++
 		panic("expecting retry on panics")
 	} else {
-		log.Info("am here")
 		handlerRetryProceed <- true
 	}
 	return nil
@@ -278,7 +277,7 @@ func TestDeadlettering(t *testing.T) {
 	if failureCount != 0 {
 		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", failureCount)
 	}
-	poisonF, _ := metrics.GetFailureCountByMessageType(poison.PayloadFQN)
+	poisonF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(poison.PayloadFQN, "func1")
 	if poisonF != 0 {
 		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", poisonF)
 	}
@@ -290,7 +289,7 @@ func TestDeadlettering(t *testing.T) {
 	if failureCount == 1 {
 		t.Errorf("faulty should have failed once, but it failed %f times", failureCount)
 	}
-	cmdF, _ := metrics.GetFailureCountByMessageType(cmd.PayloadFQN)
+	cmdF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(cmd.PayloadFQN, "func2")
 	if cmdF == 1 {
 		t.Errorf("faulty should have failed once, but it failed %f times", cmdF)
 	}

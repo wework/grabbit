@@ -125,7 +125,7 @@ func TestRunHandlerWithMetric_Latency(t *testing.T) {
 		sc, err := hm.GetLatencySampleCount()
 
 		checkLatency(t, sc, uint64(i), err)
-		mtsc, err := metrics.GetLatencySampleCountByMessageType(name)
+		mtsc, err := metrics.GetLatencySampleCountByMessageTypeAndHandlerName(name, name)
 		checkLatency(t, mtsc, uint64(i), err)
 	}
 }

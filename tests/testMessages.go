@@ -49,14 +49,6 @@ func (Reply2) SchemaName() string {
 	return "grabbit.tests.Reply2"
 }
 
-type Reply3 struct {
-	Data string
-}
-
-func (Reply3) SchemaName() string {
-	return "grabbit.tests.Reply3"
-}
-
 type Event1 struct {
 	Data string
 }

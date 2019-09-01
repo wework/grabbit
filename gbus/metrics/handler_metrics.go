@@ -16,24 +16,25 @@ var (
 		Namespace: grabbitPrefix,
 		Subsystem: handlers,
 		Name:      handlerResult,
-		Help:      "The result of the message handler. The message type and result are labeled",
-	}, []string{messageType, handlerResult})
+		Help:      "The result of the message handler. The handler's name, message type and result are labeled",
+	}, []string{handler, messageTypeLabel, handlerResult})
 	handlersLatencySummary = promauto.NewSummaryVec(prometheus.SummaryOpts{
 		Namespace: grabbitPrefix,
 		Subsystem: handlers,
 		Name:      handlerLatency,
-		Help:      "The latency of the message handler. The message type is labeled",
-	}, []string{messageType})
+		Help:      "The latency of the message handler. The handler's name and message type are labeled",
+	}, []string{handler, messageTypeLabel})
 )
 
 const (
-	failure        = "failure"
-	success        = "success"
-	handlerResult  = "result"
-	handlers       = "handlers"
-	grabbitPrefix  = "grabbit"
-	messageType    = "message_type"
-	handlerLatency = "latency"
+	failure          = "failure"
+	success          = "success"
+	handlerResult    = "result"
+	handlers         = "handlers"
+	grabbitPrefix    = "grabbit"
+	messageTypeLabel = "message_type"
+	handlerLatency   = "latency"
+	handler          = "handler"
 )
 
 type handlerMetrics struct {
@@ -59,24 +60,24 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName, messageType s
 			if handlerMetrics != nil {
 				handlerMetrics.result.WithLabelValues(failure).Inc()
 			}
-			handlersResultCounter.WithLabelValues(messageType, failure).Inc()
+			handlersResultCounter.With(prometheus.Labels{handler: handlerName, messageTypeLabel: messageType, handlerResult: failure}).Inc()
 			panic(p)
 		}
 	}()
 
 	if handlerMetrics == nil {
 		logger.WithField("handler", handlerName).Warn("Running with metrics - couldn't find metrics for the given handler")
-		return trackTime(handleMessage, handlersLatencySummary.WithLabelValues(messageType))
+		return trackTime(handleMessage, handlersLatencySummary.WithLabelValues(handlerName, messageType))
 	}
 
-	err := trackTime(handleMessage, handlerMetrics.latency, handlersLatencySummary.WithLabelValues(messageType))
+	err := trackTime(handleMessage, handlerMetrics.latency, handlersLatencySummary.WithLabelValues(handlerName, messageType))
 
 	if err != nil {
 		handlerMetrics.result.WithLabelValues(failure).Inc()
-		handlersResultCounter.WithLabelValues(messageType, failure).Inc()
+		handlersResultCounter.With(prometheus.Labels{handler: handlerName, messageTypeLabel: messageType, handlerResult: failure}).Inc()
 	} else {
 		handlerMetrics.result.WithLabelValues(success).Inc()
-		handlersResultCounter.WithLabelValues(messageType, success).Inc()
+		handlersResultCounter.With(prometheus.Labels{handler: handlerName, messageTypeLabel: messageType, handlerResult: success}).Inc()
 	}
 
 	return err
@@ -127,19 +128,19 @@ func trackTime(functionToTrack func() error, observers ...prometheus.Observer) e
 	return functionToTrack()
 }
 
-//GetSuccessCountByMessageType gets the counter value for the successful handlers' run for a given event type
-func GetSuccessCountByMessageType(messageType string) (float64, error) {
-	return getCounterValue(handlersResultCounter.WithLabelValues(messageType, success))
+//GetSuccessCountByMessageTypeAndHandlerName gets the counter value for the successful handlers' run for a given message type and handler's name
+func GetSuccessCountByMessageTypeAndHandlerName(messageType, handlerName string) (float64, error) {
+	return getCounterValue(handlersResultCounter.With(prometheus.Labels{messageTypeLabel: messageType, handler: handlerName, handlerResult: success}))
 }
 
-//GetFailureCountByMessageType gets the counter value for the failed handlers' run for a given event type
-func GetFailureCountByMessageType(messageType string) (float64, error) {
-	return getCounterValue(handlersResultCounter.WithLabelValues(messageType, failure))
+//GetFailureCountByMessageTypeAndHandlerName gets the counter value for the failed handlers' run for a given message type and handler's name
+func GetFailureCountByMessageTypeAndHandlerName(messageType, handlerName string) (float64, error) {
+	return getCounterValue(handlersResultCounter.With(prometheus.Labels{messageTypeLabel: messageType, handler: handlerName, handlerResult: failure}))
 }
 
-//GetLatencySampleCountByMessageType gets the summary sample count value for the handlers' run for a given event type
-func GetLatencySampleCountByMessageType(messageType string) (*uint64, error) {
-	summary, ok := handlersLatencySummary.WithLabelValues(messageType).(prometheus.Summary)
+//GetLatencySampleCountByMessageTypeAndHandlerName gets the summary sample count value for the handlers' run for a given message type and handler's name
+func GetLatencySampleCountByMessageTypeAndHandlerName(messageType, handlerName string) (*uint64, error) {
+	summary, ok := handlersLatencySummary.With(prometheus.Labels{messageTypeLabel: messageType, handler: handlerName}).(prometheus.Summary)
 
 	if !ok {
 		return nil, fmt.Errorf("couldn't find summary for event type: %s", messageType)
