@@ -9,7 +9,6 @@ var _ gbus.Message = &Reply2{}
 var _ gbus.Message = &Event1{}
 var _ gbus.Message = &Event2{}
 
-
 //PoisonMessage is a malformed message to test poison pill scenarios
 type PoisonMessage struct {
 }
