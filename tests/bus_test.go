@@ -548,7 +548,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 
 func TestFailHandlerInvokeOfMessageWithNilBody(t *testing.T) {
 	/*
-		The global and dead letter handlers can consume message with 0 or nil body but
+		The global and dead letter handlers can consume message with nil body but
 		"normal" handlers cannot.
 		If a "normal" handler is registered for this type of message, the bus must reject this message.
 	*/
@@ -606,7 +606,7 @@ func TestFailHandlerInvokeOfMessageWithNilBody(t *testing.T) {
 func TestSendEmptyBody(t *testing.T) {
 	/*
 			test sending of message with len(payload) == 0 .
-		    for example, proto message with 1 bool field set as "false" as 0 payload!
+		    for example, the body of proto message with 1 "false" field is len 0.
 	*/
 
 	logger := log.WithField("test", "empty_body")
