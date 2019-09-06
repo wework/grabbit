@@ -24,6 +24,7 @@ const (
 type BusConfiguration struct {
 	MaxRetryCount     uint
 	BaseRetryDuration int
+	Serializer        Serializer
 }
 
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus

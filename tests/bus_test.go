@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/wework/grabbit/gbus/serialization"
 	"reflect"
 	"testing"
 	"time"
@@ -545,7 +546,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
-func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+func TestFailHandlerInvokeOfMessageWithNilBody(t *testing.T) {
 	/*
 		The global and dead letter handlers can consume message with 0 or nil body but
 		"normal" handlers cannot.
@@ -600,6 +601,44 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 			t.Error("Should have one rejected message")
 		}
 	}, t)
+}
+
+func TestSendEmptyBody(t *testing.T) {
+	/*
+			test sending of message with len(payload) == 0 .
+		    for example, proto message with 1 bool field set as "false" as 0 payload!
+	*/
+
+	logger := log.WithField("test", "empty_body")
+	serializer := serialization.NewProtoSerializer(logger)
+	msg := EmptyProtoCommand{}
+	cmd := gbus.NewBusMessage(&msg)
+	proceed := make(chan bool)
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0, Serializer: serializer})
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+
+	err := b.HandleMessage(&EmptyProtoCommand{}, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer assertBusShutdown(b, t)
+
+	err = b.Send(noopTraceContext(), testSvc1, cmd)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	proceedOrTimeout(2, proceed, nil, t)
 }
 
 func TestHealthCheck(t *testing.T) {

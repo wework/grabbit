@@ -40,6 +40,9 @@ func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf
 	if pos {
 		busBuilder = busBuilder.PurgeOnStartUp()
 	}
+	if conf.Serializer != nil {
+		busBuilder = busBuilder.WithSerializer(conf.Serializer)
+	}
 
 	return busBuilder.Build(svcName)
 }

@@ -306,7 +306,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 
-	if delivery.Body == nil || len(delivery.Body) == 0 {
+	if delivery.Body == nil {
 		worker.log().
 			WithFields(
 				logrus.Fields{"message-name": msgName}).
