@@ -34,6 +34,7 @@ func sagaStoreTableMigration(svcName string) *migrator.Migration {
 func outboxMigrations(svcName string) *migrator.Migration {
 
 	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
+
 	query := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
 	rec_id int NOT NULL AUTO_INCREMENT,
 	message_id varchar(50) NOT NULL UNIQUE,
@@ -53,6 +54,21 @@ func outboxMigrations(svcName string) *migrator.Migration {
 		Name: "create outbox table",
 		Func: func(tx *sql.Tx) error {
 			if _, err := tx.Exec(query); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+}
+
+func outboxChangeColumnLength(svcName string) *migrator.Migration {
+	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
+	increaseLengthSQL := `ALTER TABLE ` + tblName + ` MODIFY message_type VARCHAR(2048) NOT NULL, MODIFY exchange VARCHAR(2048) NOT NULL, MODIFY routing_key VARCHAR(2048) NOT NULL`
+	return &migrator.Migration{
+		Name: "increase column length to 2048",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(increaseLengthSQL); err != nil {
 				return err
 			}
 			return nil
@@ -107,6 +123,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 		sagaStoreTableMigration(svcName),
 		timoutTableMigration(svcName),
 		legacyMigrationsTable(svcName),
+		outboxChangeColumnLength(svcName),
 	))
 	if err != nil {
 		panic(err)
