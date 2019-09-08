@@ -22,7 +22,7 @@ func init() {
 	testSvc4 = "test-svc4"
 }
 
-func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration) gbus.Bus {
+func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration, serializer gbus.Serializer) gbus.Bus {
 	busBuilder := builder.
 		New().
 		Bus(connStr).
@@ -40,8 +40,8 @@ func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf
 	if pos {
 		busBuilder = busBuilder.PurgeOnStartUp()
 	}
-	if conf.Serializer != nil {
-		busBuilder = busBuilder.WithSerializer(conf.Serializer)
+	if serializer != nil {
+		busBuilder = busBuilder.WithSerializer(serializer)
 	}
 
 	return busBuilder.Build(svcName)
@@ -52,5 +52,5 @@ func createBusForTest() gbus.Bus {
 }
 
 func createNamedBusForTest(svcName string) gbus.Bus {
-	return createBusWithConfig(svcName, "dead-grabbit", true, true, gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15})
+	return createBusWithConfig(svcName, "dead-grabbit", true, true, gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15}, nil)
 }

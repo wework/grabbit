@@ -304,10 +304,10 @@ func TestReturnDeadToQueue(t *testing.T) {
 	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 
 	deadletterSvc := createBusWithConfig("deadletterSvc", "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 
 	deadMessageHandler := func(tx *sql.Tx, poison *amqp.Delivery) error {
 		pub := amqpDeliveryToPublishing(poison)
@@ -341,10 +341,10 @@ func TestDeadLetterHandlerPanic(t *testing.T) {
 	metrics.ResetRejectedMessagesCounter()
 	poison := gbus.NewBusMessage(Command1{})
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 
 	deadletterSvc := createBusWithConfig("deadletterSvc", "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 	visited := false
 	deadMessageHandler := func(tx *sql.Tx, poison *amqp.Delivery) error {
 		/*
@@ -511,7 +511,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	*/
 
 	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 
 	proceed := make(chan bool)
 	b.HandleDeadletter(func(tx *sql.Tx, delivery *amqp.Delivery) error {
@@ -554,7 +554,7 @@ func TestFailHandlerInvokeOfMessageWithNilBody(t *testing.T) {
 	*/
 	metrics.ResetRejectedMessagesCounter()
 	b := createBusWithConfig(testSvc1, "grabbit-dead1", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, nil)
 
 	proceed := make(chan bool)
 	b.HandleDeadletter(func(tx *sql.Tx, delivery *amqp.Delivery) error {
@@ -615,7 +615,7 @@ func TestSendEmptyBody(t *testing.T) {
 	cmd := gbus.NewBusMessage(&msg)
 	proceed := make(chan bool)
 	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
-		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0, Serializer: serializer})
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, serializer)
 
 	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		proceed <- true
