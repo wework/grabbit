@@ -46,7 +46,6 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bo
 		}
 		//if the saga is potentially invoking itself then set the SagaCorrelationID to reflect that
 		//https://github.com/wework/grabbit/issues/64
-
 		if targetService == si.hostingSvc {
 			message.SagaCorrelationID = message.SagaID
 		}

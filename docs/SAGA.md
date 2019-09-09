@@ -222,7 +222,11 @@ When the above is detected grabbit will rollback the bounded transaction and ret
 
 ### Configuring a Saga Instance
 
+<<<<<<< HEAD
 It is sometimes necessary to configure a saga instance with some data before it gets executed.
+=======
+It is sometimes needed to configure a saga instance with some data before it gets executed.
+>>>>>>> added reply to initiator functionality to sagas (#157)
 grrabit allows you to do so by providing a saga configuration function when registering the saga.
 Each time a saga instance gets created or inflated from the persistent store the configuration function will be executed.
 
@@ -245,10 +249,16 @@ svc1.RegisterSaga(&BookVacationSaga{}, configSaga)
 ### Replying to the saga initiator
 
 It is common that during its life cycle a saga will need to report back and send messages with the service that initiated it (sent the command that started the saga).
+<<<<<<< HEAD
 In the example above when the booking has completed we would like to send a message to the service which initiated the booking saga.
 The way we have implemented this in the example above is by publishing an event which the service which initiated the saga would need to subscribe to and handle to get notified when the booking is complete.
 
 Although the above would work it won't be an elegant solution especially if the initiator of the saga is another saga since it means that the initiating saga will need to filter all events and select the single event that correlates to that particular instance.
+=======
+In the example above when the booking has completed we would like to send a message to the service initiating the booking saga.
+The way we have implemented this in the example above is by publishing an event which the initiating service would need to subscribe to and handle to get notified when the booking is complete.
+And although this would work it won't be an elegant solution especially if the initiator of the saga is another saga since it means that the initiating saga will need to filter all events and select the single event that correlates to that particular instance.
+>>>>>>> added reply to initiator functionality to sagas (#157)
 To relive client code to do so grabbit provides a way for a saga to directly send a message to its initiator, and if the initiator is another saga grabbit will automatically correlate the message with the correct saga instance and invoke the relevant handler.
 
 To send a message to the saga initiator the message handler attached to the saga instance will need to cast the passed in gbus.Invocation argument to a gbus.SagaInvocation and then invoke the ReplyToInitiator function.
