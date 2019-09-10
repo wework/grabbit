@@ -31,6 +31,22 @@ func sagaStoreTableMigration(svcName string) *migrator.Migration {
 	}
 }
 
+func sagaStoreAddSagaCreatorDetails(svcName string) *migrator.Migration {
+	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
+
+	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN started_by_request_of_svc VARCHAR(2048) AFTER saga_data, ADD COLUMN started_by_request_of_saga VARCHAR(255) AFTER started_by_request_of_svc`
+
+	return &migrator.Migration{
+		Name: "create saga store table",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(addCreatorDetailsSQL); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
 func outboxMigrations(svcName string) *migrator.Migration {
 
 	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
@@ -124,6 +140,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 		timoutTableMigration(svcName),
 		legacyMigrationsTable(svcName),
 		outboxChangeColumnLength(svcName),
+		sagaStoreAddSagaCreatorDetails(svcName),
 	))
 	if err != nil {
 		panic(err)

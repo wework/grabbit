@@ -20,6 +20,15 @@ type Instance struct {
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
 	Log                logrus.FieldLogger
+	/*
+		Will hold the service name that sent the command or event that started the saga
+	*/
+	StartedBy string
+	/*
+		If this saga has been started by a message originating from another saga instance
+		this field will hold the saga_id of that instance
+	*/
+	StartedBySaga string
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocation, message *gbus.BusMessage) error {

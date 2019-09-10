@@ -380,7 +380,7 @@ func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr e
 
 func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage) *defaultInvocationContext {
 	invocation := &defaultInvocationContext{
-		invocingSvc: delivery.ReplyTo,
+		invokingSvc: delivery.ReplyTo,
 		bus:         worker.b,
 		inboundMsg:  message,
 		tx:          tx,

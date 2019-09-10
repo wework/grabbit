@@ -9,6 +9,7 @@ import (
 )
 
 var _ gbus.Invocation = &sagaInvocation{}
+var _ gbus.SagaInvocation = &sagaInvocation{}
 
 type sagaInvocation struct {
 	*gbus.Glogged
@@ -17,7 +18,15 @@ type sagaInvocation struct {
 	inboundMsg          *gbus.BusMessage
 	sagaID              string
 	ctx                 context.Context
-	invokingService     string
+	//the service that is executing the saga instance
+	hostingSvc string
+	//the service that sent the command/event that triggered the creation of the saga
+	startedBy string
+	/*
+		in case the command/event that triggered the creation of the saga was sent from a saga
+		then this field will hold the saga id of that instance
+	*/
+	startedBySaga string
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
@@ -33,18 +42,34 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bo
 		//if the saga is potentially invoking itself then set the SagaCorrelationID to reflect that
 		//https://github.com/wework/grabbit/issues/64
 		_, targetService := si.decoratedInvocation.Routing()
-		if targetService == si.invokingService {
+		if targetService == si.hostingSvc {
 			message.SagaCorrelationID = message.SagaID
 		}
 
 	}
 
 }
+func (si *sagaInvocation) HostingSvc() string {
+	return si.hostingSvc
+}
+
+func (si *sagaInvocation) InvokingSvc() string {
+	return si.decoratedInvocation.InvokingSvc()
+}
 
 func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) error {
 
 	si.setCorrelationIDs(message, false)
 	return si.decoratedInvocation.Reply(ctx, message)
+}
+
+func (si *sagaInvocation) ReplyToInitiator(ctx context.Context, message *gbus.BusMessage) error {
+
+	si.setCorrelationIDs(message, false)
+
+	//overridethe SagaCorrelationID to the one of the saga id of the creating service
+	message.SagaCorrelationID = si.startedBySaga
+	return si.decoratedInvocation.Bus().Send(ctx, si.startedBy, message)
 }
 
 func (si *sagaInvocation) Bus() gbus.Messaging {
