@@ -43,10 +43,8 @@ func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf
 		busBuilder = busBuilder.PurgeOnStartUp()
 	}
 
-	if len(cf) > 0 {
-		for _, c := range cf {
-			c(busBuilder)
-		}
+	for _, c := range cf {
+		c(busBuilder)
 	}
 
 	return busBuilder.Build(svcName)
