@@ -138,10 +138,7 @@ type Deadlettering interface {
 	ReturnDeadToQueue(ctx context.Context, publishing *amqp.Publishing) error
 }
 
-/*
-	RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees
-	that the bus provides
-*/
+//RawMessageHandling provides the ability to consume and send raq amqp messages with the transactional guarantees that the bus provides
 type RawMessageHandling interface {
 	/*
 				SetGlobalRawMessageHandler registers a handler that gets called for each amqp.Delivery that is delivered
@@ -229,8 +226,21 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
+	InvokingSvc() string
 	Routing() (exchange, routingKey string)
 	DeliveryInfo() DeliveryInfo
+}
+
+/*
+	SagaInvocation allows saga instances to reply to their creator even when not in the conext of handling
+	the message that starts the saga.
+	A message handler that is attached to a saga instance can safly cast the passed in invocation to SagaInvocation
+	and use the ReplyToInitiator function to send a message to the originating service that sent the message that started the saga
+*/
+type SagaInvocation interface {
+	ReplyToInitiator(ctx context.Context, message *BusMessage) error
+	//HostingSvc returns the svc name that is executing the service
+	HostingSvc() string
 }
 
 //Serializer is the base interface for all message serializers

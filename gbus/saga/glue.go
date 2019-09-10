@@ -123,6 +123,9 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 		if startNew {
 
 			newInstance := def.newInstance()
+			newInstance.StartedBy = invocation.InvokingSvc()
+			newInstance.StartedBySaga = message.SagaCorrelationID
+			// newInstance.StartedBy =
 			imsm.Log().
 				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
@@ -199,6 +202,7 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gbus.Invocation, message *gbus.BusMessage) error {
 
 	span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), def.String())
+
 	defer span.Finish()
 	sginv := &sagaInvocation{
 		decoratedBus:        invocation.Bus(),
@@ -206,7 +210,9 @@ func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gb
 		inboundMsg:          message,
 		sagaID:              instance.ID,
 		ctx:                 sctx,
-		invokingService:     imsm.svcName,
+		hostingSvc:          imsm.svcName,
+		startedBy:           instance.StartedBy,
+		startedBySaga:       instance.StartedBySaga,
 	}
 	sginv.SetLogger(imsm.Log().WithFields(logrus.Fields{
 		"saga_id":      instance.ID,
