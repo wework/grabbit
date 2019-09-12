@@ -547,7 +547,7 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
-func TestFailHandlerInvokeOfMessageWithNilBody(t *testing.T) {
+func TestOnlyRawMessageHandlersInvoked(t *testing.T) {
 	/*
 		The global and dead letter handlers can consume message with nil body but
 		"normal" handlers cannot.
