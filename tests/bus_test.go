@@ -174,13 +174,21 @@ func TestHandlerRetry(t *testing.T) {
 		t.Error("Metrics for handleRetry should be initiated")
 	}
 	f, _ := hm.GetFailureCount()
+	mtf, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 	s, _ := hm.GetSuccessCount()
+	mts, _ := metrics.GetSuccessCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 
 	if f != 2 {
 		t.Errorf("Failure count should be 2 but was %f", f)
 	}
+	if mtf != 2 {
+		t.Errorf("Failure count should be 2 but was %f", mtf)
+	}
 	if s != 1 {
 		t.Errorf("Success count should be 1 but was %f", s)
+	}
+	if mts != 1 {
+		t.Errorf("Success count should be 1 but was %f", mts)
 	}
 }
 
@@ -249,8 +257,9 @@ func TestDeadlettering(t *testing.T) {
 	service1.Start()
 	defer assertBusShutdown(service1, t)
 
+	cmd := gbus.NewBusMessage(Command1{})
 	service1.Send(context.Background(), testSvc1, poison)
-	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
+	service1.Send(context.Background(), testSvc1, cmd)
 
 	proceedOrTimeout(2, proceed, nil, t)
 
@@ -268,6 +277,10 @@ func TestDeadlettering(t *testing.T) {
 	if failureCount != 0 {
 		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", failureCount)
 	}
+	poisonF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(poison.PayloadFQN, "func1")
+	if poisonF != 0 {
+		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", poisonF)
+	}
 	handlerMetrics = metrics.GetHandlerMetrics("func2")
 	if handlerMetrics == nil {
 		t.Fatal("faulty should be registered for metrics")
@@ -275,6 +288,10 @@ func TestDeadlettering(t *testing.T) {
 	failureCount, _ = handlerMetrics.GetFailureCount()
 	if failureCount == 1 {
 		t.Errorf("faulty should have failed once, but it failed %f times", failureCount)
+	}
+	cmdF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(cmd.PayloadFQN, "func2")
+	if cmdF == 1 {
+		t.Errorf("faulty should have failed once, but it failed %f times", cmdF)
 	}
 }
 

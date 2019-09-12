@@ -211,7 +211,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		handlerWrapper := func() error {
 			return worker.deadletterHandler(tx, &delivery)
 		}
-		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), worker.log())
+		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), fmt.Sprintf("deadletter_%s", delivery.Type), worker.log())
 	}
 
 	err := worker.withTx(txWrapper)
@@ -250,7 +250,7 @@ func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
 				return worker.withTx(txWrapper)
 			}
 			//run the global handler with metrics
-			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, worker.log())
+			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, delivery.Type, worker.log())
 		}
 		return worker.SafeWithRetries(retryAction, MaxRetryCount)
 	}
@@ -417,7 +417,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				//execute the handler with metrics
 				handlerErr := metrics.RunHandlerWithMetric(func() error {
 					return pinedHandler(invocation, message)
-				}, handlerName, worker.log())
+				}, handlerName, message.PayloadFQN, worker.log())
 
 				if handlerErr != nil {
 					hspan.LogFields(slog.Error(handlerErr))
