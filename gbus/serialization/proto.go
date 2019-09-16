@@ -15,6 +15,8 @@ import (
 
 var _ gbus.Serializer = &Proto{}
 
+const ProtoContentType = "application/x-protobuf"
+
 //Proto a serializer for GBus uses protobuf
 type Proto struct {
 	lock              *sync.Mutex
@@ -33,7 +35,7 @@ func NewProtoSerializer(logger logrus.FieldLogger) gbus.Serializer {
 
 //Name implements Serializer.Name
 func (as *Proto) Name() string {
-	return "application/x-protobuf"
+	return ProtoContentType
 }
 
 //Encode encodes an object into a byte array

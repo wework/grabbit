@@ -24,7 +24,7 @@ func TestProtoSerialization(t *testing.T) {
 	serializer := serialization.NewProtoSerializer(logger)
 
 	name := serializer.Name()
-	if name != "application/x-protobuf" {
+	if name != serialization.ProtoContentType {
 		t.Fatalf("incorrect serializer name. expected:application/x-protobuf actual:%s", name)
 	}
 	cmd := getProtoCommand()
