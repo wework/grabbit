@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wework/grabbit/gbus/serialization"
+
 	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/opentracing/opentracing-go"
@@ -562,9 +564,9 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
-func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+func TestOnlyRawMessageHandlersInvoked(t *testing.T) {
 	/*
-		The global and dead letter handlers can consume message with 0 or nil body but
+		The global and dead letter handlers can consume message with nil body but
 		"normal" handlers cannot.
 		If a "normal" handler is registered for this type of message, the bus must reject this message.
 	*/
@@ -617,6 +619,48 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 			t.Error("Should have one rejected message")
 		}
 	}, t)
+}
+
+func TestSendEmptyBody(t *testing.T) {
+	/*
+			test sending of message with len(payload) == 0 .
+		    for example, the body of proto message with 1 "false" field is len 0.
+	*/
+
+	logger := log.WithField("test", "empty_body")
+	serializer := serialization.NewProtoSerializer(logger)
+	msg := EmptyProtoCommand{}
+	cmd := gbus.NewBusMessage(&msg)
+	proceed := make(chan bool)
+
+	cfgSerializer := func(builder gbus.Builder) {
+		builder.WithSerializer(serializer)
+	}
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, cfgSerializer)
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+
+	err := b.HandleMessage(&EmptyProtoCommand{}, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer assertBusShutdown(b, t)
+
+	err = b.Send(noopTraceContext(), testSvc1, cmd)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	proceedOrTimeout(2, proceed, nil, t)
 }
 
 func TestHealthCheck(t *testing.T) {
