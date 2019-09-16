@@ -22,7 +22,9 @@ func init() {
 	testSvc4 = "test-svc4"
 }
 
-func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration) gbus.Bus {
+type configBilder func(builder gbus.Builder)
+
+func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration, cf ...configBilder) gbus.Bus {
 	busBuilder := builder.
 		New().
 		Bus(connStr).
@@ -39,6 +41,10 @@ func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf
 	}
 	if pos {
 		busBuilder = busBuilder.PurgeOnStartUp()
+	}
+
+	for _, c := range cf {
+		c(busBuilder)
 	}
 
 	return busBuilder.Build(svcName)

@@ -5,3 +5,7 @@ message ProtoCommand {
     int64 some_number = 1;
     string some_data = 2;
 }
+
+
+message EmptyProtoCommand {
+}

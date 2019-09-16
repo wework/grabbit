@@ -4,3 +4,7 @@ package tests
 func (*ProtoCommand) SchemaName() string {
 	return "ProtoCommand"
 }
+
+func (*EmptyProtoCommand) SchemaName() string {
+	return "EmptyProtoCommand"
+}
