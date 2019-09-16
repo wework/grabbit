@@ -85,11 +85,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 				return val.Interface().(error)
 			}
 			return nil
-<<<<<<< HEAD
 		}, methodName, message.PayloadFQN, si.log())
-=======
-		}, methodName, message.PayloadFQN, invocation.Log())
->>>>>>> added generic handler metrics with message type as the label (#144)
 
 		if err != nil {
 			return err
