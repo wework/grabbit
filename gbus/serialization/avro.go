@@ -62,7 +62,7 @@ func NewAvroSerializer(schemaRegistryUrls ...string) *Avro {
 
 //Name implements Serializer.Name
 func (as *Avro) Name() string {
-	return "avro"
+	return "avro/binary"
 }
 
 //Encode encodes an object into a byte array

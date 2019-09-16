@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/wework/grabbit/gbus/metrics"
+	"github.com/wework/grabbit/gbus/policy"
 
 	"github.com/opentracing/opentracing-go"
 	olog "github.com/opentracing/opentracing-go/log"
@@ -617,6 +618,27 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 			t.Error("Should have one rejected message")
 		}
 	}, t)
+}
+
+func TestTypeAndContentTypeHeadersSet(t *testing.T) {
+	cmd := Command1{}
+
+	bus := createNamedBusForTest(testSvc1)
+
+	policy := &policy.Generic{
+		Funk: func(publishing *amqp.Publishing) {
+			if publishing.Type != cmd.SchemaName() {
+				t.Errorf("publishing.Type != cmd.SchemaName()")
+			}
+			dfb := bus.(*gbus.DefaultBus)
+			if publishing.ContentType != dfb.Serializer.Name() {
+				t.Errorf("expected %s as content-type but actual value was %s", dfb.Serializer.Name(), publishing.ContentType)
+			}
+		}}
+
+	bus.Start()
+	defer bus.Shutdown()
+	bus.Send(context.Background(), testSvc1, gbus.NewBusMessage(cmd), policy)
 }
 
 func TestHealthCheck(t *testing.T) {

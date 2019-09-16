@@ -33,7 +33,7 @@ func NewProtoSerializer(logger logrus.FieldLogger) gbus.Serializer {
 
 //Name implements Serializer.Name
 func (as *Proto) Name() string {
-	return "proto"
+	return "application/x-protobuf"
 }
 
 //Encode encodes an object into a byte array

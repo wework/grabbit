@@ -655,12 +655,13 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 	}
 
 	msg := amqp.Publishing{
-		Body:            buffer,
-		ReplyTo:         replyTo,
-		MessageId:       message.ID,
-		CorrelationId:   message.CorrelationID,
-		ContentEncoding: b.Serializer.Name(),
-		Headers:         headers,
+		Type:          message.PayloadFQN,
+		Body:          buffer,
+		ReplyTo:       replyTo,
+		MessageId:     message.ID,
+		CorrelationId: message.CorrelationID,
+		ContentType:   b.Serializer.Name(),
+		Headers:       headers,
 	}
 	span.LogFields(message.GetTraceLog()...)
 
