@@ -128,7 +128,6 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			newInstance.StartedByRPCID = message.RPCID
 			newInstance.StartedByMessageID = message.ID
 
-			// newInstance.StartedBy =
 			imsm.Log().
 				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 				Info("created new saga")
