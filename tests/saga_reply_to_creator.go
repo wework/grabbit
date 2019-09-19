@@ -68,3 +68,36 @@ func (s *ReplyToCreatorSaga2) HandleCommand3(invocation gbus.Invocation, message
 	sagaInvocation := invocation.(gbus.SagaInvocation)
 	return sagaInvocation.ReplyToInitiator(invocation.Ctx(), reply)
 }
+
+type ReplyToInitiatorSaga3 struct {
+}
+
+func (*ReplyToInitiatorSaga3) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
+	return append(starters, Command1{})
+}
+
+func (s *ReplyToInitiatorSaga3) IsComplete() bool {
+	return false
+}
+
+func (s *ReplyToInitiatorSaga3) New() gbus.Saga {
+	return &ReplyToInitiatorSaga3{}
+}
+
+func (s *ReplyToInitiatorSaga3) RegisterAllHandlers(register gbus.HandlerRegister) {
+	register.HandleMessage(Command1{}, s.HandleCommand1)
+	register.HandleMessage(Command2{}, s.HandleCommand2)
+}
+
+func (s *ReplyToInitiatorSaga3) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	sagaInvocation := invocation.(gbus.SagaInvocation)
+	cmd2 := gbus.NewBusMessage(Command2{})
+	return invocation.Bus().Send(invocation.Ctx(), sagaInvocation.HostingSvc(), cmd2)
+}
+
+func (s *ReplyToInitiatorSaga3) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	reply := gbus.NewBusMessage(Reply1{})
+	sagaInvocation := invocation.(gbus.SagaInvocation)
+	return sagaInvocation.ReplyToInitiator(invocation.Ctx(), reply)
+}
