@@ -29,6 +29,11 @@ type Instance struct {
 		this field will hold the saga_id of that instance
 	*/
 	StartedBySaga string
+
+	//StartedByMessageID the message-id of the message that created the saga
+	StartedByMessageID string
+	//StartedByRPCID the rpc id of the message that created the saga
+	StartedByRPCID string
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocation, message *gbus.BusMessage) error {

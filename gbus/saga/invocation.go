@@ -27,6 +27,11 @@ type sagaInvocation struct {
 		then this field will hold the saga id of that instance
 	*/
 	startedBySaga string
+
+	/* the message-id of the message that created the saga */
+	startedByMessageID string
+	/* the rpc id of the message that created the saga */
+	startedByRPCID string
 }
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
@@ -67,8 +72,10 @@ func (si *sagaInvocation) ReplyToInitiator(ctx context.Context, message *gbus.Bu
 
 	si.setCorrelationIDs(message, false)
 
-	//overridethe SagaCorrelationID to the one of the saga id of the creating service
+	//overridethe correlation ids to those of the message creating the saga
 	message.SagaCorrelationID = si.startedBySaga
+	message.RPCID = si.startedByRPCID
+	message.CorrelationID = si.startedByMessageID
 	return si.decoratedInvocation.Bus().Send(ctx, si.startedBy, message)
 }
 

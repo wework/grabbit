@@ -322,6 +322,28 @@ func TestReplyToCreator(t *testing.T) {
 
 }
 
+func TestReplyToCreatorViaRPC(t *testing.T) {
+
+	svc1 := createNamedBusForTest(testSvc1)
+	client := createNamedBusForTest(testSvc3)
+
+	svc1.RegisterSaga(&ReplyToInitiatorSaga3{})
+
+	svc1.Start()
+	defer svc1.Shutdown()
+
+	client.Start()
+	defer client.Shutdown()
+
+	response, err := client.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}), gbus.NewBusMessage(Reply1{}), time.Second*20)
+	if err != nil {
+		t.Errorf("rpc call failed with error %v", err)
+	}
+	if response == nil {
+		t.Errorf("failed to receive response message from rpc call")
+	}
+}
+
 func TestSagaConfFunctions(t *testing.T) {
 	proceed := make(chan bool)
 	fail := make(chan bool)
