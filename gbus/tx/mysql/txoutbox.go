@@ -294,12 +294,8 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		}
 	}
 
-	for recid := range failedDeliveries {
-		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attempts=delivery_attempts+1  WHERE rec_id=?", recid)
-		if updateErr != nil {
-			outbox.log().WithError(updateErr).WithField("record_id", recid).Warn("failed to update transactional outbox with failed deivery attempt for record")
-		}
-	}
+	outbox.updateFailedDeliveries(tx, failedDeliveries)
+
 	if cmtErr := tx.Commit(); cmtErr != nil {
 		outbox.log().WithError(cmtErr).Error("Error committing outbox transaction")
 	} else {
@@ -312,6 +308,15 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	}
 
 	return nil
+}
+
+func (outbox *TxOutbox) updateFailedDeliveries(tx *sql.Tx, failedDeliveries []int) {
+	for recid := range failedDeliveries {
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attempts=delivery_attempts+1  WHERE rec_id=?", recid)
+		if updateErr != nil {
+			outbox.log().WithError(updateErr).WithField("record_id", recid).Warn("failed to update transactional outbox with failed deivery attempt for record")
+		}
+	}
 }
 
 func getOutboxName(svcName string) string {

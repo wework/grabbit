@@ -101,6 +101,39 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 	return defs
 }
 
+func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
+	newInstance := def.newInstance()
+	newInstance.StartedBy = invocation.InvokingSvc()
+	newInstance.StartedBySaga = message.SagaCorrelationID
+	newInstance.StartedByRPCID = message.RPCID
+	newInstance.StartedByMessageID = message.ID
+
+	imsm.Log().
+		WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
+		Info("created new saga")
+	if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
+		imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
+		return invkErr
+	}
+
+	if !newInstance.isComplete() {
+		imsm.Log().WithField("saga_id", newInstance.ID).Info("saving new saga")
+
+		if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
+			imsm.Log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
+			return e
+		}
+
+		if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
+			imsm.Log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
+			if tme := imsm.timeoutManager.RegisterTimeout(invocation.Tx(), newInstance.ID, duration); tme != nil {
+				return tme
+			}
+		}
+	}
+	return nil
+}
+
 //SagaHandler is the generic handler invoking saga instances
 func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
@@ -121,37 +154,8 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 		*/
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
+			return imsm.handleNewSaga(def, invocation, message)
 
-			newInstance := def.newInstance()
-			newInstance.StartedBy = invocation.InvokingSvc()
-			newInstance.StartedBySaga = message.SagaCorrelationID
-			newInstance.StartedByRPCID = message.RPCID
-			newInstance.StartedByMessageID = message.ID
-
-			imsm.Log().
-				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
-				Info("created new saga")
-			if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
-				imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
-				return invkErr
-			}
-
-			if !newInstance.isComplete() {
-				imsm.Log().WithField("saga_id", newInstance.ID).Info("saving new saga")
-
-				if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
-					imsm.Log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
-					return e
-				}
-
-				if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
-					imsm.Log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
-					if tme := imsm.timeoutManager.RegisterTimeout(invocation.Tx(), newInstance.ID, duration); tme != nil {
-						return tme
-					}
-				}
-			}
-			return nil
 		} else if message.SagaCorrelationID != "" {
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 

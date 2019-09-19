@@ -32,6 +32,6 @@ linters:
     # - deadcode
     # - dupl
     # - gocritic
-    # - gocyclo
+    - gocyclo
     - golint
     - misspell
