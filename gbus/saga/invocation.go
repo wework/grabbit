@@ -72,7 +72,7 @@ func (si *sagaInvocation) ReplyToInitiator(ctx context.Context, message *gbus.Bu
 
 	si.setCorrelationIDs(message, false)
 
-	//overridethe correlation ids to those of the message creating the saga
+	//override the correlation ids to those of the message creating the saga
 	message.SagaCorrelationID = si.startedBySaga
 	message.RPCID = si.startedByRPCID
 	message.CorrelationID = si.startedByMessageID
