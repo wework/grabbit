@@ -2,11 +2,12 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	io_prometheus_client "github.com/prometheus/client_model/go"
+
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_model/go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -37,7 +38,8 @@ const (
 	handler          = "handler"
 )
 
-type handlerMetrics struct {
+//HandlerMetrics holds the metrics results for a handler
+type HandlerMetrics struct {
 	result  *prometheus.CounterVec
 	latency prometheus.Summary
 }
@@ -84,17 +86,17 @@ func RunHandlerWithMetric(handleMessage func() error, handlerName, messageType s
 }
 
 //GetHandlerMetrics gets the metrics handler associated with the handlerName
-func GetHandlerMetrics(handlerName string) *handlerMetrics {
+func GetHandlerMetrics(handlerName string) *HandlerMetrics {
 	entry, ok := handlerMetricsByHandlerName.Load(handlerName)
 	if ok {
-		return entry.(*handlerMetrics)
+		return entry.(*HandlerMetrics)
 	}
 
 	return nil
 }
 
-func newHandlerMetrics(handlerName string) *handlerMetrics {
-	return &handlerMetrics{
+func newHandlerMetrics(handlerName string) *HandlerMetrics {
+	return &HandlerMetrics{
 		result: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: grabbitPrefix,
@@ -150,17 +152,17 @@ func GetLatencySampleCountByMessageTypeAndHandlerName(messageType, handlerName s
 }
 
 //GetSuccessCount gets the value of the handlers success value
-func (hm *handlerMetrics) GetSuccessCount() (float64, error) {
+func (hm *HandlerMetrics) GetSuccessCount() (float64, error) {
 	return getCounterValue(hm.result.WithLabelValues(success))
 }
 
 //GetFailureCount gets the value of the handlers failure value
-func (hm *handlerMetrics) GetFailureCount() (float64, error) {
+func (hm *HandlerMetrics) GetFailureCount() (float64, error) {
 	return getCounterValue(hm.result.WithLabelValues(failure))
 }
 
 //GetLatencySampleCount gets the value of the handlers latency value
-func (hm *handlerMetrics) GetLatencySampleCount() (*uint64, error) {
+func (hm *HandlerMetrics) GetLatencySampleCount() (*uint64, error) {
 	return getSummarySampleCount(hm.latency)
 }
 

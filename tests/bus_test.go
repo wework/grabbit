@@ -319,7 +319,7 @@ func TestRawMessageHandling(t *testing.T) {
 func TestReturnDeadToQueue(t *testing.T) {
 
 	var visited bool
-	proceed := make(chan bool, 0)
+	proceed := make(chan bool)
 	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,

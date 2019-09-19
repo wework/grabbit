@@ -9,10 +9,6 @@ var _ gbus.Message = &Reply2{}
 var _ gbus.Message = &Event1{}
 var _ gbus.Message = &Event2{}
 
-<<<<<<< HEAD
-=======
-
->>>>>>> golint fixes into master (#154)
 //PoisonMessage is a malformed message to test poison pill scenarios
 type PoisonMessage struct {
 }
@@ -68,7 +64,6 @@ type Reply2 struct {
 	Data string
 }
 
-
 //SchemaName implementing gbus.Message
 func (Reply2) SchemaName() string {
 	return "grabbit.tests.Reply2"
@@ -83,8 +78,6 @@ type Reply3 struct {
 func (Reply3) SchemaName() string {
 	return "grabbit.tests.Reply3"
 }
-
-
 
 //Event1 for testing
 type Event1 struct {

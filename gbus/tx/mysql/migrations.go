@@ -47,7 +47,7 @@ func sagaStoreAddSagaCreatorDetails(svcName string) *migrator.Migration {
 	}
 }
 
-func sagaStoreAdd_RPCID_Details(svcName string) *migrator.Migration {
+func sagaStoreAddRPCIDDetails(svcName string) *migrator.Migration {
 	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
 
 	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN started_by_msg_id VARCHAR(50) AFTER started_by_request_of_svc, ADD COLUMN started_by_rpcid VARCHAR(50) AFTER started_by_msg_id`
@@ -157,7 +157,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 		legacyMigrationsTable(svcName),
 		outboxChangeColumnLength(svcName),
 		sagaStoreAddSagaCreatorDetails(svcName),
-		sagaStoreAdd_RPCID_Details(svcName),
+		sagaStoreAddRPCIDDetails(svcName),
 	))
 	if err != nil {
 		panic(err)
