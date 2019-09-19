@@ -125,6 +125,9 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			newInstance := def.newInstance()
 			newInstance.StartedBy = invocation.InvokingSvc()
 			newInstance.StartedBySaga = message.SagaCorrelationID
+			newInstance.StartedByRPCID = message.RPCID
+			newInstance.StartedByMessageID = message.ID
+
 			// newInstance.StartedBy =
 			imsm.Log().
 				WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
@@ -213,6 +216,8 @@ func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gb
 		hostingSvc:          imsm.svcName,
 		startedBy:           instance.StartedBy,
 		startedBySaga:       instance.StartedBySaga,
+		startedByMessageID:  instance.StartedByMessageID,
+		startedByRPCID:      instance.StartedByRPCID,
 	}
 	sginv.SetLogger(imsm.Log().WithFields(logrus.Fields{
 		"saga_id":      instance.ID,
