@@ -63,22 +63,6 @@ func sagaStoreAddRPCIDDetails(svcName string) *migrator.Migration {
 	}
 }
 
-func sagaStoreAdd_RPCID_Details(svcName string) *migrator.Migration {
-	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
-
-	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN started_by_msg_id VARCHAR(50) AFTER started_by_request_of_svc, ADD COLUMN started_by_rpcid VARCHAR(50) AFTER started_by_msg_id`
-
-	return &migrator.Migration{
-		Name: "adding the started_by_msg_id and started_by_rpcid columns to the saga table",
-		Func: func(tx *sql.Tx) error {
-			if _, err := tx.Exec(addCreatorDetailsSQL); err != nil {
-				return err
-			}
-			return nil
-		},
-	}
-}
-
 func outboxMigrations(svcName string) *migrator.Migration {
 
 	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
