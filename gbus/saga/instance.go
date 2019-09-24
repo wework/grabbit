@@ -19,7 +19,7 @@ type Instance struct {
 	ConcurrencyCtrl    int
 	UnderlyingInstance gbus.Saga
 	MsgToMethodMap     []*MsgToFuncPair
-	Log                logrus.FieldLogger
+	logger             logrus.FieldLogger
 	/*
 		Will hold the service name that sent the command or event that started the saga
 	*/
@@ -34,6 +34,14 @@ type Instance struct {
 	StartedByMessageID string
 	//StartedByRPCID the rpc id of the message that created the saga
 	StartedByRPCID string
+}
+
+func (si *Instance) log() logrus.FieldLogger {
+	if si.logger == nil {
+		return logrus.WithField("id", si.ID)
+	}
+
+	return si.logger
 }
 
 func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocation, message *gbus.BusMessage) error {
@@ -55,10 +63,10 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 		params := make([]reflect.Value, 0)
 		params = append(params, reflect.ValueOf(invocation), valueOfMessage)
 		method := reflectedVal.MethodByName(methodName)
-		if invocation.Log() == nil {
+		if si.log() == nil {
 			panic("here")
 		}
-		invocation.Log().WithFields(logrus.Fields{
+		si.log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("invoking method on saga")
 
@@ -78,13 +86,13 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 				return val.Interface().(error)
 			}
 			return nil
-		}, methodName, message.PayloadFQN, invocation.Log())
+		}, methodName, message.PayloadFQN, si.log())
 
 		if err != nil {
 			return err
 		}
 
-		invocation.Log().WithFields(logrus.Fields{
+		si.log().WithFields(logrus.Fields{
 			"method_name": methodName, "saga_id": si.ID,
 		}).Info("saga instance invoked")
 	}

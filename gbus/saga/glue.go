@@ -229,6 +229,7 @@ func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gb
 	}))
 
 	exchange, routingKey := invocation.Routing()
+	instance.logger = imsm.Log()
 	err := instance.invoke(exchange, routingKey, sginv, message)
 	if err != nil {
 		span.LogFields(slog.Error(err))
@@ -321,6 +322,8 @@ func NewGlue(bus gbus.Bus, sagaStore Store, svcName string, txp gbus.TxProvider,
 		timeoutManager:   timeoutManager,
 	}
 
+	logged := &gbus.Glogged{}
+	g.Glogged = logged
 	timeoutManager.SetTimeoutFunction(g.TimeoutSaga)
 	return g
 }
