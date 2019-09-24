@@ -31,6 +31,7 @@ var (
 
 //TxOutbox is a mysql based transactional outbox
 type TxOutbox struct {
+	*gbus.Glogged
 	svcName                string
 	txProv                 gbus.TxProvider
 	purgeOnStartup         bool
@@ -44,7 +45,7 @@ type TxOutbox struct {
 }
 
 func (outbox *TxOutbox) log() *log.Entry {
-	return log.WithField("tx", "mysql")
+	return outbox.Log().WithField("tx", "mysql")
 }
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change
@@ -128,6 +129,7 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 		ack:            make(chan uint64, 1000000),
 		nack:           make(chan uint64, 1000000),
 		exit:           make(chan bool)}
+	txo.Glogged = &gbus.Glogged{}
 	return txo
 }
 

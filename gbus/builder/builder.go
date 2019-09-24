@@ -89,6 +89,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 		}
 		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
+		gb.Outbox.SetLogger(gb.Log())
 		timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
 
 	default:
@@ -107,6 +108,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		}
 	}
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
+	glue.SetLogger(gb.Log())
 	gb.Glue = glue
 	return gb
 }
