@@ -241,6 +241,9 @@ type SagaInvocation interface {
 	ReplyToInitiator(ctx context.Context, message *BusMessage) error
 	//HostingSvc returns the svc name that is executing the service
 	HostingSvc() string
+
+	//SagaID returns the saga id of the currently invoked saga instance
+	SagaID() string
 }
 
 //Serializer is the base interface for all message serializers

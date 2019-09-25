@@ -115,3 +115,7 @@ func (si *sagaInvocation) Routing() (exchange, routingKey string) {
 func (si *sagaInvocation) DeliveryInfo() gbus.DeliveryInfo {
 	return si.decoratedInvocation.DeliveryInfo()
 }
+
+func (si *sagaInvocation) SagaID() string {
+	return si.sagaID
+}
