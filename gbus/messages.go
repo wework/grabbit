@@ -83,7 +83,7 @@ func (bm *BusMessage) SetPayload(payload Message) {
 
 //TargetSaga allows sending the message to a specific Saga instance
 func (bm *BusMessage) TargetSaga(sagaID string) {
-	bm.SagaID = sagaID
+	bm.SagaCorrelationID = sagaID
 }
 
 //GetTraceLog returns an array of log entires containing all of the message properties
