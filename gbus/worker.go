@@ -3,7 +3,6 @@ package gbus
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"runtime/debug"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/wework/grabbit/gbus/metrics"
 
+	"emperror.dev/errors"
+	logrushandler "emperror.dev/handler/logrus"
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/jitter"
@@ -333,6 +334,8 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if err == nil {
 		_ = worker.ack(delivery)
 	} else {
+		logErr := logrushandler.New(worker.log())
+		logErr.Handle(err)
 		_ = worker.reject(false, delivery)
 	}
 }
