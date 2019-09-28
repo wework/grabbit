@@ -211,6 +211,7 @@ func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gb
 
 	defer span.Finish()
 	sginv := &sagaInvocation{
+		Glogged:             &gbus.Glogged{},
 		decoratedBus:        invocation.Bus(),
 		decoratedInvocation: invocation,
 		inboundMsg:          message,
@@ -222,10 +223,9 @@ func (imsm *Glue) invokeSagaInstance(def *Def, instance *Instance, invocation gb
 		startedByMessageID:  instance.StartedByMessageID,
 		startedByRPCID:      instance.StartedByRPCID,
 	}
-	sginv.SetLogger(imsm.Log().WithFields(logrus.Fields{
-		"saga_id":      instance.ID,
-		"saga_type":    instance.String(),
-		"message_name": message.PayloadFQN,
+	sginv.SetLogger(invocation.Log().WithFields(logrus.Fields{
+		"saga_id":  instance.ID,
+		"saga_def": instance.String(),
 	}))
 
 	exchange, routingKey := invocation.Routing()

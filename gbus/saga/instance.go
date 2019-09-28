@@ -63,12 +63,12 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 		params := make([]reflect.Value, 0)
 		params = append(params, reflect.ValueOf(invocation), valueOfMessage)
 		method := reflectedVal.MethodByName(methodName)
-		if si.log() == nil {
-			panic("here")
-		}
-		si.log().WithFields(logrus.Fields{
-			"method_name": methodName, "saga_id": si.ID,
-		}).Info("invoking method on saga")
+
+		//replace the handler_name entry with the current inoked saga method that will be invoked
+		chainedLogger := invocation.Log().WithField("handler_name", methodName)
+		invocation.SetLogger(chainedLogger)
+
+		invocation.Log().Info("invoking saga instance")
 
 		span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), methodName)
 
@@ -92,9 +92,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 			return err
 		}
 
-		si.log().WithFields(logrus.Fields{
-			"method_name": methodName, "saga_id": si.ID,
-		}).Info("saga instance invoked")
+		invocation.Log().Info("saga instance invoked")
 	}
 
 	return nil
