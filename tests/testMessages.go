@@ -39,6 +39,16 @@ func (Command2) SchemaName() string {
 	return "grabbit.tests.Command2"
 }
 
+//Command3 for testing
+type Command3 struct {
+	Data string
+}
+
+//SchemaName implementing gbus.Message
+func (Command3) SchemaName() string {
+	return "grabbit.tests.Command3"
+}
+
 //Reply1 for testing
 type Reply1 struct {
 	Data string
@@ -57,6 +67,16 @@ type Reply2 struct {
 //SchemaName implementing gbus.Message
 func (Reply2) SchemaName() string {
 	return "grabbit.tests.Reply2"
+}
+
+//Reply3 for testing
+type Reply3 struct {
+	Data string
+}
+
+//SchemaName implementing gbus.Message
+func (Reply3) SchemaName() string {
+	return "grabbit.tests.Reply3"
 }
 
 //Event1 for testing

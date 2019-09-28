@@ -3,7 +3,6 @@ package gbus
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"runtime/debug"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/wework/grabbit/gbus/metrics"
 
+	"emperror.dev/errors"
+	logrushandler "emperror.dev/handler/logrus"
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/jitter"
@@ -211,7 +212,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		handlerWrapper := func() error {
 			return worker.deadletterHandler(tx, &delivery)
 		}
-		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), worker.log())
+		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), fmt.Sprintf("deadletter_%s", delivery.Type), worker.log())
 	}
 
 	err := worker.withTx(txWrapper)
@@ -250,7 +251,7 @@ func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
 				return worker.withTx(txWrapper)
 			}
 			//run the global handler with metrics
-			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, worker.log())
+			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, delivery.Type, worker.log())
 		}
 		return worker.SafeWithRetries(retryAction, MaxRetryCount)
 	}
@@ -306,7 +307,7 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		return
 	}
 
-	if delivery.Body == nil || len(delivery.Body) == 0 {
+	if delivery.Body == nil {
 		worker.log().
 			WithFields(
 				logrus.Fields{"message-name": msgName}).
@@ -333,6 +334,8 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if err == nil {
 		_ = worker.ack(delivery)
 	} else {
+		logErr := logrushandler.New(worker.log())
+		logErr.Handle(err)
 		_ = worker.reject(false, delivery)
 	}
 }
@@ -378,9 +381,10 @@ func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr e
 	return nil
 }
 
-func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage) *defaultInvocationContext {
+func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage, handlerName string) *defaultInvocationContext {
 	invocation := &defaultInvocationContext{
-		invocingSvc: delivery.ReplyTo,
+		Glogged:     &Glogged{},
+		invokingSvc: delivery.ReplyTo,
 		bus:         worker.b,
 		inboundMsg:  message,
 		tx:          tx,
@@ -392,6 +396,12 @@ func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Deliv
 			MaxRetryCount: MaxRetryCount,
 		},
 	}
+	invocationLogger := worker.log().
+		WithFields(logrus.Fields{"routing_key": delivery.RoutingKey,
+			"message_id":   message.ID,
+			"message_name": message.Payload.SchemaName(),
+			"handler_name": handlerName})
+	invocation.SetLogger(invocationLogger)
 	return invocation
 }
 
@@ -412,12 +422,11 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pinedHandler := handler //https://github.com/kyoh86/scopelint
 				handlerName := pinedHandler.Name()
 				hspan, hsctx := opentracing.StartSpanFromContext(sctx, handlerName)
-				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message)
-				invocation.SetLogger(worker.log().WithField("handler", handlerName))
+				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message, handlerName)
 				//execute the handler with metrics
 				handlerErr := metrics.RunHandlerWithMetric(func() error {
 					return pinedHandler(invocation, message)
-				}, handlerName, worker.log())
+				}, handlerName, message.PayloadFQN, worker.log())
 
 				if handlerErr != nil {
 					hspan.LogFields(slog.Error(handlerErr))

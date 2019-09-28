@@ -23,6 +23,8 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
 8) Reporting [Metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
 9) Distributed [Tracing](https://github.com/wework/grabbit/blob/master/docs/TRACING.md) via OpenTracing
+10) [Extensible serialization](https://github.com/wework/grabbit/blob/master/docs/SERIALIZATION.md) with
+default support for gob, protobuf and avro
 
 ## Stable release
 the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates.

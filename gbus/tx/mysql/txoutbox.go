@@ -31,6 +31,7 @@ var (
 
 //TxOutbox is a mysql based transactional outbox
 type TxOutbox struct {
+	*gbus.Glogged
 	svcName                string
 	txProv                 gbus.TxProvider
 	purgeOnStartup         bool
@@ -44,7 +45,7 @@ type TxOutbox struct {
 }
 
 func (outbox *TxOutbox) log() *log.Entry {
-	return log.WithField("tx", "mysql")
+	return outbox.Log().WithField("tx", "mysql")
 }
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change
@@ -128,6 +129,7 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 		ack:            make(chan uint64, 1000000),
 		nack:           make(chan uint64, 1000000),
 		exit:           make(chan bool)}
+	txo.Glogged = &gbus.Glogged{}
 	return txo
 }
 
@@ -294,12 +296,8 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		}
 	}
 
-	for recid := range failedDeliveries {
-		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attempts=delivery_attempts+1  WHERE rec_id=?", recid)
-		if updateErr != nil {
-			outbox.log().WithError(updateErr).WithField("record_id", recid).Warn("failed to update transactional outbox with failed deivery attempt for record")
-		}
-	}
+	outbox.updateFailedDeliveries(tx, failedDeliveries)
+
 	if cmtErr := tx.Commit(); cmtErr != nil {
 		outbox.log().WithError(cmtErr).Error("Error committing outbox transaction")
 	} else {
@@ -312,6 +310,15 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 	}
 
 	return nil
+}
+
+func (outbox *TxOutbox) updateFailedDeliveries(tx *sql.Tx, failedDeliveries []int) {
+	for recid := range failedDeliveries {
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET delivery_attempts=delivery_attempts+1  WHERE rec_id=?", recid)
+		if updateErr != nil {
+			outbox.log().WithError(updateErr).WithField("record_id", recid).Warn("failed to update transactional outbox with failed deivery attempt for record")
+		}
+	}
 }
 
 func getOutboxName(svcName string) string {

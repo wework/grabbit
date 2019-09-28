@@ -263,6 +263,87 @@ func TestSagaSelfMessaging(t *testing.T) {
 
 }
 
+func TestReplyToCreator(t *testing.T) {
+	/*
+		This test scenario simulates the following messaging interaction
+
+		1. client                         --- Command1  ----> svc1 (saga:ReplyToInitiatorSaga1)
+		2. svc1 (saga:ReplyToInitiatorSaga1) --- Command2  ----> svc2 (saga:ReplyToCreatorSaga2)
+		3. svc2 (saga:ReplyToCreatorSaga2) --- Command3  ----> svc2 (saga:ReplyToCreatorSaga2)
+		4. svc2 (saga:ReplyToCreatorSaga2) --- Reply2    ----> svc1 (saga:ReplyToInitiatorSaga1)
+		5. svc1 (saga:ReplyToInitiatorSaga1) --- Reply1    ----> client
+
+		Step 4 validates that the ReplyToCreator functionality works when the caller is a saga instance
+		So the Reply2 message hits the correct saga instance (verifying that the SagaCorrelationID headers)
+		were properly set.
+
+		Step 5 validates that the ReplyToCreator functionality works when the caller is not a saga, it is redundant
+		In our case as it is a subset of the functionality already validated in Step 4 but we use it to control the
+		execution of the test case.
+	*/
+
+	proceed := make(chan bool)
+	svc1 := createNamedBusForTest(testSvc1)
+	svc2 := createNamedBusForTest(testSvc2)
+	client := createNamedBusForTest(testSvc3)
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		proceed <- true
+
+		return nil
+	}
+
+	err := client.HandleMessage(Reply1{}, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	configSaga := func(saga gbus.Saga) gbus.Saga {
+		s := saga.(*ReplyToInitiatorSaga1)
+		s.DelegateToSvc = testSvc2
+		return s
+	}
+	svc1.RegisterSaga(&ReplyToInitiatorSaga1{}, configSaga)
+	svc2.RegisterSaga(&ReplyToCreatorSaga2{})
+
+	svc1.Start()
+	defer svc1.Shutdown()
+
+	svc2.Start()
+	defer svc2.Shutdown()
+
+	client.Start()
+	defer client.Shutdown()
+
+	client.Send(context.TODO(), testSvc1, gbus.NewBusMessage(Command1{}))
+
+	<-proceed
+
+}
+
+func TestReplyToCreatorViaRPC(t *testing.T) {
+
+	svc1 := createNamedBusForTest(testSvc1)
+	client := createNamedBusForTest(testSvc3)
+
+	svc1.RegisterSaga(&ReplyToInitiatorSaga3{})
+
+	svc1.Start()
+	defer svc1.Shutdown()
+
+	client.Start()
+	defer client.Shutdown()
+
+	response, err := client.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}), gbus.NewBusMessage(Reply1{}), time.Second*20)
+	if err != nil {
+		t.Errorf("rpc call failed with error %v", err)
+	}
+	if response == nil {
+		t.Errorf("failed to receive response message from rpc call")
+	}
+}
+
 func TestSagaConfFunctions(t *testing.T) {
 	proceed := make(chan bool)
 	fail := make(chan bool)

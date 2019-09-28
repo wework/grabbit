@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wework/grabbit/gbus/serialization"
+
 	"github.com/wework/grabbit/gbus/metrics"
+	"github.com/wework/grabbit/gbus/policy"
 
 	"github.com/opentracing/opentracing-go"
 	olog "github.com/opentracing/opentracing-go/log"
@@ -174,13 +177,21 @@ func TestHandlerRetry(t *testing.T) {
 		t.Error("Metrics for handleRetry should be initiated")
 	}
 	f, _ := hm.GetFailureCount()
+	mtf, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 	s, _ := hm.GetSuccessCount()
+	mts, _ := metrics.GetSuccessCountByMessageTypeAndHandlerName(reply.PayloadFQN, "handleRetry")
 
 	if f != 2 {
 		t.Errorf("Failure count should be 2 but was %f", f)
 	}
+	if mtf != 2 {
+		t.Errorf("Failure count should be 2 but was %f", mtf)
+	}
 	if s != 1 {
 		t.Errorf("Success count should be 1 but was %f", s)
+	}
+	if mts != 1 {
+		t.Errorf("Success count should be 1 but was %f", mts)
 	}
 }
 
@@ -249,8 +260,9 @@ func TestDeadlettering(t *testing.T) {
 	service1.Start()
 	defer assertBusShutdown(service1, t)
 
+	cmd := gbus.NewBusMessage(Command1{})
 	service1.Send(context.Background(), testSvc1, poison)
-	service1.Send(context.Background(), testSvc1, gbus.NewBusMessage(Command1{}))
+	service1.Send(context.Background(), testSvc1, cmd)
 
 	proceedOrTimeout(2, proceed, nil, t)
 
@@ -268,6 +280,10 @@ func TestDeadlettering(t *testing.T) {
 	if failureCount != 0 {
 		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", failureCount)
 	}
+	poisonF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(poison.PayloadFQN, "func1")
+	if poisonF != 0 {
+		t.Errorf("DeadLetterHandler should not have failed, but it failed %f times", poisonF)
+	}
 	handlerMetrics = metrics.GetHandlerMetrics("func2")
 	if handlerMetrics == nil {
 		t.Fatal("faulty should be registered for metrics")
@@ -275,6 +291,10 @@ func TestDeadlettering(t *testing.T) {
 	failureCount, _ = handlerMetrics.GetFailureCount()
 	if failureCount == 1 {
 		t.Errorf("faulty should have failed once, but it failed %f times", failureCount)
+	}
+	cmdF, _ := metrics.GetFailureCountByMessageTypeAndHandlerName(cmd.PayloadFQN, "func2")
+	if cmdF == 1 {
+		t.Errorf("faulty should have failed once, but it failed %f times", cmdF)
 	}
 }
 
@@ -299,7 +319,7 @@ func TestRawMessageHandling(t *testing.T) {
 func TestReturnDeadToQueue(t *testing.T) {
 
 	var visited bool
-	proceed := make(chan bool, 0)
+	proceed := make(chan bool)
 	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
@@ -545,9 +565,9 @@ func TestEmptyMessageInvokesDeadHanlder(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
-func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
+func TestOnlyRawMessageHandlersInvoked(t *testing.T) {
 	/*
-		The global and dead letter handlers can consume message with 0 or nil body but
+		The global and dead letter handlers can consume message with nil body but
 		"normal" handlers cannot.
 		If a "normal" handler is registered for this type of message, the bus must reject this message.
 	*/
@@ -600,6 +620,69 @@ func TestFailHandlerInvokeOfMessageWithEmptyBody(t *testing.T) {
 			t.Error("Should have one rejected message")
 		}
 	}, t)
+}
+
+func TestTypeAndContentTypeHeadersSet(t *testing.T) {
+	cmd := Command1{}
+
+	bus := createNamedBusForTest(testSvc1)
+
+	policy := &policy.Generic{
+		Funk: func(publishing *amqp.Publishing) {
+			if publishing.Type != cmd.SchemaName() {
+				t.Errorf("publishing.Type != cmd.SchemaName()")
+			}
+			dfb := bus.(*gbus.DefaultBus)
+			if publishing.ContentType != dfb.Serializer.Name() {
+				t.Errorf("expected %s as content-type but actual value was %s", dfb.Serializer.Name(), publishing.ContentType)
+			}
+		}}
+
+	bus.Start()
+	defer bus.Shutdown()
+	bus.Send(context.Background(), testSvc1, gbus.NewBusMessage(cmd), policy)
+}
+
+func TestSendEmptyBody(t *testing.T) {
+	/*
+			test sending of message with len(payload) == 0 .
+		    for example, the body of proto message with 1 "false" field is len 0.
+	*/
+
+	logger := log.WithField("test", "empty_body")
+	serializer := serialization.NewProtoSerializer(logger)
+	msg := EmptyProtoCommand{}
+	cmd := gbus.NewBusMessage(&msg)
+	proceed := make(chan bool)
+
+	cfgSerializer := func(builder gbus.Builder) {
+		builder.WithSerializer(serializer)
+	}
+	b := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
+		gbus.BusConfiguration{MaxRetryCount: 0, BaseRetryDuration: 0}, cfgSerializer)
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		proceed <- true
+		return nil
+	}
+
+	err := b.HandleMessage(&EmptyProtoCommand{}, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer assertBusShutdown(b, t)
+
+	err = b.Send(noopTraceContext(), testSvc1, cmd)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	proceedOrTimeout(2, proceed, nil, t)
 }
 
 func TestHealthCheck(t *testing.T) {

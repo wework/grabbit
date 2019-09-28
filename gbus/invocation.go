@@ -13,7 +13,7 @@ var _ Messaging = &defaultInvocationContext{}
 
 type defaultInvocationContext struct {
 	*Glogged
-	invocingSvc  string
+	invokingSvc  string
 	bus          *DefaultBus
 	inboundMsg   *BusMessage
 	tx           *sql.Tx
@@ -29,8 +29,8 @@ type DeliveryInfo struct {
 	MaxRetryCount uint
 }
 
-func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
-	return dfi.Glogged.Log().WithFields(logrus.Fields{"routing_key": dfi.routingKey, "message_id": dfi.inboundMsg.ID})
+func (dfi *defaultInvocationContext) InvokingSvc() string {
+	return dfi.invokingSvc
 }
 
 //Reply implements the Invocation.Reply signature
@@ -43,9 +43,9 @@ func (dfi *defaultInvocationContext) Reply(ctx context.Context, replyMessage *Bu
 	var err error
 
 	if dfi.tx != nil {
-		return dfi.bus.sendWithTx(ctx, dfi.tx, dfi.invocingSvc, replyMessage)
+		return dfi.bus.sendWithTx(ctx, dfi.tx, dfi.invokingSvc, replyMessage)
 	}
-	if err = dfi.bus.Send(ctx, dfi.invocingSvc, replyMessage); err != nil {
+	if err = dfi.bus.Send(ctx, dfi.invokingSvc, replyMessage); err != nil {
 		//TODO: add logs?
 		logrus.WithError(err).Error("could not send reply")
 

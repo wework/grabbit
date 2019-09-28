@@ -1,6 +1,9 @@
 module github.com/wework/grabbit
 
 require (
+	emperror.dev/emperror v0.21.3 // indirect
+	emperror.dev/errors v0.4.3
+	emperror.dev/handler/logrus v0.1.0
 	github.com/DataDog/zstd v1.4.0 // indirect
 	github.com/Rican7/retry v0.1.0
 	github.com/Shopify/sarama v1.23.0 // indirect
@@ -23,7 +26,6 @@ require (
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/prometheus/common v0.6.0 // indirect

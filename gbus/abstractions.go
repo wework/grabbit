@@ -226,8 +226,24 @@ type Invocation interface {
 	Bus() Messaging
 	Tx() *sql.Tx
 	Ctx() context.Context
+	InvokingSvc() string
 	Routing() (exchange, routingKey string)
 	DeliveryInfo() DeliveryInfo
+}
+
+/*
+	SagaInvocation allows saga instances to reply to their creator even when not in the conext of handling
+	the message that starts the saga.
+	A message handler that is attached to a saga instance can safly cast the passed in invocation to SagaInvocation
+	and use the ReplyToInitiator function to send a message to the originating service that sent the message that started the saga
+*/
+type SagaInvocation interface {
+	ReplyToInitiator(ctx context.Context, message *BusMessage) error
+	//HostingSvc returns the svc name that is executing the service
+	HostingSvc() string
+
+	//SagaID returns the saga id of the currently invoked saga instance
+	SagaID() string
 }
 
 //Serializer is the base interface for all message serializers
@@ -247,6 +263,7 @@ type TxProvider interface {
 
 //TxOutbox abstracts the transactional outgoing channel type
 type TxOutbox interface {
+	Logged
 	Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error
 	Start(amqpOut *AMQPOutbox) error
 	Stop() error

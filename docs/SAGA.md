@@ -22,6 +22,7 @@ type BookVacationSaga struct {
 	BookingId string
 	GotCarSvcResponse bool
 	GotHotelSvcResponse bool
+	SomeConfigData string
 }
 ```
 
@@ -171,7 +172,7 @@ func (s *BookVacationSaga) HandleBookFlightResponse(invocation gbus.Invocation, 
 
 }
 ```
-### Step 4 - Handling the  timeout requirement
+### Step 4 - Handling the timeout requirement
 
 In order to define a timeout for the saga and have grabbit call the saga instance once that timeout is reached (assuming the saga hasn't completed yet) the saga needs to implement the gbus.RequestSagaTimeout interface
 
@@ -191,7 +192,7 @@ func (s *BookVacationSaga) TimeoutDuration() time.Duration {
 	return time.Minute * 15
 }
 
-func (s *BookVacationSaga) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
+func (s *BookVacationSaga) Timeout(tx *sql.Tx, bus Messaging) error {
 	return bus.Publish(context.Background(), "some_exchange", "some.topic.1", gbus.NewBusMessage(VacationBookingTimedOut{}))
 }
 
@@ -202,7 +203,7 @@ func (s *BookVacationSaga) Timeout(invocation gbus.Invocation, message *gbus.Bus
 ```go
 
 gb := getBus("vacationSvc")
-gb.RegisterSaga(BookVacationSaga{})
+gb.RegisterSaga(&BookVacationSaga{})
 
 ```
 
@@ -218,3 +219,54 @@ It is recommended to follow [semantic versioning](https://semver.org/) of the go
 
 grabbit automatically implements an optimistic concurrency model when processing a message and persisting saga instances, detecting when the saga state turns stale due to processing concurrently a different message.
 When the above is detected grabbit will rollback the bounded transaction and retry the execution of the saga.
+
+### Configuring a Saga Instance
+
+It is sometimes necessary to configure a saga instance with some data before it gets executed.
+grrabit allows you to do so by providing a saga configuration function when registering the saga.
+Each time a saga instance gets created or inflated from the persistent store the configuration function will be executed.
+
+The saga configuration function accepts a single gbus.Saga parameter and returns a single gbus.Saga return value.
+The passed in gbus.Saga is the instance that will be executed and will be the type of the saga being registered meaning it can safely be casted to your specific saga type.
+Once you casted to the specific saga type you can configure the instance and access its fields as needed.
+After the instance is configured the function returns the configured saga instance so grabbit can proceed and execute it.
+
+The following snippet is an example of how to pass in a saga configuration function
+```go
+configSaga := func(saga gbus.Saga) gbus.Saga {
+		s := saga.(*BookVacationSaga)
+		s.SomeConfigData = "config value"
+		return s
+	}
+svc1.RegisterSaga(&BookVacationSaga{}, configSaga)
+
+```
+
+### Replying to the saga initiator
+
+It is common that during its life cycle a saga will need to report back and send messages with the service that initiated it (sent the command that started the saga).
+In the example above when the booking has completed we would like to send a message to the service which initiated the booking saga.
+The way we have implemented this in the example above is by publishing an event which the service which initiated the saga would need to subscribe to and handle to get notified when the booking is complete.
+
+Although the above would work it won't be an elegant solution especially if the initiator of the saga is another saga since it means that the initiating saga will need to filter all events and select the single event that correlates to that particular instance.
+To relive client code to do so grabbit provides a way for a saga to directly send a message to its initiator, and if the initiator is another saga grabbit will automatically correlate the message with the correct saga instance and invoke the relevant handler.
+
+To send a message to the saga initiator the message handler attached to the saga instance will need to cast the passed in gbus.Invocation argument to a gbus.SagaInvocation and then invoke the ReplyToInitiator function.
+We can replace the following code from the above example
+
+```go
+	if s.IsComplete(){
+		event :=  gbus.NewBusMessage(VacationBookingComplete{})
+		invocation.Bus().Publish(invocation.Ctx(), "some_exchange", "some.topic", event)
+	}
+```
+
+to this:
+
+```go
+	sagaInvocation := invocation.(gbus.SagaInvocation)
+	if s.IsComplete(){
+		msg :=  gbus.NewBusMessage(VacationBookingComplete{})
+		sagaInvocation.ReplyToInitiator(invocation.Ctx(), msg)
+	}
+```
