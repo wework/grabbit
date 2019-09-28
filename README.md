@@ -10,7 +10,6 @@
 
 A lightweight transactional message bus on top of RabbitMQ supporting:
 
-
 1) Supported [Messaging Styles](https://github.com/wework/grabbit/blob/master/docs/MESSAGING.md) 
     - One Way (Fire and forget)
     - Publish/Subscribe
