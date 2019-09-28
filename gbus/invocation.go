@@ -29,10 +29,6 @@ type DeliveryInfo struct {
 	MaxRetryCount uint
 }
 
-func (dfi *defaultInvocationContext) Log() logrus.FieldLogger {
-	return dfi.Glogged.Log().WithFields(logrus.Fields{"routing_key": dfi.routingKey, "message_id": dfi.inboundMsg.ID})
-}
-
 func (dfi *defaultInvocationContext) InvokingSvc() string {
 	return dfi.invokingSvc
 }

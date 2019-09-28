@@ -381,8 +381,9 @@ func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr e
 	return nil
 }
 
-func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage) *defaultInvocationContext {
+func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage, handlerName string) *defaultInvocationContext {
 	invocation := &defaultInvocationContext{
+		Glogged:     &Glogged{},
 		invokingSvc: delivery.ReplyTo,
 		bus:         worker.b,
 		inboundMsg:  message,
@@ -395,6 +396,12 @@ func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Deliv
 			MaxRetryCount: MaxRetryCount,
 		},
 	}
+	invocationLogger := worker.log().
+		WithFields(logrus.Fields{"routing_key": delivery.RoutingKey,
+			"message_id":   message.ID,
+			"message_name": message.Payload.SchemaName(),
+			"handler_name": handlerName})
+	invocation.SetLogger(invocationLogger)
 	return invocation
 }
 
@@ -415,8 +422,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pinedHandler := handler //https://github.com/kyoh86/scopelint
 				handlerName := pinedHandler.Name()
 				hspan, hsctx := opentracing.StartSpanFromContext(sctx, handlerName)
-				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message)
-				invocation.SetLogger(worker.log().WithField("handler", handlerName))
+				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message, handlerName)
 				//execute the handler with metrics
 				handlerErr := metrics.RunHandlerWithMetric(func() error {
 					return pinedHandler(invocation, message)
