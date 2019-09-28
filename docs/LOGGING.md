@@ -9,24 +9,16 @@ annotated with the following contextual data (added as logrus fields to the log 
 allowing for a better debugging experience.
 
 - _service: the service name
-<<<<<<< HEAD
 - correlation_id: the correlation id set for the message
 - exchange: the exchange the message was published to
 - handler_name: the name of the handler being invoked
 - idempotency_key: the idempotency key set for the message
-=======
-- handler_name: the name of the handler being invoked
->>>>>>> Fix logging and added logging documentation (#176)
 - message_id: the id of the processed message
 - message_name: the type of the message that is being processed
 - routing_key: the routing_key of the message
 - saga_id: the id of the saga instance being invoked
-<<<<<<< HEAD
 - saga_def: the type of the saga that is being invoked
 - worker: the worker identifier that is processing the message
-=======
-- saga_def: the type of the saga that is being invoked 
->>>>>>> Fix logging and added logging documentation (#176)
 
 ```go
 
@@ -63,10 +55,14 @@ func SomeHandler(invocation gbus.Invocation, message *gbus.BusMessage) error{
 ```
 grabbit makes it easier handling these cases and reduce the repetitive task of logging
 <<<<<<< HEAD
+<<<<<<< HEAD
 these custom contextual attributes in cases of errors by integrating the [emperror errors package](https://github.com/emperror/errors).
 =======
 these custom contextual attributes in cases of errors by integrating the [emperror errors package] (https://github.com/emperror/errors).
 >>>>>>> Fix logging and added logging documentation (#176)
+=======
+these custom contextual attributes in cases of errors by integrating the [emperror errors package](https://github.com/emperror/errors).
+>>>>>>> added documentation on serialization support (#177)
 emperror drop-in replacement for the default errors package allows developers to add the needed contextual data on the error instance and have graabit log the error with all contextual attribute.
 
 ```go
