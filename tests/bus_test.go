@@ -88,6 +88,10 @@ func TestReply(t *testing.T) {
 			t.Errorf("message handler for reply message invoked with wrong message type\r\n%v", message)
 		}
 
+		if message.CorrelationID != cmdBusMsg.ID {
+			t.Errorf("CorrelationID didn't match expected %s but was %s", cmdBusMsg.ID, message.CorrelationID)
+		}
+
 		proceed <- true
 		return nil
 	}
