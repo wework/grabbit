@@ -33,7 +33,7 @@ the v1.x branch contains the latest stable releases of grabbit and one should tr
 
 ## Basic Usage
 
-### See complete application in the examples/vacation_app folder
+- For a complete sample application see the vacation booking [sample app](https://github.com/wework/grabbit/blob/master/examples/vacation_app) in the examples directory
 
 The following outlines the basic usage of grabbit.
 For a complete view of how you would use grabbit including how to write saga's and handle deadlettering refer to grabbit/tests package
