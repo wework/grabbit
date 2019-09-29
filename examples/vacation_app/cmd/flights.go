@@ -4,14 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-  
+
 	"vacation_app/messages"
 	"vacation_app/trace"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/wework/grabbit/gbus"
 )
-
 
 var runFlightsgServiceCmd = &cobra.Command{
 	Use:   "flights",
