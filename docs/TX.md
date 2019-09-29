@@ -5,7 +5,9 @@ When handlers use the passed in transaction instance to persist their business o
 grabbit guarantees local transactivity by bounding business objects persistence, outgoing command, reply and event messages the handler issues in a single transaction and routing messages to the [Transaction Outbox](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md).
 
 The following demonstrates how to access the active transaction from within a handler
+
 In this example, the updating of the orders table, publishing of the OrderCanceledEvent event and sending the OrderCanceledReply reply message are all bound to the same transaction.
+
 
 
 ```go
