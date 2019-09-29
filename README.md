@@ -10,37 +10,30 @@
 
 A lightweight transactional message bus on top of RabbitMQ supporting:
 
-1) Supported messaging semantics
-    * One Way
-    * Duplex
-    * Publish/Subscribe
-    * Request/Reply (RPC)
-2) Long running processes via the [Saga](https://github.com/wework/grabbit/blob/master/docs/SAGA.md) pattern
-3) Retry and backoffs
-4) Publisher confirms
-5) [Reliable messaging](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and local service transactivity via Transaction Outbox pattern
-6) Deadlettering
-7) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
-8) Reporting [Metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
-9) Distributed [Tracing](https://github.com/wework/grabbit/blob/master/docs/TRACING.md) via OpenTracing
-10) [Extensible serialization](https://github.com/wework/grabbit/blob/master/docs/SERIALIZATION.md) with
-default support for gob, protobuf and avro
+
+1) Supported [Messaging Styles](https://github.com/wework/grabbit/blob/master/docs/MESSAGING.md) 
+    - One Way (Fire and forget)
+    - Publish/Subscribe
+    - Aync Command/Reply
+    - Blocking Command/Reply (RPC)
+2) [Transactional](https://github.com/wework/grabbit/blob/master/docs/TX.md) message processing
+3) Message Orchestration via the [Saga](https://github.com/wework/grabbit/blob/master/docs/SAGA.md) pattern
+4) At least once reliable messaging via [Transaction Outbox](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md) and [Publisher Confirms](https://github.com/wework/grabbit/blob/master/docs/OUTBOX.md)
+5) [Retry and backoffs](https://github.com/wework/grabbit/blob/master/docs/RETRY.md)
+6) [Structured logging](https://github.com/wework/grabbit/blob/master/docs/LOGGING.md)
+7) Reporting [Metrics](https://github.com/wework/grabbit/blob/master/docs/METRICS.md) via Prometheus
+8) Distributed [Tracing](https://github.com/wework/grabbit/blob/master/docs/TRACING.md) via OpenTracing
+9) [Extensible serialization](https://github.com/wework/grabbit/blob/master/docs/SERIALIZATION.md) with default support for gob, protobuf and avro
 
 ## Stable release
 the v1.x branch contains the latest stable releases of grabbit and one should track that branch to get point and minor release updates.
 
 ## Supported transactional resources
 1) MySql > 8.0 (InnoDB)
-## Supported serializers
-1) gob
-2) Avro
-3) Protobuf
 
-## Instrumentation
+## Basic Usage
 
-1) Opentracing
-
-## Usage
+- For a complete sample application see the vacation booking [sample app](https://github.com/wework/grabbit/blob/master/examples/vacation_app) in the examples directory
 
 The following outlines the basic usage of grabbit.
 For a complete view of how you would use grabbit including how to write saga's and handle deadlettering refer to grabbit/tests package
