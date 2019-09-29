@@ -33,6 +33,8 @@ the v1.x branch contains the latest stable releases of grabbit and one should tr
 
 ## Basic Usage
 
+### See complete application in the examples/vacation_app folder
+
 The following outlines the basic usage of grabbit.
 For a complete view of how you would use grabbit including how to write saga's and handle deadlettering refer to grabbit/tests package
 
