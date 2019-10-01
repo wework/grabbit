@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/wework/grabbit/gbus"
@@ -50,6 +51,14 @@ func (outbox *TxOutbox) log() *log.Entry {
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change
 func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
+	outbox.Log().WithFields(
+		logrus.Fields{
+			"send_interval":     sendInterval,
+			"scavange_interval": scavengeInterval,
+			"page_szie":         maxPageSize,
+			"ackers":            ackers,
+		},
+	).Info("mysql transactional outbox configured")
 	outbox.gl = &sync.Mutex{}
 	outbox.recordsPendingConfirms = make(map[uint64]int)
 	tx, e := outbox.txProv.New()
@@ -88,7 +97,6 @@ func (outbox *TxOutbox) Stop() error {
 
 //Save stores a message in a DB to ensure delivery
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
-
 	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (
 							 message_id,
 							 message_type,
@@ -119,9 +127,10 @@ func (outbox *TxOutbox) purge(tx *sql.Tx) error {
 }
 
 //NewOutbox creates a new mysql transactional outbox
-func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxOutbox {
+func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool, cfg gbus.OutboxConfiguration) *TxOutbox {
 
 	txo := &TxOutbox{
+		Glogged:        &gbus.Glogged{},
 		svcName:        svcName,
 		txProv:         txProv,
 		purgeOnStartup: purgeOnStartup,
@@ -130,6 +139,20 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 		nack:           make(chan uint64, 1000000),
 		exit:           make(chan bool)}
 	txo.Glogged = &gbus.Glogged{}
+
+	if cfg.PageSize > 0 {
+		maxPageSize = int(cfg.PageSize)
+	}
+	if cfg.SendInterval.String() != "0s" {
+		sendInterval = cfg.SendInterval
+	}
+	if cfg.ScavengeInterval.String() != "0s" {
+		scavengeInterval = cfg.ScavengeInterval
+	}
+	if cfg.Ackers > 0 {
+		ackers = int(cfg.Ackers)
+	}
+
 	return txo
 }
 

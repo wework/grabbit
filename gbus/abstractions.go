@@ -20,12 +20,6 @@ const (
 	EVT Semantics = "evt"
 )
 
-//BusConfiguration provides configuration passed to the bus builder
-type BusConfiguration struct {
-	MaxRetryCount     uint
-	BaseRetryDuration int
-}
-
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister

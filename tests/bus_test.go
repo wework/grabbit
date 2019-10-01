@@ -253,7 +253,7 @@ func TestDeadlettering(t *testing.T) {
 	}
 
 	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		return errors.New("fail")
+		return errors.New("TestDeadlettering simulating a failed handler")
 	}
 
 	deadletterSvc.HandleDeadletter(deadMessageHandler)
@@ -761,7 +761,7 @@ func proceedOrTimeout(timeout time.Duration, p chan bool, onProceed func(), t *t
 		if onProceed != nil {
 			onProceed()
 		}
-	case <-time.After(timeout * time.Second):
+	case <-time.After(timeout * time.Second * 5):
 		t.Fatal("timeout")
 	}
 }
