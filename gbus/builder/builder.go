@@ -29,6 +29,7 @@ type defaultBuilder struct {
 	dbPingTimeout    time.Duration
 	usingPingTimeout bool
 	logger           logrus.FieldLogger
+	busCfg           gbus.BusConfiguration
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -88,7 +89,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 				panic(err)
 			}
 		}
-		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup)
+		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup, builder.busCfg.OutboxCfg)
 		gb.Outbox.SetLogger(gb.Log())
 		timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
 
@@ -182,6 +183,7 @@ func (builder *defaultBuilder) ConfigureHealthCheck(timeoutInSeconds time.Durati
 
 func (builder *defaultBuilder) WithConfiguration(config gbus.BusConfiguration) gbus.Builder {
 
+	builder.busCfg = config
 	gbus.MaxRetryCount = config.MaxRetryCount
 
 	if config.BaseRetryDuration > 0 {
@@ -207,6 +209,7 @@ type Nu struct {
 //Bus inits a new BusBuilder
 func (Nu) Bus(brokerConnStr string) gbus.Builder {
 	return &defaultBuilder{
+		busCfg:          gbus.BusConfiguration{},
 		PrefetchCount:   1,
 		connStr:         brokerConnStr,
 		serializer:      serialization.NewGobSerializer(),
