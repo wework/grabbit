@@ -320,6 +320,51 @@ func TestRawMessageHandling(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
+func TestGlobalRawMessageHandlingErr(t *testing.T) {
+	metrics.ResetRejectedMessagesCounter()
+	/*
+		tests issues:
+		https://github.com/wework/grabbit/issues/187
+		https://github.com/wework/grabbit/issues/188
+	*/
+	var otherHandlerCalled bool
+
+	handler := func(tx *sql.Tx, delivery *amqp.Delivery) error {
+
+		return errors.New("other handlers should not be called")
+	}
+
+	//this handler should not be invoked by the bus, if it does the test should fail
+	otherHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		otherHandlerCalled = true
+		return nil
+	}
+	svc1 := createNamedBusForTest(testSvc1)
+	svc1.SetGlobalRawMessageHandler(handler)
+	svc1.HandleMessage(Command1{}, otherHandler)
+	_ = svc1.Start()
+	defer assertBusShutdown(svc1, t)
+
+	cmd1 := gbus.NewBusMessage(Command1{})
+	_ = svc1.Send(context.Background(), testSvc1, cmd1)
+
+	if otherHandlerCalled == true {
+		t.Fail()
+	}
+
+	//delay test execution so to make sure the second handler is not called
+	time.Sleep(1500 * time.Millisecond)
+	rejected, _ := metrics.GetRejectedMessagesValue()
+	if rejected != 1 {
+		t.Errorf("rejected messages metric was expected to be 1 but was %f", rejected)
+	}
+
+	if otherHandlerCalled {
+		t.Errorf("other handler that was not expected to be called was called ")
+	}
+}
+
 func TestReturnDeadToQueue(t *testing.T) {
 
 	var visited bool
