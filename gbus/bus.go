@@ -76,6 +76,7 @@ var (
 	BaseRetryDuration = 10 * time.Millisecond
 	//RPCHeaderName used to define the header in grabbit for RPC
 	RPCHeaderName = "x-grabbit-msg-rpc-id"
+	ResurrectedHeaderName = "x-resurrected-from-death"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -488,21 +489,65 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 
 func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
 	if !b.started {
-		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+		return errors.New("bus not started or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	//publishing.Headers.
-	exchange := fmt.Sprintf("%v", publishing.Headers["x-first-death-exchange"])
-	routingKey := fmt.Sprintf("%v", publishing.Headers["x-first-death-queue"])
+
+	targetQueue, ok := publishing.Headers["x-first-death-queue"].(string)
+	if !ok {
+		return fmt.Errorf("bad x-first-death-queue field - %v", publishing.Headers["x-first-death-queue"])
+	}
+	exchange, ok := publishing.Headers["x-first-death-exchange"].(string)
+	if !ok {
+		return fmt.Errorf("bad x-first-death-exchange field - %v", publishing.Headers["x-first-death-exchange"])
+	}
+	routingKey, err := extractRoutingKey(publishing.Headers)
+	if err != nil {
+		return err
+	}
+
+	publishing.Headers[ResurrectedHeaderName] = true
+	publishing.Headers["x-first-death-routing-key"] = routingKey
+	// publishing.Headers["x-first-death-exchange"] is not deleted and kept as is
 
 	delete(publishing.Headers, "x-death")
 	delete(publishing.Headers, "x-first-death-queue")
 	delete(publishing.Headers, "x-first-death-reason")
-	delete(publishing.Headers, "x-first-death-exchange")
+
+	b.Log().
+		WithField("targetQueue", targetQueue).
+		WithField("firstDeathRoutingKey", routingKey).
+		WithField("firstDeathExchange", exchange).
+		Info("returning dead message to queue...")
 
 	send := func(tx *sql.Tx) error {
-		return b.publish(tx, exchange, routingKey, publishing)
+		// Publishing a "resurrected" message is done directly to the target queue using the default exchange
+		return b.publish(tx, "", targetQueue, publishing)
 	}
 	return b.withTx(send, ambientTx)
+}
+
+func extractRoutingKey(headers amqp.Table) (result string, err error) {
+	x_death_list, ok := headers["x-death"].([]interface{});
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
+	}
+
+	x_death, ok := x_death_list[0].(amqp.Table)
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
+	}
+
+	routingKeys, ok := x_death["routing-keys"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", x_death["routing-keys"])
+	}
+
+	routingKey, ok := routingKeys[0].(string)
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", x_death["routing-keys"])
+	}
+
+	return routingKey, nil
 }
 
 //Publish implements GBus.Publish(topic, message)
