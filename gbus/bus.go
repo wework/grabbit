@@ -75,7 +75,7 @@ var (
 	//for a random retry time. Default is 10 but it is configurable.
 	BaseRetryDuration = 10 * time.Millisecond
 	//RPCHeaderName used to define the header in grabbit for RPC
-	RPCHeaderName = "x-grabbit-msg-rpc-id"
+	RPCHeaderName         = "x-grabbit-msg-rpc-id"
 	ResurrectedHeaderName = "x-resurrected-from-death"
 )
 
@@ -527,24 +527,24 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 }
 
 func extractRoutingKey(headers amqp.Table) (result string, err error) {
-	x_death_list, ok := headers["x-death"].([]interface{});
+	xDeathList, ok := headers["x-death"].([]interface{})
 	if !ok {
 		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
 	}
 
-	x_death, ok := x_death_list[0].(amqp.Table)
+	xDeath, ok := xDeathList[0].(amqp.Table)
 	if !ok {
 		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
 	}
 
-	routingKeys, ok := x_death["routing-keys"].([]interface{})
+	routingKeys, ok := xDeath["routing-keys"].([]interface{})
 	if !ok {
-		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", x_death["routing-keys"])
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
 	}
 
 	routingKey, ok := routingKeys[0].(string)
 	if !ok {
-		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", x_death["routing-keys"])
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
 	}
 
 	return routingKey, nil

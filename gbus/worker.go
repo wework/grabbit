@@ -183,9 +183,9 @@ func exchangeAndRoutingFromDelivery(delivery amqp.Delivery) (exchange string, ro
 			return "", "", errors.New("failed extracting routing-key from resurrected message, bad x-first-death-routing-key")
 		}
 		return exchange, routingKey, nil
-	} else {
-		return delivery.Exchange, delivery.RoutingKey, nil
 	}
+
+	return delivery.Exchange, delivery.RoutingKey, nil
 }
 
 func isResurrectedMessage(delivery amqp.Delivery) bool {
