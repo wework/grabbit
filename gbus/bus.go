@@ -514,9 +514,9 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 	delete(publishing.Headers, "x-first-death-reason")
 
 	b.Log().
-		WithField("targetQueue", targetQueue).
-		WithField("firstDeathRoutingKey", routingKey).
-		WithField("firstDeathExchange", exchange).
+		WithField("target_queue", targetQueue).
+		WithField("first_death_routing_key", routingKey).
+		WithField("first_death_exchange", exchange).
 		Info("returning dead message to queue...")
 
 	send := func(tx *sql.Tx) error {
