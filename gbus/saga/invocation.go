@@ -3,7 +3,6 @@ package saga
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"time"
 
 	"github.com/wework/grabbit/gbus"
@@ -11,9 +10,6 @@ import (
 
 var _ gbus.Invocation = &sagaInvocation{}
 var _ gbus.SagaInvocation = &sagaInvocation{}
-
-//ErrCantReplyToEvents error stating that events can not be replied
-var ErrCantReplyToEvents = errors.New("can't reply to events")
 
 type sagaInvocation struct {
 	*gbus.Glogged
@@ -67,10 +63,7 @@ func (si *sagaInvocation) InvokingSvc() string {
 }
 
 func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) error {
-	exchange, targetService := si.decoratedInvocation.Routing()
-	if exchange != "" {
-		return ErrCantReplyToEvents
-	}
+	_, targetService := si.decoratedInvocation.Routing()
 	si.setCorrelationIDs(message, false, targetService)
 	return si.decoratedInvocation.Reply(ctx, message)
 }
