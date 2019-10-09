@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-
 	"vacation_app/messages"
 	"vacation_app/trace"
 
@@ -29,7 +28,6 @@ var runFlightsgServiceCmd = &cobra.Command{
 		gb := createBus(svcName)
 
 		gb.HandleMessage(messages.BookFlightsCmd{}, HandleBookFlightCommand)
-
 		gb.HandleMessage(messages.CancelFlightsCmd{}, HandleCancelFlightCommand)
 
 		gb.Start()
