@@ -104,7 +104,7 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
 	newInstance := def.newInstance()
 	newInstance.StartedBy = invocation.InvokingSvc()
-	newInstance.StartedBySaga = message.SagaCorrelationID
+	newInstance.StartedBySaga = message.SagaID
 	newInstance.StartedByRPCID = message.RPCID
 	newInstance.StartedByMessageID = message.ID
 
@@ -164,6 +164,13 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 				return getErr
 			}
 			if instance == nil {
+				/*
+					TODO: this case should not return an error but rather log a Warn/Info and return nil
+					There are edge cases in which the instance can be nil  due to completion of the saga
+					on a different node or worker.
+					In cases like these returning an error here would prevent additional handlers to be invoked
+					as the message will get rejected and transactions will be rolledback
+				*/
 				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
 				return e
 			}
