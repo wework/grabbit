@@ -165,14 +165,16 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			}
 			if instance == nil {
 				/*
-					TODO: this case should not return an error but rather log a Warn/Info and return nil
+					In this case we should not return an error but rather log a Warn/Info and return nil
 					There are edge cases in which the instance can be nil  due to completion of the saga
 					on a different node or worker.
 					In cases like these returning an error here would prevent additional handlers to be invoked
 					as the message will get rejected and transactions will be rolledback
+
+					https://github.com/wework/grabbit/issues/196
 				*/
-				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
-				return e
+				imsm.Log().WithField("saga_correlation_id", message.SagaCorrelationID).Warn("message routed with SagaCorrelationID but no saga instance with the same id found")
+				return nil
 			}
 			def.configureSaga(instance)
 			if invkErr := imsm.invokeSagaInstance(def, instance, invocation, message); invkErr != nil {
