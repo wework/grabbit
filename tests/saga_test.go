@@ -57,9 +57,9 @@ func TestSagaStartUps(t *testing.T) {
 	})
 
 	log.Printf("%v - %v - %v", cmd1.ID, cmd2.ID, cmd3.ID)
-	svc1.Send(noopTraceContext(), testSvc2, cmd1)
-	svc1.Send(noopTraceContext(), testSvc2, cmd2)
-	svc1.Send(noopTraceContext(), testSvc2, cmd3)
+	svc1.Send(context.Background(), testSvc2, cmd1)
+	svc1.Send(context.Background(), testSvc2, cmd2)
+	svc1.Send(context.Background(), testSvc2, cmd3)
 
 	<-proceed
 	//make sure all sagaIDs are unique
@@ -90,7 +90,7 @@ func TestSagaToServiceConversation(t *testing.T) {
 	svc2 := createNamedBusForTest(testSvc2)
 
 	reply1Handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		invocation.Reply(noopTraceContext(), gbus.NewBusMessage(Command2{}))
+		invocation.Reply(context.Background(), gbus.NewBusMessage(Command2{}))
 		return nil
 	}
 
@@ -118,7 +118,7 @@ func TestSagaToServiceConversation(t *testing.T) {
 	defer svc2.Shutdown()
 
 	cmd1 := gbus.NewBusMessage(Command1{})
-	svc1.Send(noopTraceContext(), testSvc2, cmd1)
+	svc1.Send(context.Background(), testSvc2, cmd1)
 
 	<-proceed
 
@@ -132,7 +132,7 @@ func TestSagas(t *testing.T) {
 	cmdReplyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 		firstSagaCorrelationID = message.SagaCorrelationID
 
-		err := invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
+		err := invocation.Bus().Publish(context.Background(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{}))
 		if err != nil {
 			t.Fatal("could not publish", err)
 		}
@@ -176,7 +176,7 @@ func TestSagas(t *testing.T) {
 	defer svc2.Shutdown()
 
 	cmd := gbus.NewBusMessage(Command1{})
-	err = svc1.Send(noopTraceContext(), testSvc2, cmd)
+	err = svc1.Send(context.Background(), testSvc2, cmd)
 	if err != nil {
 		t.Fatal("could not send message", err)
 	}
@@ -219,7 +219,7 @@ func TestSagaTimeout(t *testing.T) {
 	}
 	defer svc2.Shutdown()
 	cmd2 := gbus.NewBusMessage(Command2{})
-	err = svc1.Send(noopTraceContext(), testSvc2, cmd2)
+	err = svc1.Send(context.Background(), testSvc2, cmd2)
 	if err != nil {
 		t.Error("could not start the saga", err)
 		return
@@ -422,19 +422,19 @@ func (s *SagaA) RegisterAllHandlers(register gbus.HandlerRegister) {
 
 func (s *SagaA) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{})
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 
 func (s *SagaA) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	log.Println("command2 received")
 	reply := gbus.NewBusMessage(Reply2{})
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 
 func (s *SagaA) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply2{})
 	log.Println("event1 received")
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 
 func (s *SagaA) HandleEvent2(inocation gbus.Invocation, message *gbus.BusMessage) error {
@@ -465,7 +465,7 @@ func (s *SagaB) Startup(invocation gbus.Invocation, message *gbus.BusMessage) er
 	reply := gbus.NewBusMessage(Reply1{
 		Data: "SagaB.Startup",
 	})
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 
 func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessage) error {
@@ -473,7 +473,7 @@ func (s *SagaB) HandleEvent1(invocation gbus.Invocation, message *gbus.BusMessag
 		Data: "SagaB.HandleEvent1",
 	})
 	log.Println("event1 on SagaB received")
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 
 func (s *SagaB) IsComplete() bool {
@@ -485,7 +485,7 @@ func (s *SagaB) RequestTimeout() time.Duration {
 }
 
 func (s *SagaB) Timeout(invocation gbus.Invocation, message *gbus.BusMessage) error {
-	return invocation.Bus().Publish(noopTraceContext(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
+	return invocation.Bus().Publish(context.Background(), "test_exchange", "some.topic.1", gbus.NewBusMessage(Event1{
 		Data: "SagaB.Timeout",
 	}))
 }
