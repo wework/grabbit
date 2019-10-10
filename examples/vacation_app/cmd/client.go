@@ -14,7 +14,6 @@ import (
 	"github.com/wework/grabbit/gbus"
 )
 
-
 var runClientCmd = &cobra.Command{
 	Use:   "client",
 	Short: "Run the client app",
@@ -57,7 +56,7 @@ var runClientCmd = &cobra.Command{
 func HandleBookingComplete(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	bookingComplete := message.Payload.(*messages.BookingComplete)
 	if bookingComplete.Success {
-		fmt.Printf("booking completed succesfully\n")
+		fmt.Printf("booking completed successfully\n")
 
 	} else {
 		fmt.Printf("failed to book vacation\n")

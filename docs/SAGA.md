@@ -109,7 +109,7 @@ func (s *BookVacationSaga) HandleBookVacationCommand(invocation gbus.Invocation,
 	reply := gbus.NewBusMessage(BookVacationReply{
 		BookingId: s.BookingId})
 	//reply to the command so the caller can continue with his execution flow	
-	return invocation.Reply(noopTraceContext(), reply)
+	return invocation.Reply(context.Background(), reply)
 }
 ```
 
