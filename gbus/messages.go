@@ -121,7 +121,7 @@ func (SagaTimeoutMessage) SchemaName() string {
 
 // In order to route "resurrected" events to the correct handler it is necessary to use the original exchange and routing-key which
 // were added by grabbit previously as headers, as opposed to the native values on the delivery
-// Issue reference: https://github.com/wework/grabbit/issues/191
+// Issue reference:	https://github.com/wework/grabbit/issues/191
 func exchangeAndRoutingFromDelivery(delivery amqp.Delivery) (exchange string, routingKey string, err error) {
 	if isResurrectedMessage(delivery) {
 		exchange, ok := delivery.Headers["x-first-death-exchange"].(string)
