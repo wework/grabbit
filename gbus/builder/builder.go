@@ -37,6 +37,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	gb := &gbus.DefaultBus{
 		AmqpConnStr:   builder.connStr,
 		PrefetchCount: builder.PrefetchCount,
+		Glogged:       &gbus.Glogged{},
 
 		SvcName:              svcName,
 		PurgeOnStartup:       builder.purgeOnStartup,
