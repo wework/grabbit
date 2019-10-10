@@ -77,6 +77,7 @@ var (
 	//RPCHeaderName used to define the header in grabbit for RPC
 	RPCHeaderName         = "x-grabbit-msg-rpc-id"
 	ResurrectedHeaderName = "x-resurrected-from-death"
+	FirstDeathRoutingKeyHeaderName = "x-first-death-routing-key"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -505,8 +506,8 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 		return err
 	}
 
+	publishing.Headers[FirstDeathRoutingKeyHeaderName] = routingKey // Set the original death routing key to be used later for replaying
 	publishing.Headers[ResurrectedHeaderName] = true
-	publishing.Headers["x-first-death-routing-key"] = routingKey
 	// publishing.Headers["x-first-death-exchange"] is not deleted and kept as is
 
 	delete(publishing.Headers, "x-death")
@@ -514,6 +515,7 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 	delete(publishing.Headers, "x-first-death-reason")
 
 	b.Log().
+		WithField("message_id", publishing.MessageId).
 		WithField("target_queue", targetQueue).
 		WithField("first_death_routing_key", routingKey).
 		WithField("first_death_exchange", exchange).
@@ -526,6 +528,8 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 	return b.withTx(send, ambientTx)
 }
 
+// Extracts the routing key of the most recent death of the message. "x-death" header contains a list of "deaths" that happened to this message, with
+// the most recent death always being first in the list. More information: https://www.rabbitmq.com/dlx.html
 func extractRoutingKey(headers amqp.Table) (result string, err error) {
 	xDeathList, ok := headers["x-death"].([]interface{})
 	if !ok {
