@@ -230,7 +230,7 @@ func (outbox *TxOutbox) reportMetrics() error {
 	var totalOutboxSize int
 	for rows.Next() {
 		var count, status int
-		rows.Scan(&count, &status)
+		rows.Scan(&status, &count)
 		totalOutboxSize += count
 		switch status {
 		case Pending:
