@@ -18,6 +18,7 @@ import (
 
 //SagaStore base type for embedding for new transactional saga stores
 type SagaStore struct {
+	*gbus.Glogged
 	Tx            gbus.TxProvider
 	SvcName       string
 	ParamsMarkers []string
@@ -252,5 +253,5 @@ func GetSagatableName(svcName string) string {
 }
 
 func (store *SagaStore) log() *log.Entry {
-	return log.WithField("store", "mysql")
+	return store.Log().WithField("store", "mysql")
 }

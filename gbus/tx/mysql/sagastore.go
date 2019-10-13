@@ -15,6 +15,7 @@ type SagaStore struct {
 func NewSagaStore(svcName string, txProvider gbus.TxProvider) saga.Store {
 
 	base := &tx.SagaStore{
+		Glogged:       &gbus.Glogged{},
 		Tx:            txProvider,
 		SvcName:       svcName,
 		ParamsMarkers: getParamsMarker()}
