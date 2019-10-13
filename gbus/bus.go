@@ -717,13 +717,3 @@ type rpcPolicy struct {
 func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RPCHeaderName] = p.rpcID
 }
-
-//Log returns the default logrus.FieldLogger for the bus via the Glogged helper
-func (b *DefaultBus) Log() logrus.FieldLogger {
-	if b.Glogged == nil {
-		b.Glogged = &Glogged{
-			log: logrus.WithField("_service", b.SvcName),
-		}
-	}
-	return b.Glogged.Log()
-}

@@ -55,11 +55,13 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		Confirm:              builder.confirm,
 	}
 
+	var finalLogger logrus.FieldLogger
 	if builder.logger != nil {
-		gb.SetLogger(builder.logger)
+		finalLogger = builder.logger.WithField("_service", gb.SvcName)
 	} else {
-		gb.SetLogger(logrus.New())
+		finalLogger = logrus.WithField("_service", gb.SvcName)
 	}
+	gb.SetLogger(finalLogger)
 
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
