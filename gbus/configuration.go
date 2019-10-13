@@ -11,8 +11,16 @@ type BusConfiguration struct {
 
 //OutboxConfiguration configures the transactional outbox
 type OutboxConfiguration struct {
+	/*
+		Ackers the number of goroutines configured to drain incoming ack/nack signals from the broker.
+		Increase this value if you are experiencing deadlocks.
+		Default is 10
+	*/
+	Ackers uint
 	//PageSize is the amount of pending messsage records the outbox selects from the database every iteration, the default is 500
 	PageSize uint
+	//MetricsInterval is the duration the outbox waits between each metrics report, default is 15 seconds
+	MetricsInterval time.Duration
 	//SendInterval is the duration the outbox waits before each iteration, default is 1 second
 	SendInterval time.Duration
 	/*
@@ -21,11 +29,4 @@ type OutboxConfiguration struct {
 		Default is 60 seconds
 	*/
 	ScavengeInterval time.Duration
-	/*
-		Ackers the number of goroutines configured to drain incoming ack/nack signals from the broker.
-		Increase this value if you are experiencing deadlocks.
-		Default is 10
-	*/
-
-	Ackers uint
 }
