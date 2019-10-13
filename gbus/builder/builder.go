@@ -115,6 +115,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
 	glue.SetLogger(gb.Log())
+	sagaStore.SetLogger(glue.Log())
 	gb.Glue = glue
 	return gb
 }

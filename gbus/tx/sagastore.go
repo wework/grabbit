@@ -251,3 +251,4 @@ func GetSagatableName(svcName string) string {
 
 	return strings.ToLower("grabbit_" + sanitized + "_sagas")
 }
+
