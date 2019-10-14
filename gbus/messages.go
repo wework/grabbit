@@ -28,6 +28,7 @@ func NewBusMessage(payload Message) *BusMessage {
 	bm := &BusMessage{
 		ID: xid.New().String(),
 	}
+	bm.SetIdempotencyKey(bm.ID)
 	bm.SetPayload(payload)
 	return bm
 }
