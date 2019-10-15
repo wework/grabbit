@@ -150,7 +150,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 		handlers = append(handlers, rpcHandler)
 
 	} else {
-		exchange, routingKey, err := exchangeAndRoutingFromDelivery(delivery)
+		exchange, routingKey, err := getRoutingParamsFromDelivery(delivery)
 		if err != nil {
 			worker.log().WithError(err).Warn("failed extracting exchange and routingKey from delivery...rejecting message")
 			return handlers

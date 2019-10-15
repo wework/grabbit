@@ -75,8 +75,8 @@ var (
 	//for a random retry time. Default is 10 but it is configurable.
 	BaseRetryDuration = 10 * time.Millisecond
 	//RPCHeaderName used to define the header in grabbit for RPC
-	RPCHeaderName         = "x-grabbit-msg-rpc-id"
-	ResurrectedHeaderName = "x-resurrected-from-death"
+	RPCHeaderName                  = "x-grabbit-msg-rpc-id"
+	ResurrectedHeaderName          = "x-resurrected-from-death"
 	FirstDeathRoutingKeyHeaderName = "x-first-death-routing-key"
 )
 
@@ -501,13 +501,13 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 	if !ok {
 		return fmt.Errorf("bad x-first-death-exchange field - %v", publishing.Headers["x-first-death-exchange"])
 	}
-	routingKey, err := extractRoutingKey(publishing.Headers)
+	routingKey, err := extractFirstDeathRoutingKey(publishing.Headers)
 	if err != nil {
 		return err
 	}
 
 	publishing.Headers[FirstDeathRoutingKeyHeaderName] = routingKey // Set the original death routing key to be used later for replaying
-	publishing.Headers[ResurrectedHeaderName] = true
+	publishing.Headers[ResurrectedHeaderName] = true                // mark message as resurrected
 	// publishing.Headers["x-first-death-exchange"] is not deleted and kept as is
 
 	delete(publishing.Headers, "x-death")
@@ -528,9 +528,9 @@ func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, p
 	return b.withTx(send, ambientTx)
 }
 
-// Extracts the routing key of the most recent death of the message. "x-death" header contains a list of "deaths" that happened to this message, with
-// the most recent death always being first in the list. More information: https://www.rabbitmq.com/dlx.html
-func extractRoutingKey(headers amqp.Table) (result string, err error) {
+// Extracts the routing key of the first death of the message. "x-death" header contains a list of "deaths" that happened to this message, with
+// the most recent death always being first in the list, so fhe first death is the last one. More information: https://www.rabbitmq.com/dlx.html
+func extractFirstDeathRoutingKey(headers amqp.Table) (result string, err error) {
 	xDeathList, ok := headers["x-death"].([]interface{})
 	if !ok {
 		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
@@ -546,7 +546,7 @@ func extractRoutingKey(headers amqp.Table) (result string, err error) {
 		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
 	}
 
-	routingKey, ok := routingKeys[0].(string)
+	routingKey, ok := routingKeys[len(routingKeys)-1].(string)
 	if !ok {
 		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
 	}
