@@ -398,6 +398,7 @@ func TestSetSagaIdFromMessage(t *testing.T) {
 
 	svc1 := createNamedBusForTest(testSvc1)
 	client := createNamedBusForTest(testSvc3)
+	client2 := createNamedBusForTest(testSvc2)
 
 	svc1.RegisterSaga(&IdGenerationSaga{})
 
@@ -405,6 +406,9 @@ func TestSetSagaIdFromMessage(t *testing.T) {
 	defer svc1.Shutdown()
 
 	client.Start()
+	defer client.Shutdown()
+
+	client2.Start()
 	defer client.Shutdown()
 
 	response, err := client.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command1{
@@ -418,6 +422,20 @@ func TestSetSagaIdFromMessage(t *testing.T) {
 	}
 
 	if response.SagaID != "vlad" {
+		t.Errorf("saga id should had been set from the saga buisness logic")
+	}
+
+	response2, err := client2.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command2{
+		Data: "vlad",
+	}), gbus.NewBusMessage(Reply2{}), time.Second*20)
+	if err != nil {
+		t.Errorf("rpc call failed with error %v", err)
+	}
+	if response2 == nil {
+		t.Errorf("failed to receive response message from rpc call")
+	}
+
+	if response2.SagaID != "vlad" {
 		t.Errorf("saga id should had been set from the saga buisness logic")
 	}
 }
@@ -643,11 +661,14 @@ type IdGenerationSaga struct {
 }
 
 func (i *IdGenerationSaga) GetSagaId(invocation gbus.Invocation, message *gbus.BusMessage) (string, error) {
-	msg, ok := message.Payload.(*Command1)
-	if !ok {
-		return "", errors.NewWithDetails("could not cast message.Payload to Command1", "payload", message.Payload)
+	switch msg := message.Payload.(type) {
+	case *Command1:
+		return msg.Data, nil
+	case *Command2:
+		return msg.Data, nil
+	default:
+		return "", errors.NewWithDetails("could not cast message.Payload to Command1 or Command2", "payload", message.Payload)
 	}
-	return msg.Data, nil
 }
 
 func (i *IdGenerationSaga) StartedBy() []gbus.Message {
@@ -657,6 +678,7 @@ func (i *IdGenerationSaga) StartedBy() []gbus.Message {
 
 func (i *IdGenerationSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
 	register.HandleMessage(Command1{}, i.HandleCommand1)
+	register.HandleMessage(Command2{}, i.HandleCommand2)
 }
 
 func (i *IdGenerationSaga) IsComplete() bool {
@@ -671,6 +693,11 @@ func (i *IdGenerationSaga) New() gbus.Saga {
 
 func (i *IdGenerationSaga) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
 	reply := gbus.NewBusMessage(Reply1{})
+	return invocation.Reply(context.Background(), reply)
+}
+
+func (i *IdGenerationSaga) HandleCommand2(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	reply := gbus.NewBusMessage(Reply2{})
 	i.Complete = true
 	return invocation.Reply(context.Background(), reply)
 }
