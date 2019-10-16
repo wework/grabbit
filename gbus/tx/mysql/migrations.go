@@ -37,7 +37,7 @@ func sagaStoreAddSagaCreatorDetails(svcName string) *migrator.Migration {
 	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN started_by_request_of_svc VARCHAR(2048) AFTER saga_data, ADD COLUMN started_by_request_of_saga VARCHAR(255) AFTER started_by_request_of_svc`
 
 	return &migrator.Migration{
-		Name: "create saga store table",
+		Name: "add saga creator details columns",
 		Func: func(tx *sql.Tx) error {
 			if _, err := tx.Exec(addCreatorDetailsSQL); err != nil {
 				return err
