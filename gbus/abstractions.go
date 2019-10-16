@@ -122,6 +122,10 @@ type Saga interface {
 	New() Saga
 }
 
+type SagaIDGenerator interface {
+	GenSagaId(invocation Invocation, message *BusMessage) (string, error)
+}
+
 //Deadlettering provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
 type Deadlettering interface {
 	/*

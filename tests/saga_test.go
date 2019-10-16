@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"emperror.dev/errors"
+
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/metrics"
 )
@@ -392,6 +394,34 @@ func TestSagaConfFunctions(t *testing.T) {
 
 }
 
+func TestSetSagaIdFromMessage(t *testing.T) {
+
+	svc1 := createNamedBusForTest(testSvc1)
+	client := createNamedBusForTest(testSvc3)
+
+	svc1.RegisterSaga(&IdGenerationSaga{})
+
+	svc1.Start()
+	defer svc1.Shutdown()
+
+	client.Start()
+	defer client.Shutdown()
+
+	response, err := client.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command1{
+		Data: "vlad",
+	}), gbus.NewBusMessage(Reply1{}), time.Second*20)
+	if err != nil {
+		t.Errorf("rpc call failed with error %v", err)
+	}
+	if response == nil {
+		t.Errorf("failed to receive response message from rpc call")
+	}
+
+	if response.SagaID != "vlad" {
+		t.Errorf("saga id should had been set from the saga buisness logic")
+	}
+}
+
 /*Test Sagas*/
 
 type SagaA struct {
@@ -603,4 +633,44 @@ func (s *ConfigurableSaga) IsComplete() bool {
 
 func (s *ConfigurableSaga) New() gbus.Saga {
 	return &ConfigurableSaga{}
+}
+
+var _ gbus.Saga = &IdGenerationSaga{}
+var _ gbus.SagaIDGenerator = &IdGenerationSaga{}
+
+type IdGenerationSaga struct {
+	Complete bool
+}
+
+func (i *IdGenerationSaga) GenSagaId(invocation gbus.Invocation, message *gbus.BusMessage) (string, error) {
+	msg, ok := message.Payload.(*Command1)
+	if !ok {
+		return "", errors.NewWithDetails("could not cast message.Payload to Command1", "payload", message.Payload)
+	}
+	return msg.Data, nil
+}
+
+func (i *IdGenerationSaga) StartedBy() []gbus.Message {
+	starters := make([]gbus.Message, 0)
+	return append(starters, Command1{})
+}
+
+func (i *IdGenerationSaga) RegisterAllHandlers(register gbus.HandlerRegister) {
+	register.HandleMessage(Command1{}, i.HandleCommand1)
+}
+
+func (i *IdGenerationSaga) IsComplete() bool {
+	return i.Complete
+}
+
+func (i *IdGenerationSaga) New() gbus.Saga {
+	return &IdGenerationSaga{
+		Complete: false,
+	}
+}
+
+func (i *IdGenerationSaga) HandleCommand1(invocation gbus.Invocation, message *gbus.BusMessage) error {
+	reply := gbus.NewBusMessage(Reply1{})
+	i.Complete = true
+	return invocation.Reply(context.Background(), reply)
 }

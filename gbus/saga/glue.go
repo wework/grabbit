@@ -11,6 +11,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	slog "github.com/opentracing/opentracing-go/log"
+	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/metrics"
@@ -103,6 +104,17 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
 	newInstance := def.newInstance()
+	id := xid.New().String()
+	sgen, ok := newInstance.UnderlyingInstance.(gbus.SagaIDGenerator)
+	if ok {
+		nid, err := sgen.GenSagaId(invocation, message)
+		if err != nil {
+			imsm.Log().WithError(err).Error("generating id for saga")
+		} else {
+			id = nid
+		}
+	}
+	newInstance.ID = id
 	newInstance.StartedBy = invocation.InvokingSvc()
 	newInstance.StartedBySaga = message.SagaID
 	newInstance.StartedByRPCID = message.RPCID
