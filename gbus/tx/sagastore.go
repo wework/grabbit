@@ -18,6 +18,7 @@ import (
 
 //SagaStore base type for embedding for new transactional saga stores
 type SagaStore struct {
+	*gbus.Glogged
 	Tx            gbus.TxProvider
 	SvcName       string
 	ParamsMarkers []string
@@ -41,7 +42,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		if error == sql.ErrNoRows {
 			return nil, error
 		} else if error != nil {
-			store.log().WithError(error).Error("failed to scan saga row")
+			store.Log().WithError(error).Error("failed to scan saga row")
 			return nil, error
 		}
 
@@ -67,7 +68,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		}
 
 		if decErr != nil {
-			store.log().WithError(decErr).Error("failed to decode saga instance")
+			store.Log().WithError(decErr).Error("failed to decode saga instance")
 			return nil, decErr
 		}
 
@@ -88,7 +89,7 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (insta
 	defer func() {
 		err := rows.Close()
 		if err != nil {
-			store.log().WithError(err).Error("could not close rows")
+			store.Log().WithError(err).Error("could not close rows")
 		}
 	}()
 
@@ -97,7 +98,7 @@ func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (insta
 	}
 
 	if instances, err = store.scanInstances(rows); err != nil {
-		store.log().WithError(err).Error("SagaStore failed to scan saga db record")
+		store.Log().WithError(err).Error("SagaStore failed to scan saga db record")
 		return nil, err
 	}
 	return instances, nil
@@ -111,7 +112,7 @@ func (store *SagaStore) UpdateSaga(tx *sql.Tx, instance *saga.Instance) (err err
 	instance.ConcurrencyCtrl = nextVersion
 	var buf []byte
 	if buf, err = store.serilizeSaga(instance); err != nil {
-		store.log().WithError(err).WithField("saga_id", instance.ID).Error("SagaStore failed to encode saga")
+		store.Log().WithError(err).WithField("saga_id", instance.ID).Error("SagaStore failed to encode saga")
 		return err
 	}
 
@@ -158,7 +159,7 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 	defer func() {
 		err := rows.Close()
 		if err != nil {
-			store.log().WithError(err).Error("could not close rows")
+			store.Log().WithError(err).Error("could not close rows")
 		}
 	}()
 
@@ -166,7 +167,7 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 		return nil, saga.ErrInstanceNotFound
 	}
 	if err != nil {
-		store.log().WithError(err).
+		store.Log().WithError(err).
 			WithFields(log.Fields{"saga_id": sagaID, "table_name": GetSagatableName(store.SvcName)}).
 			Error("Failed to fetch saga")
 
@@ -190,12 +191,12 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
-		store.log().WithError(err).WithField("saga_id", newInstance.ID).Error("failed to encode saga with sagaID")
+		store.Log().WithError(err).WithField("saga_id", newInstance.ID).Error("failed to encode saga with sagaID")
 		return err
 	}
 	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.StartedBy, newInstance.StartedByMessageID, newInstance.StartedByRPCID, newInstance.StartedBySaga, newInstance.ConcurrencyCtrl)
 	if err != nil {
-		store.log().WithError(err).Error("failed saving new saga")
+		store.Log().WithError(err).Error("failed saving new saga")
 		return err
 	}
 	return nil
@@ -204,11 +205,11 @@ func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstan
 //Purge cleans up the saga store, to be used in tests and in extreme situations in production
 func (store *SagaStore) Purge() error {
 	tx := store.NewTx()
-	store.log().WithField("saga_table", GetSagatableName(store.SvcName)).Info("Purging saga table")
+	store.Log().WithField("saga_table", GetSagatableName(store.SvcName)).Info("Purging saga table")
 	deleteSQL := fmt.Sprintf("DELETE FROM %s", GetSagatableName(store.SvcName))
 	results, err := tx.Exec(deleteSQL)
 	if err != nil {
-		store.log().WithError(err).Error("failed to purge saga table")
+		store.Log().WithError(err).Error("failed to purge saga table")
 		return err
 	}
 	if txErr := tx.Commit(); txErr != nil {
@@ -216,9 +217,9 @@ func (store *SagaStore) Purge() error {
 	}
 	rowsEffected, resultsErr := results.RowsAffected()
 	if resultsErr != nil {
-		store.log().WithError(err).Warn("failed to fetch number of deleted saga records")
+		store.Log().WithError(err).Warn("failed to fetch number of deleted saga records")
 	} else {
-		store.log().WithField("deleted_instances", rowsEffected).Info("purged saga store")
+		store.Log().WithField("deleted_instances", rowsEffected).Info("purged saga store")
 	}
 
 	return nil
@@ -251,6 +252,3 @@ func GetSagatableName(svcName string) string {
 	return strings.ToLower("grabbit_" + sanitized + "_sagas")
 }
 
-func (store *SagaStore) log() *log.Entry {
-	return log.WithField("store", "mysql")
-}
