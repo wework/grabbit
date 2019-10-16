@@ -55,11 +55,13 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		Confirm:              builder.confirm,
 	}
 
+	var finalLogger logrus.FieldLogger
 	if builder.logger != nil {
-		gb.SetLogger(builder.logger)
+		finalLogger = builder.logger.WithField("_service", gb.SvcName)
 	} else {
-		gb.SetLogger(logrus.New())
+		finalLogger = logrus.WithField("_service", gb.SvcName)
 	}
+	gb.SetLogger(finalLogger)
 
 	if builder.workerNum < 1 {
 		gb.WorkerNum = 1
@@ -74,6 +76,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	switch builder.txnlProvider {
 
 	case "mysql":
+		providerLogger := gb.Log().WithField("provider", "mysql")
 		mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
 		if err != nil {
 			panic(err)
@@ -84,6 +87,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 
 		//TODO move purge logic into the NewSagaStore factory method
 		sagaStore = mysql.NewSagaStore(gb.SvcName, mysqltx)
+		sagaStore.SetLogger(providerLogger)
 		if builder.purgeOnStartup {
 			err := sagaStore.Purge()
 			if err != nil {
@@ -91,7 +95,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			}
 		}
 		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup, builder.busCfg.OutboxCfg)
-		gb.Outbox.SetLogger(gb.Log())
+		gb.Outbox.SetLogger(providerLogger)
 		timeoutManager = mysql.NewTimeoutManager(gb, gb.TxProvider, gb.Log, svcName, builder.purgeOnStartup)
 
 	default:
@@ -111,6 +115,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	}
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
 	glue.SetLogger(gb.Log())
+	sagaStore.SetLogger(glue.Log())
 	gb.Glue = glue
 	return gb
 }

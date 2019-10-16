@@ -3,6 +3,7 @@ package tests
 import (
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/builder"
 	"github.com/wework/grabbit/gbus/policy"
@@ -25,12 +26,15 @@ func init() {
 type configBilder func(builder gbus.Builder)
 
 func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf gbus.BusConfiguration, cf ...configBilder) gbus.Bus {
+
+	log := logrus.WithField("_test", "true")
 	busBuilder := builder.
 		New().
 		Bus(connStr).
 		WithPolicies(&policy.Durable{}, &policy.TTL{Duration: time.Second * 3600}).
 		WorkerNum(3, 1).
 		WithConfirms().
+		WithLogger(log).
 		WithConfiguration(conf)
 
 	if txnl {

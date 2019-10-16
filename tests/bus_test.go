@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -775,6 +776,40 @@ func TestSanitizingSvcName(t *testing.T) {
 	defer assertBusShutdown(svc4, t)
 
 	fmt.Println("succeeded sanitizing service name")
+}
+
+func TestIdempotencyKeyHeaders(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	keys := make([]string, 0)
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		keys = append(keys, message.IdempotencyKey)
+		wg.Done()
+		return nil
+	}
+
+	bus := createNamedBusForTest(testSvc1)
+
+	bus.HandleMessage(Command1{}, handler)
+	bus.Start()
+	defer bus.Shutdown()
+
+	cmd1 := gbus.NewBusMessage(Command1{})
+	cmd1.SetIdempotencyKey("some-unique-key")
+
+	cmd2 := gbus.NewBusMessage(Command1{})
+	cmd2.SetIdempotencyKey("some-unique-key")
+
+	//send two commands with the same IdempotencyKey to test that the same IdempotencyKey is propogated
+	bus.Send(context.Background(), testSvc1, cmd1)
+	bus.Send(context.Background(), testSvc1, cmd2)
+
+	wg.Wait()
+
+	if keys[0] != keys[1] && keys[0] != "" {
+		t.Errorf("expected same IdempotencyKey. actual key1:%s, key2%s", keys[0], keys[1])
+	}
+
 }
 
 func amqpDeliveryToPublishing(del *amqp.Delivery) (pub amqp.Publishing) {
