@@ -128,3 +128,8 @@ type SagaTimeoutMessage struct {
 func (SagaTimeoutMessage) SchemaName() string {
 	return "grabbit.timeout"
 }
+
+func isResurrectedMessage(delivery amqp.Delivery) bool {
+	isResurrected, ok := delivery.Headers[ResurrectedHeaderName].(bool)
+	return ok && isResurrected
+}
