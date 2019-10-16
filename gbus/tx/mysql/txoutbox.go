@@ -24,12 +24,11 @@ const (
 )
 
 var (
-	maxPageSize         = 500
-	maxDeliveryAttempts = 50
-	sendInterval        = time.Second
-	scavengeInterval    = time.Second * 60
-	metricsInterval     = time.Second * 15
-	ackers              = 10
+	maxPageSize      = 500
+	sendInterval     = time.Second
+	scavengeInterval = time.Second * 60
+	metricsInterval  = time.Second * 15
+	ackers           = 10
 )
 
 //TxOutbox is a mysql based transactional outbox
@@ -288,7 +287,7 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " USE INDEX (status_delivery) WHERE status = " + strconv.Itoa(Pending) + " AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " USE INDEX (status_delivery) WHERE status = " + strconv.Itoa(Pending) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
