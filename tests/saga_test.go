@@ -660,7 +660,7 @@ type IdGenerationSaga struct {
 	Complete bool
 }
 
-func (i *IdGenerationSaga) GetSagaId(invocation gbus.Invocation, message *gbus.BusMessage) (string, error) {
+func (i *IdGenerationSaga) GetSagaId(message *gbus.BusMessage) (string, error) {
 	switch msg := message.Payload.(type) {
 	case *Command1:
 		return msg.Data, nil

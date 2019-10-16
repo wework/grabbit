@@ -11,8 +11,8 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	slog "github.com/opentracing/opentracing-go/log"
-	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
+
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/metrics"
 )
@@ -104,17 +104,9 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
 	newInstance := def.newInstance()
-	id := xid.New().String()
-	sgen, ok := newInstance.UnderlyingInstance.(gbus.SagaIDProvider)
-	if ok {
-		nid, err := sgen.GetSagaId(invocation, message)
-		if err != nil {
-			imsm.Log().WithError(err).Error("generating id for saga")
-		} else {
-			id = nid
-		}
+	if message.SagaCorrelationID != "" {
+		newInstance.ID = message.SagaCorrelationID
 	}
-	newInstance.ID = id
 	newInstance.StartedBy = invocation.InvokingSvc()
 	newInstance.StartedBySaga = message.SagaID
 	newInstance.StartedByRPCID = message.RPCID
@@ -165,9 +157,9 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			5) Else iterate over all instances and invoke the needed handler
 		*/
 		startNew := def.shouldStartNewSaga(message)
-		if !startNew && message.SagaCorrelationID == "" {
+		if message.SagaCorrelationID == "" {
 			if sgen, ok := def.newInstance().UnderlyingInstance.(gbus.SagaIDProvider); ok {
-				message.SagaCorrelationID, _ = sgen.GetSagaId(invocation, message)
+				message.SagaCorrelationID, _ = sgen.GetSagaId(message)
 			}
 		}
 
