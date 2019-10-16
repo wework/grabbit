@@ -105,9 +105,9 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
 	newInstance := def.newInstance()
 	id := xid.New().String()
-	sgen, ok := newInstance.UnderlyingInstance.(gbus.SagaIDGenerator)
+	sgen, ok := newInstance.UnderlyingInstance.(gbus.SagaIDProvider)
 	if ok {
-		nid, err := sgen.GenSagaId(invocation, message)
+		nid, err := sgen.GetSagaId(invocation, message)
 		if err != nil {
 			imsm.Log().WithError(err).Error("generating id for saga")
 		} else {
@@ -160,11 +160,17 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			1) If Def does not have handlers for the message type then log a warning (as this should not happen) and return
 			2) Else if the message is a startup message then create new instance of a saga, invoke startup handler and mark as started
 				2.1) If new instance requests timeouts then reuqest a timeout
-			3) Else if message is destinated for a specific saga instance (reply messages) then find that saga by id and invoke it
+			3) Else if message is destinated for a specific saga instance (reply messages / saga is of type SagaIDProvider ) then find that saga by id and invoke it
 			4) Else if message is not an event drop it (cmd messages should have 1 specific target)
 			5) Else iterate over all instances and invoke the needed handler
 		*/
 		startNew := def.shouldStartNewSaga(message)
+		if !startNew && message.SagaCorrelationID == "" {
+			if sgen, ok := def.newInstance().UnderlyingInstance.(gbus.SagaIDProvider); ok {
+				message.SagaCorrelationID, _ = sgen.GetSagaId(invocation, message)
+			}
+		}
+
 		if startNew {
 			return imsm.handleNewSaga(def, invocation, message)
 

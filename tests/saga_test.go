@@ -636,13 +636,13 @@ func (s *ConfigurableSaga) New() gbus.Saga {
 }
 
 var _ gbus.Saga = &IdGenerationSaga{}
-var _ gbus.SagaIDGenerator = &IdGenerationSaga{}
+var _ gbus.SagaIDProvider = &IdGenerationSaga{}
 
 type IdGenerationSaga struct {
 	Complete bool
 }
 
-func (i *IdGenerationSaga) GenSagaId(invocation gbus.Invocation, message *gbus.BusMessage) (string, error) {
+func (i *IdGenerationSaga) GetSagaId(invocation gbus.Invocation, message *gbus.BusMessage) (string, error) {
 	msg, ok := message.Payload.(*Command1)
 	if !ok {
 		return "", errors.NewWithDetails("could not cast message.Payload to Command1", "payload", message.Payload)
