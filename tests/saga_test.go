@@ -409,7 +409,7 @@ func TestSetSagaIdFromMessage(t *testing.T) {
 	defer client.Shutdown()
 
 	client2.Start()
-	defer client.Shutdown()
+	defer client2.Shutdown()
 
 	response, err := client.RPC(context.Background(), testSvc1, gbus.NewBusMessage(Command1{
 		Data: "vlad",
