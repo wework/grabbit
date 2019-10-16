@@ -71,6 +71,9 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 		startedBy:   fqnsFromMessages(saga.StartedBy()),
 		msgToFunc:   make([]*MsgToFuncPair, 0),
 		lock:        &sync.Mutex{}}
+	if correlator, ok := saga.(gbus.CustomeSagaCorrelator); ok {
+		def.customCorrelation = correlator.CorrelationID()
+	}
 
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
@@ -108,13 +111,21 @@ func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *g
 	newInstance.StartedByRPCID = message.RPCID
 	newInstance.StartedByMessageID = message.ID
 
-	imsm.Log().
-		WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
-		Info("created new saga")
 	if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
 		imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
 		return invkErr
 	}
+	/*
+		assign the new saga id only after the invocation as we assume that the value of the custom saga id
+		is based on some value on the incoming message
+	*/
+	if def.customCorrelation != nil {
+		customCorrelator := newInstance.UnderlyingInstance.(gbus.CustomeSagaCorrelator)
+		newInstance.ID = customCorrelator.GenCustomCorrelationID()
+	}
+	imsm.Log().
+		WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
+		Info("created new saga")
 
 	if !newInstance.isComplete() {
 		imsm.Log().WithField("saga_id", newInstance.ID).Info("saving new saga")
@@ -156,11 +167,30 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 		if startNew {
 			return imsm.handleNewSaga(def, invocation, message)
 
-		} else if message.SagaCorrelationID != "" {
-			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
+		} else if message.Semantics == gbus.CMD {
+			if message.SagaCorrelationID == "" && def.customCorrelation == nil {
+				e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
+				return e
+
+			}
+			var correlatedSagaID string
+
+			/*
+				fetch the correlation id from the custom correlation if one exists.
+				If there is no custom correlator set or if the returned value is an empty string (meaning the custom
+				correlator doesn't know how to correelate this message) then fallback to the message.SagaCorrelationID
+			*/
+
+			if def.customCorrelation != nil {
+				correlatedSagaID = def.customCorrelation(message)
+			} else {
+				correlatedSagaID = message.SagaCorrelationID
+			}
+
+			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), correlatedSagaID)
 
 			if getErr != nil {
-				imsm.Log().WithError(getErr).WithField("saga_id", message.SagaCorrelationID).Error("failed to fetch saga by id")
+				imsm.Log().WithError(getErr).WithField("saga_id", correlatedSagaID).Error("failed to fetch saga by id")
 				return getErr
 			}
 			if instance == nil {
@@ -173,7 +203,7 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 
 					https://github.com/wework/grabbit/issues/196
 				*/
-				imsm.Log().WithField("saga_correlation_id", message.SagaCorrelationID).Warn("message routed with SagaCorrelationID but no saga instance with the same id found")
+				imsm.Log().WithField("saga_correlation_id", correlatedSagaID).Warn("message routed with SagaCorrelationID but no saga instance with the same id found")
 				return nil
 			}
 			def.configureSaga(instance)
@@ -184,9 +214,6 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 
 			return imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 
-		} else if message.Semantics == gbus.CMD {
-			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
-			return e
 		} else {
 
 			imsm.Log().WithFields(logrus.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")

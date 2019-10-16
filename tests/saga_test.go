@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -390,6 +391,46 @@ func TestSagaConfFunctions(t *testing.T) {
 	case <-proceed:
 	}
 
+}
+
+func TestCustomSagaCorrelation(t *testing.T) {
+
+	client := createNamedBusForTest(testSvc1)
+	server := createNamedBusForTest(testSvc2)
+	server.RegisterSaga(&CustomSagaLocatorSaga{})
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	client.HandleMessage(InitiateOrderResponse{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		wg.Done()
+		return nil
+	})
+
+	client.HandleMessage(AddToOrderResponse{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		wg.Done()
+		return nil
+	})
+
+	client.HandleMessage(CompleteOrderResponse{}, func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		wg.Done()
+		return nil
+	})
+
+	client.Start()
+	defer client.Shutdown()
+
+	server.Start()
+	defer server.Shutdown()
+
+	orderID := "someOrderID"
+	client.Send(context.Background(), testSvc2, gbus.NewBusMessage(InitiateOrderCommand{OrderID: orderID}))
+	client.Send(context.Background(), testSvc2, gbus.NewBusMessage(AddToOrderCommand{OrderID: orderID}))
+	client.Send(context.Background(), testSvc2, gbus.NewBusMessage(CompleteOrderCommand{OrderID: orderID}))
+
+	wg.Wait()
 }
 
 /*Test Sagas*/

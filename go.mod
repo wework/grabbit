@@ -6,16 +6,21 @@ require (
 	github.com/Rican7/retry v0.1.0
 	github.com/Shopify/sarama v1.24.0 // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible // indirect
+	github.com/creack/pty v1.1.9 // indirect
 	github.com/dangkaka/go-kafka-avro v0.0.0-20181108134201-d57aece51a15
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang/protobuf v1.3.2
+	github.com/hhatto/gocloc v0.3.0 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
 	github.com/klauspost/compress v1.8.6 // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
+	github.com/kr/pty v1.1.8 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/lopezator/migrator v0.2.0
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
@@ -28,15 +33,19 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563 // indirect
 	github.com/rs/xid v1.2.1
 	github.com/sirupsen/logrus v1.4.2
+	github.com/src-d/enry/v2 v2.1.0 // indirect
 	github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271
+	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/stretchr/testify v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
 	golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc // indirect
 	golang.org/x/net v0.0.0-20191009170851-d66e71096ffb // indirect
 	golang.org/x/sys v0.0.0-20191009170203-06d7bd2c5f4f // indirect
 	google.golang.org/appengine v1.6.5 // indirect
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
+	gopkg.in/yaml.v2 v2.2.4 // indirect
 )
 
 go 1.13
