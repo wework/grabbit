@@ -368,8 +368,9 @@ func TestGlobalRawMessageHandlingErr(t *testing.T) {
 
 func TestReturnDeadToQueue(t *testing.T) {
 
-	var visited bool
-	proceed := make(chan bool)
+	var visitedMessageHandler, visitedEventHandler bool
+	messageProceed, eventProceed := make(chan bool), make(chan bool)
+
 	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
@@ -380,21 +381,34 @@ func TestReturnDeadToQueue(t *testing.T) {
 
 	deadMessageHandler := func(tx *sql.Tx, poison *amqp.Delivery) error {
 		pub := amqpDeliveryToPublishing(poison)
-		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		err := deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		if err != nil {
+			t.Fatalf("failed returning dead to queue with error: %s", err.Error())
+		}
 		return nil
 	}
 
-	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		if visited {
-			proceed <- true
+	faultyMessageHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		if visitedMessageHandler {
+			messageProceed <- true
 			return nil
 		}
-		visited = true
+		visitedMessageHandler = true
+		return errors.New("fail")
+	}
+
+	faultyEventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		if visitedEventHandler {
+			eventProceed <- true
+			return nil
+		}
+		visitedEventHandler = true
 		return errors.New("fail")
 	}
 
 	deadletterSvc.HandleDeadletter(deadMessageHandler)
-	service1.HandleMessage(Command1{}, faultyHandler)
+	service1.HandleMessage(Command1{}, faultyMessageHandler)
+	service1.HandleEvent("exchange", "topic", Command1{}, faultyEventHandler)
 
 	deadletterSvc.Start()
 	defer assertBusShutdown(deadletterSvc, t)
@@ -402,7 +416,10 @@ func TestReturnDeadToQueue(t *testing.T) {
 	defer assertBusShutdown(service1, t)
 
 	service1.Send(context.Background(), testSvc1, poison)
-	proceedOrTimeout(2, proceed, nil, t)
+	proceedOrTimeout(2, messageProceed, nil, t)
+
+	service1.Publish(context.Background(), "exchange", "topic", poison)
+	proceedOrTimeout(2, eventProceed, nil, t)
 }
 
 func TestDeadLetterHandlerPanic(t *testing.T) {

@@ -150,11 +150,17 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 		handlers = append(handlers, rpcHandler)
 
 	} else {
+		exchange, routingKey, err := getRoutingParamsFromDelivery(delivery)
+		if err != nil {
+			worker.log().WithError(err).Warn("failed extracting exchange and routingKey from delivery...rejecting message")
+			return handlers
+		}
+
 		worker.handlersLock.Lock()
 		defer worker.handlersLock.Unlock()
 		msgName := GetMessageName(delivery)
 		for _, registration := range worker.registrations {
-			if registration.Matches(delivery.Exchange, delivery.RoutingKey, msgName) {
+			if registration.Matches(exchange, routingKey, msgName) {
 				handlers = append(handlers, registration.Handler)
 			}
 		}
@@ -164,6 +170,26 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 	}
 
 	return handlers
+}
+
+func getRoutingParamsFromDelivery(delivery amqp.Delivery) (exchange string, routingKey string, err error) {
+
+	// In order to route "resurrected" events to the correct handler it is necessary to use the original exchange and routing-key which
+	// were added by grabbit previously as headers, as opposed to the native values on the delivery
+	// Issue reference:	https://github.com/wework/grabbit/issues/191
+	if isResurrectedMessage(delivery) {
+		exchange, ok := delivery.Headers["x-first-death-exchange"].(string)
+		if !ok {
+			return "", "", errors.New("failed extracting exchange from resurrected message, bad x-first-death-exchange")
+		}
+		routingKey, ok := delivery.Headers[FirstDeathRoutingKeyHeaderName].(string)
+		if !ok {
+			return "", "", errors.New("failed extracting routing-key from resurrected message, bad x-first-death-routing-key")
+		}
+		return exchange, routingKey, nil
+	}
+
+	return delivery.Exchange, delivery.RoutingKey, nil
 }
 
 func (worker *worker) ack(delivery amqp.Delivery) error {
