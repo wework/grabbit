@@ -654,20 +654,26 @@ func (s *ConfigurableSaga) New() gbus.Saga {
 }
 
 var _ gbus.Saga = &IdGenerationSaga{}
-var _ gbus.SagaIDProvider = &IdGenerationSaga{}
+var _ gbus.CustomSagaCorrelation = &IdGenerationSaga{}
 
 type IdGenerationSaga struct {
 	Complete bool
 }
 
-func (i *IdGenerationSaga) GetSagaId(message *gbus.BusMessage) (string, error) {
-	switch msg := message.Payload.(type) {
-	case *Command1:
-		return msg.Data, nil
-	case *Command2:
-		return msg.Data, nil
-	default:
-		return "", errors.NewWithDetails("could not cast message.Payload to Command1 or Command2", "payload", message.Payload)
+func (i *IdGenerationSaga) GetSagaCorrelationFn() gbus.SagaCorrelationGetId {
+	return func(message *gbus.BusMessage, isNew bool) (string, error) {
+		switch msg := message.Payload.(type) {
+		case *Command1:
+			return msg.Data, nil
+		case *Command2:
+			return msg.Data, nil
+		default:
+			details := make([]interface{}, 0)
+			for key, value := range message.GetFieldsMap() {
+				details = append(details, key, value)
+			}
+			return "", errors.NewWithDetails("could not generate saga correlation id", details...)
+		}
 	}
 }
 

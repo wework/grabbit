@@ -11,6 +11,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	slog "github.com/opentracing/opentracing-go/log"
+	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
@@ -64,14 +65,26 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 
 	imsm.sagaStore.RegisterSagaType(saga)
 
-	def := &Def{
+	var idGenerator gbus.SagaCorrelationGetId = func(msg *gbus.BusMessage, isNew bool) (string, error) {
+		if isNew {
+			return xid.New().String(), nil
+		}
+		return "", errors.New("can generate correlation id for existing saga")
+	}
 
-		glue:        imsm,
-		sagaType:    sagaType,
-		sagaConfFns: conf,
-		startedBy:   fqnsFromMessages(saga.StartedBy()),
-		msgToFunc:   make([]*MsgToFuncPair, 0),
-		lock:        &sync.Mutex{}}
+	if csidg, ok := saga.(gbus.CustomSagaCorrelation); ok {
+		idGenerator = csidg.GetSagaCorrelationFn()
+	}
+
+	def := &Def{
+		glue:             imsm,
+		sagaType:         sagaType,
+		sagaConfFns:      conf,
+		startedBy:        fqnsFromMessages(saga.StartedBy()),
+		msgToFunc:        make([]*MsgToFuncPair, 0),
+		lock:             &sync.Mutex{},
+		correlationIdGen: idGenerator,
+	}
 
 	saga.RegisterAllHandlers(def)
 	imsm.sagaDefs = append(imsm.sagaDefs, def)
@@ -103,10 +116,17 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 }
 
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
-	newInstance := def.newInstance()
-	if message.SagaCorrelationID != "" {
-		newInstance.ID = message.SagaCorrelationID
+	sID, err := def.correlationIdGen(message, true)
+	if err != nil {
+		fields := message.GetLogFields()
+		fields["saga_def"] = def.String()
+		imsm.Log().WithError(err).
+			WithFields(fields).
+			Error("could not generate saga id from message")
+		return err
 	}
+	newInstance := def.newInstance()
+	newInstance.ID = sID
 	newInstance.StartedBy = invocation.InvokingSvc()
 	newInstance.StartedBySaga = message.SagaID
 	newInstance.StartedByRPCID = message.RPCID
@@ -152,15 +172,18 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			1) If Def does not have handlers for the message type then log a warning (as this should not happen) and return
 			2) Else if the message is a startup message then create new instance of a saga, invoke startup handler and mark as started
 				2.1) If new instance requests timeouts then reuqest a timeout
-			3) Else if message is destinated for a specific saga instance (reply messages / saga is of type SagaIDProvider ) then find that saga by id and invoke it
+			3) Else if message is destinated for a specific saga instance (reply messages / saga is of type CustomSagaCorrelation ) then find that saga by id and invoke it
 			4) Else if message is not an event drop it (cmd messages should have 1 specific target)
 			5) Else iterate over all instances and invoke the needed handler
 		*/
 		startNew := def.shouldStartNewSaga(message)
-		if message.SagaCorrelationID == "" {
-			if sgen, ok := def.newInstance().UnderlyingInstance.(gbus.SagaIDProvider); ok {
-				message.SagaCorrelationID, _ = sgen.GetSagaId(message)
+		if !startNew && message.Semantics == gbus.CMD && message.SagaCorrelationID == "" {
+			sid, err := def.correlationIdGen(message, false)
+			if err != nil {
+				imsm.Log().WithError(err).WithFields(message.GetLogFields()).Error("failed to generate saga correlation id from message")
+				return err
 			}
+			message.SagaCorrelationID = sid
 		}
 
 		if startNew {

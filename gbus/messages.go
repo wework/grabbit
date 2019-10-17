@@ -7,6 +7,7 @@ import (
 
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -106,6 +107,33 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 		log.String("SagaCorrelationID", bm.SagaCorrelationID),
 		log.String("Semantics", string(bm.Semantics)),
 		log.String("RPCID", bm.RPCID),
+	}
+}
+
+func (bm *BusMessage) GetLogFields() (fields logrus.Fields) {
+	return logrus.Fields{
+		"message":           bm.PayloadFQN,
+		"ID":                bm.ID,
+		"IdempotencyKey":    bm.IdempotencyKey,
+		"SagaID":            bm.SagaID,
+		"CorrelationID":     bm.CorrelationID,
+		"SagaCorrelationID": bm.SagaCorrelationID,
+		"Semantics":         string(bm.Semantics),
+		"RPCID":             bm.RPCID,
+	}
+}
+
+// GetFieldsMap returns a map of all of the fields of the message
+func (bm *BusMessage) GetFieldsMap() map[string]string {
+	return map[string]string{
+		"message":           bm.PayloadFQN,
+		"ID":                bm.ID,
+		"IdempotencyKey":    bm.IdempotencyKey,
+		"SagaID":            bm.SagaID,
+		"CorrelationID":     bm.CorrelationID,
+		"SagaCorrelationID": bm.SagaCorrelationID,
+		"Semantics":         string(bm.Semantics),
+		"RPCID":             bm.RPCID,
 	}
 }
 

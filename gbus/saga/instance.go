@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
@@ -149,7 +148,6 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instan
 
 	//newSagaPtr := reflect.New(sagaType).Elem()
 	newInstance := &Instance{
-		ID:                 xid.New().String(),
 		UnderlyingInstance: newSaga,
 		MsgToMethodMap:     msgToMethodMap,
 	}

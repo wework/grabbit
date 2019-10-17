@@ -122,9 +122,13 @@ type Saga interface {
 	New() Saga
 }
 
-type SagaIDProvider interface {
-	GetSagaId(message *BusMessage) (string, error)
+// CustomSagaCorrelation allows any saga which implements this interface to generate it's own Saga ID from a message
+type CustomSagaCorrelation interface {
+	GetSagaCorrelationFn() SagaCorrelationGetId
 }
+
+// SagaCorrelationGetId custom handler which knows how to convert a message to SagaId/SagaCorrelationId
+type SagaCorrelationGetId func(message *BusMessage, isNew bool) (string, error)
 
 //Deadlettering provides the ability to handle messages that were rejected as poision and arrive to the deadletter queue
 type Deadlettering interface {
