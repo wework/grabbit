@@ -72,7 +72,9 @@ func (imsm *Glue) RegisterSaga(saga gbus.Saga, conf ...gbus.SagaConfFn) error {
 		msgToFunc:   make([]*MsgToFuncPair, 0),
 		lock:        &sync.Mutex{}}
 	if correlator, ok := saga.(gbus.CustomeSagaCorrelator); ok {
-		def.customCorrelation = correlator.CorrelationID()
+		def.customCorrelation = correlator.Correlator()
+	} else {
+		def.customCorrelation = func(message gbus.Message) (string, bool) { return "", false }
 	}
 
 	saga.RegisterAllHandlers(def)
@@ -111,18 +113,15 @@ func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *g
 	newInstance.StartedByRPCID = message.RPCID
 	newInstance.StartedByMessageID = message.ID
 
+	if overrideID, canCorrelate := def.customCorrelation(message.Payload); canCorrelate {
+		newInstance.ID = overrideID
+	}
+
 	if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
 		imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
 		return invkErr
 	}
-	/*
-		assign the new saga id only after the invocation as we assume that the value of the custom saga id
-		is based on some value on the incoming message
-	*/
-	if def.customCorrelation != nil {
-		customCorrelator := newInstance.UnderlyingInstance.(gbus.CustomeSagaCorrelator)
-		newInstance.ID = customCorrelator.GenCustomCorrelationID()
-	}
+
 	imsm.Log().
 		WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
 		Info("created new saga")
@@ -181,8 +180,8 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 				correlator doesn't know how to correelate this message) then fallback to the message.SagaCorrelationID
 			*/
 
-			if def.customCorrelation != nil {
-				correlatedSagaID = def.customCorrelation(message)
+			if overrideID, canCorrelate := def.customCorrelation(message.Payload); canCorrelate {
+				correlatedSagaID = overrideID
 			} else {
 				correlatedSagaID = message.SagaCorrelationID
 			}

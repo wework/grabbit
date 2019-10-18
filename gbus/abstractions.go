@@ -286,35 +286,31 @@ type Logged interface {
 //CustomeSagaCorrelator allows saga instances to control the way messages get correlated to the saga instance
 type CustomeSagaCorrelator interface {
 	/*
-				GenCustomCorrelationID generate a unique ID that will serve as the unique identifier for the saga instance
-		        grabbit will call this function after creating a new instance and invoking the saga handler that handles the
-		        the message that starts up the saga.
-	*/
-	GenCustomCorrelationID() string
-	/*
-				CorrelationID provides grabbit with a custom function hinting grabbit how to correlate incoming messages
-				to the specific saga instance.
+						CorrelationFn provides grabbit with a custom function controling which value of the incoming messages
+						to use as the correlation key.
 
-				Example:
+						Example:
 
-				func (c *CustomSagaLocatorSaga) CorrelationID() func(message *gbus.BusMessage) string {
+		func (c *CustomSagaLocatorSaga) Correlator() func(message gbus.Message) (string, bool) {
 
-					return func(message *gbus.BusMessage) string {
-						switch message.Payload.(type) {
-						case *AddToOrderCommand:
-							return message.Payload.(*AddToOrderCommand).OrderID
-						case *CompleteOrderCommand:
-							return message.Payload.(*CompleteOrderCommand).OrderID
-						default:
-							return ""
-						}
-					}
+			return func(message gbus.Message) (string, bool) {
+				switch message.(type) {
+				case *InitiateOrderCommand:
+					return message.(*InitiateOrderCommand).OrderID, true
+				case *AddToOrderCommand:
+					return message.(*AddToOrderCommand).OrderID, true
+				case *CompleteOrderCommand:
+					return message.(*CompleteOrderCommand).OrderID, true
+				default:
+					return "", false
 				}
+			}
+		}
 
-				The above instructs grabbit to correlate incoming messages of type *AddToOrderCommand and *CompleteOrderCommand
-		        according to their OrderID value and return an empty string if the incoming message doesn't match any of the above.
-				if a saga instance implements the CustomeSagaCorrelator interface it will first try to correlate the message to a saga
-				instance by the value returned by the custom correlation function and in case the returned value is an empty string grabbit will fallback and correlate the message to a saga instance according to BusMessage.SagaCorrelationID field
+						The above instructs grabbit to correlate incoming messages of type *InitiateOrderCommand, *AddToOrderCommand and *CompleteOrderCommand
+				        according to their OrderID value and return an empty string and false value if the incoming message doesn't match any of the above.
+						if a saga instance implements the CustomeSagaCorrelator interface it will first try to correlate the message to a saga
+						instance by the value returned by the custom correlation function and in case the returned value if it can and will fallback and correlate the message to a saga instance according to BusMessage.SagaCorrelationID field
 	*/
-	CorrelationID() func(*BusMessage) string
+	Correlator() func(Message) (string, bool)
 }

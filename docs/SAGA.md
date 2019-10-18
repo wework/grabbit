@@ -278,7 +278,7 @@ By default grabbit correlates a message to the correct saga instance when a hand
 There are many cases in which you would like to interact with a saga instance and send it messages not in the context of replying to a specific message originating from the saga.
 
 The way to do this is have the saga implement the gbus.CustomeSagaCorrelator interface
-gbus.CustomeSagaCorrelator allows saga developers to instruct grabbit to rout messages to teh saga instance acording to some custom key that may be carried as part of message payloads.
+gbus.CustomeSagaCorrelator allows saga developers to instruct grabbit to rout messages to the saga instance acording to some custom key that may be carried as part of message payloads.
 
 See the [following test](https://github.com/wework/grabbit/blob/master/tests/saga_test.go#L396) as an example.
 

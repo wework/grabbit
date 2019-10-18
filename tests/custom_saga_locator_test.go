@@ -99,16 +99,18 @@ func (c *CustomSagaLocatorSaga) GenCustomCorrelationID() string {
 	return c.OrderID
 }
 
-func (c *CustomSagaLocatorSaga) CorrelationID() func(message *gbus.BusMessage) string {
+func (c *CustomSagaLocatorSaga) Correlator() func(message gbus.Message) (string, bool) {
 
-	return func(message *gbus.BusMessage) string {
-		switch message.Payload.(type) {
+	return func(message gbus.Message) (string, bool) {
+		switch message.(type) {
+		case *InitiateOrderCommand:
+			return message.(*InitiateOrderCommand).OrderID, true
 		case *AddToOrderCommand:
-			return message.Payload.(*AddToOrderCommand).OrderID
+			return message.(*AddToOrderCommand).OrderID, true
 		case *CompleteOrderCommand:
-			return message.Payload.(*CompleteOrderCommand).OrderID
+			return message.(*CompleteOrderCommand).OrderID, true
 		default:
-			return ""
+			return "", false
 		}
 	}
 }

@@ -25,7 +25,7 @@ type Def struct {
 	lock              *sync.Mutex
 	sagaConfFns       []gbus.SagaConfFn
 	msgToFunc         []*MsgToFuncPair
-	customCorrelation func(*gbus.BusMessage) string
+	customCorrelation func(gbus.Message) (string, bool)
 }
 
 //HandleMessage implements HandlerRegister interface
