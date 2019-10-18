@@ -286,7 +286,7 @@ type Logged interface {
 //CustomeSagaCorrelator allows saga instances to control the way messages get correlated to the saga instance
 type CustomeSagaCorrelator interface {
 	/*
-						CorrelationFn provides grabbit with a custom function controling which value of the incoming messages
+						Correlator provides grabbit with a custom function controlling which value of the incoming messages
 						to use as the correlation key.
 
 						Example:
