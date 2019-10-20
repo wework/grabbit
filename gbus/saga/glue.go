@@ -191,8 +191,8 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			return imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 
 		} else if message.Semantics == gbus.CMD {
-			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
-			return e
+			logInContext.Warn("command or reply message with no saga reference received")
+			return errors.New("can not resolve saga instance for message")
 		} else {
 
 			logInContext.Info("fetching saga instances by type")
