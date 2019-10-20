@@ -648,19 +648,28 @@ func (b *DefaultBus) sendImpl(sctx context.Context, tx *sql.Tx, toService, reply
 		b.Log().WithError(err).Error("could not inject headers")
 	}
 
-	buffer, err := b.Serializer.Encode(message.Payload)
+	payloadBody, err := b.Serializer.Encode(message.Payload)
 	if err != nil {
 		b.Log().WithError(err).WithField("message", message).Error("failed to send message, encoding of message failed")
 		return err
 	}
 
+	if message.payloadBody != nil {
+		payloadBody = message.payloadBody
+	}
+
+	contentType := b.Serializer.Name()
+	if message.ContentType != "" {
+		contentType = message.ContentType
+	}
+
 	msg := amqp.Publishing{
 		Type:          message.PayloadFQN,
-		Body:          buffer,
+		Body:          payloadBody,
 		ReplyTo:       replyTo,
 		MessageId:     message.ID,
 		CorrelationId: message.CorrelationID,
-		ContentType:   b.Serializer.Name(),
+		ContentType:   contentType,
 		Headers:       headers,
 	}
 	span.LogFields(message.GetTraceLog()...)

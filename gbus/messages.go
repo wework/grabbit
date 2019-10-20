@@ -18,7 +18,10 @@ type BusMessage struct {
 	Semantics         Semantics /*cmd or evt*/
 	Payload           Message
 	PayloadFQN        string
+	payloadBody       []byte
 	RPCID             string
+	Headers           amqp.Table
+	ContentType       string
 }
 
 //NewBusMessage factory method for creating a BusMessage that wraps the given payload
@@ -61,7 +64,9 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
 	headers["x-grabbit-msg-rpc-id"] = bm.RPCID
 	headers["x-msg-name"] = bm.Payload.SchemaName()
-
+	for headerKey, headerValue := range bm.Headers {
+		headers[headerKey] = headerValue
+	}
 	return
 }
 
@@ -72,6 +77,8 @@ func (bm *BusMessage) SetFromAMQPHeaders(delivery amqp.Delivery) {
 	bm.SagaCorrelationID = castToString(headers["x-msg-saga-correlation-id"])
 	bm.RPCID = castToString(headers["x-grabbit-msg-rpc-id"])
 	bm.PayloadFQN = GetMessageName(delivery)
+	bm.ContentType = delivery.ContentType
+	bm.Headers = delivery.Headers
 
 }
 
@@ -79,6 +86,10 @@ func (bm *BusMessage) SetFromAMQPHeaders(delivery amqp.Delivery) {
 func (bm *BusMessage) SetPayload(payload Message) {
 	bm.PayloadFQN = payload.SchemaName()
 	bm.Payload = payload
+}
+
+func (bm *BusMessage) SetPayloadBody(payload []byte) {
+	bm.payloadBody = payload
 }
 
 //TargetSaga allows sending the message to a specific Saga instance
@@ -96,6 +107,7 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 		log.String("SagaCorrelationID", bm.SagaCorrelationID),
 		log.String("Semantics", string(bm.Semantics)),
 		log.String("RPCID", bm.RPCID),
+		log.String("ContentType", bm.ContentType),
 	}
 }
 
