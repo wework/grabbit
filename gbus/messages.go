@@ -113,7 +113,7 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 func GetDeliveryLogEntries(delivery amqp.Delivery) logrus.Fields {
 
 	return logrus.Fields{
-		"message":         castToString(delivery.Headers["x-msg-name"]),
+		"message_name":    castToString(delivery.Headers["x-msg-name"]),
 		"message_id":      delivery.MessageId,
 		"routing_key":     delivery.RoutingKey,
 		"exchange":        delivery.Exchange,

@@ -124,7 +124,7 @@ func (worker *worker) extractBusMessage(delivery amqp.Delivery, msgSpecificLogEn
 	var decErr error
 	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 	if decErr != nil {
-		msgSpecificLogEntry.WithError(decErr).WithField("message_name", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
+		msgSpecificLogEntry.WithError(decErr).Error("failed to decode message. rejected as poison")
 		return nil, decErr
 	}
 	return bm, nil
@@ -418,10 +418,7 @@ func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Deliv
 		},
 	}
 	invocationLogger := msgSpecificLogEntry.
-		WithFields(logrus.Fields{"routing_key": delivery.RoutingKey,
-			"message_id":   message.ID,
-			"message_name": message.Payload.SchemaName(),
-			"handler_name": handlerName})
+		WithField("handler_name", handlerName)
 	invocation.SetLogger(invocationLogger)
 	return invocation
 }
