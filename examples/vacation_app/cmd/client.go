@@ -57,7 +57,6 @@ func HandleBookingComplete(invocation gbus.Invocation, message *gbus.BusMessage)
 	bookingComplete := message.Payload.(*messages.BookingComplete)
 	if bookingComplete.Success {
 		fmt.Printf("booking completed successfully\n")
-
 	} else {
 		fmt.Printf("failed to book vacation\n")
 	}
