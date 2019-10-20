@@ -7,6 +7,7 @@ import (
 
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -107,6 +108,20 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 		log.String("Semantics", string(bm.Semantics)),
 		log.String("RPCID", bm.RPCID),
 	}
+}
+
+func GetDeliveryLogEntries(delivery amqp.Delivery) logrus.Fields {
+
+	return logrus.Fields{
+		"message_name":    castToString(delivery.Headers["x-msg-name"]),
+		"message_id":      delivery.MessageId,
+		"routing_key":     delivery.RoutingKey,
+		"exchange":        delivery.Exchange,
+		"idempotency_key": castToString(delivery.Headers["x-idempotency-key"]),
+		"correlation_id":  castToString(delivery.CorrelationId),
+		"rpc_id":          castToString(delivery.Headers["x-grabbit-msg-rpc-id"]),
+	}
+
 }
 
 func castToString(i interface{}) string {

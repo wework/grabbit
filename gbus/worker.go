@@ -114,28 +114,28 @@ func (worker *worker) consumeRPC() {
 	}
 }
 
-func (worker *worker) extractBusMessage(delivery amqp.Delivery) (*BusMessage, error) {
+func (worker *worker) extractBusMessage(delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) (*BusMessage, error) {
 	bm, err := NewFromDelivery(delivery)
 	if err != nil {
-		worker.log().Warn("failed creating BusMessage from AMQP delivery")
+		msgSpecificLogEntry.Warn("failed creating BusMessage from AMQP delivery")
 		return nil, err
 	}
 
 	var decErr error
 	bm.Payload, decErr = worker.serializer.Decode(delivery.Body, bm.PayloadFQN)
 	if decErr != nil {
-		worker.log().WithError(decErr).WithField("message_name", bm.PayloadFQN).Error("failed to decode message. rejected as poison")
+		msgSpecificLogEntry.WithError(decErr).Error("failed to decode message. rejected as poison")
 		return nil, decErr
 	}
 	return bm, nil
 }
 
-func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) []MessageHandler {
+func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) []MessageHandler {
 	handlers := make([]MessageHandler, 0)
 	if isRPCreply {
 		rpcID, rpcHeaderFound := delivery.Headers[RPCHeaderName].(string)
 		if !rpcHeaderFound {
-			worker.log().Warn("rpc message received but no rpc header found...rejecting message")
+			msgSpecificLogEntry.Warn("rpc message received but no rpc header found...rejecting message")
 			return handlers
 		}
 		worker.rpcLock.Lock()
@@ -143,7 +143,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 		worker.rpcLock.Unlock()
 
 		if rpcHandler == nil {
-			worker.log().Warn("rpc message received but no rpc header found...rejecting message")
+			msgSpecificLogEntry.Warn("rpc message received but no rpc header found...rejecting message")
 			return handlers
 		}
 
@@ -152,7 +152,7 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 	} else {
 		exchange, routingKey, err := getRoutingParamsFromDelivery(delivery)
 		if err != nil {
-			worker.log().WithError(err).Warn("failed extracting exchange and routingKey from delivery...rejecting message")
+			msgSpecificLogEntry.WithError(err).Warn("failed extracting exchange and routingKey from delivery...rejecting message")
 			return handlers
 		}
 
@@ -164,9 +164,6 @@ func (worker *worker) resolveHandlers(isRPCreply bool, delivery amqp.Delivery) [
 				handlers = append(handlers, registration.Handler)
 			}
 		}
-	}
-	if len(handlers) > 0 {
-		worker.log().WithFields(logrus.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 	}
 
 	return handlers
@@ -192,25 +189,25 @@ func getRoutingParamsFromDelivery(delivery amqp.Delivery) (exchange string, rout
 	return delivery.Exchange, delivery.RoutingKey, nil
 }
 
-func (worker *worker) ack(delivery amqp.Delivery) error {
+func (worker *worker) ack(delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) error {
 	ack := func(attempts uint) error { return delivery.Ack(false /*multiple*/) }
-	worker.log().WithField("message_id", delivery.MessageId).Debug("acking message")
+	msgSpecificLogEntry.Debug("acking message")
 	err := retry.Retry(ack,
 		strategy.Wait(100*time.Millisecond))
 
 	if err != nil {
-		worker.log().WithError(err).Error("could not ack the message")
+		msgSpecificLogEntry.WithError(err).Error("could not ack the message")
 		worker.span.LogFields(slog.Error(err))
 	} else {
-		worker.log().WithField("message_id", delivery.MessageId).Debug("message acked")
+		msgSpecificLogEntry.Debug("message acked")
 	}
 
 	return err
 }
 
-func (worker *worker) reject(requeue bool, delivery amqp.Delivery) error {
+func (worker *worker) reject(requeue bool, delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) error {
 	reject := func(attempts uint) error { return delivery.Reject(requeue /*multiple*/) }
-	worker.log().WithFields(logrus.Fields{"message_id": delivery.MessageId, "requeue": requeue}).Info("rejecting message")
+	msgSpecificLogEntry.WithField("requeue", requeue).Info("rejecting message")
 	err := retry.Retry(reject,
 		strategy.Wait(100*time.Millisecond))
 	if err != nil {
@@ -233,7 +230,7 @@ func (worker *worker) isDead(delivery amqp.Delivery) bool {
 	return false
 }
 
-func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
+func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) {
 	txWrapper := func(tx *sql.Tx) error {
 		handlerWrapper := func() error {
 			return worker.deadletterHandler(tx, &delivery)
@@ -241,12 +238,12 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery) {
 		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), fmt.Sprintf("deadletter_%s", delivery.Type), worker.log())
 	}
 
-	err := worker.withTx(txWrapper)
+	err := worker.withTx(txWrapper, msgSpecificLogEntry)
 	if err != nil {
 		//we reject the deelivery but requeue it so the message will not be lost and recovered to the dlq
-		_ = worker.reject(true, delivery)
+		_ = worker.reject(true, delivery, msgSpecificLogEntry)
 	} else {
-		_ = worker.ack(delivery)
+		_ = worker.ack(delivery, msgSpecificLogEntry)
 	}
 }
 
@@ -265,7 +262,7 @@ func (worker *worker) extractOpenTracingSpan(delivery amqp.Delivery, actionName 
 
 }
 
-func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
+func (worker *worker) runGlobalHandler(delivery *amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) error {
 	if worker.globalRawHandler != nil {
 		handlerName := worker.globalRawHandler.Name()
 		retryAction := func() error {
@@ -274,7 +271,7 @@ func (worker *worker) runGlobalHandler(delivery *amqp.Delivery) error {
 					return worker.globalRawHandler(tx, delivery)
 				}
 				//run the global handler inside a  transactions
-				return worker.withTx(txWrapper)
+				return worker.withTx(txWrapper, msgSpecificLogEntry)
 			}
 			//run the global handler with metrics
 			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, delivery.Type, worker.log())
@@ -288,60 +285,57 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	span, ctx := worker.extractOpenTracingSpan(delivery, "ProcessMessage")
 	worker.span = span
 	defer worker.span.Finish()
+
+	msgSpecificLogEntry := worker.log().WithFields(GetDeliveryLogEntries(delivery))
+
 	//catch all error handling so goroutine will not crash
 	defer func() {
 		if r := recover(); r != nil {
-			logEntry := worker.log().WithField("worker", worker.consumerTag)
 			if err, ok := r.(error); ok {
 				worker.span.LogFields(slog.Error(err))
-				logEntry = logEntry.WithError(err)
+				msgSpecificLogEntry = msgSpecificLogEntry.WithError(err)
 			} else {
-				logEntry = logEntry.WithField("panic", r)
+				msgSpecificLogEntry = msgSpecificLogEntry.WithField("panic", r)
 			}
 			worker.span.LogFields(slog.String("panic", "failed to process message"))
-			logEntry.Error("failed to process message")
-			_ = worker.reject(false, delivery)
+			msgSpecificLogEntry.Error("failed to process message")
+			_ = worker.reject(false, delivery, msgSpecificLogEntry)
 		}
 	}()
 
-	worker.log().WithFields(logrus.Fields{"worker": worker.consumerTag, "message_id": delivery.MessageId}).Info("GOT MSG")
+	msgSpecificLogEntry.Info("GOT MSG")
 
 	//handle a message that originated from a deadletter exchange
 	if worker.isDead(delivery) && worker.deadletterHandler != nil {
 		worker.span.LogFields(slog.Error(errors.New("handling dead-letter delivery")))
-		worker.log().Info("invoking deadletter handler")
-		worker.invokeDeadletterHandler(delivery)
+		msgSpecificLogEntry.Info("invoking deadletter handler")
+		worker.invokeDeadletterHandler(delivery, msgSpecificLogEntry)
 		return
 	}
 
-	if err := worker.runGlobalHandler(&delivery); err != nil {
+	if err := worker.runGlobalHandler(&delivery, msgSpecificLogEntry); err != nil {
 		//when the global handler fails terminate executation and reject the message
-		_ = worker.reject(false, delivery)
+		_ = worker.reject(false, delivery, msgSpecificLogEntry)
 		return
 	}
 
 	//TODO:Dedup message
-	msgName := GetMessageName(delivery)
-	handlers := worker.resolveHandlers(isRPCreply, delivery)
+
+	handlers := worker.resolveHandlers(isRPCreply, delivery, msgSpecificLogEntry)
 	if len(handlers) == 0 {
-		worker.log().
-			WithFields(
-				logrus.Fields{"message-name": msgName}).
-			Warn("Message received but no handlers found")
+		msgSpecificLogEntry.Warn("Message received but no handlers found")
 		worker.span.LogFields(slog.String("grabbit", "no handlers found"))
 		//remove the message by acking it and not rejecting it so it will not be routed to a deadletter queue
-		_ = worker.ack(delivery)
+		_ = worker.ack(delivery, msgSpecificLogEntry)
 		return
 	}
+	msgSpecificLogEntry.WithFields(logrus.Fields{"number_of_handlers": len(handlers)}).Info("found message handlers")
 
 	if delivery.Body == nil {
-		worker.log().
-			WithFields(
-				logrus.Fields{"message-name": msgName}).
-			Warn("body is missing for message. Cannot invoke handlers.")
+		msgSpecificLogEntry.Warn("body is missing for message. Cannot invoke handlers.")
 		worker.span.LogFields(slog.String("grabbit", "no body found"))
 		// if there are handlers registered for this type of message, it's a bug and the message must be rejected.
-		_ = worker.reject(false, delivery)
+		_ = worker.reject(false, delivery, msgSpecificLogEntry)
 		return
 	}
 	/*
@@ -349,36 +343,36 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		it includes deserializing the amqp payload which we want to avoid if no handlers are found
 		(for instance if a reply message arrives but bo handler is registered for that type of message)
 	*/
-	bm, err := worker.extractBusMessage(delivery)
+	bm, err := worker.extractBusMessage(delivery, msgSpecificLogEntry)
 	if err != nil {
 		worker.span.LogFields(slog.Error(err), slog.String("grabbit", "message is poison"))
 		//reject poison message
-		_ = worker.reject(false, delivery)
+		_ = worker.reject(false, delivery, msgSpecificLogEntry)
 		return
 	}
 
-	err = worker.invokeHandlers(ctx, handlers, bm, &delivery)
+	err = worker.invokeHandlers(ctx, handlers, bm, &delivery, msgSpecificLogEntry)
 	if err == nil {
-		_ = worker.ack(delivery)
+		_ = worker.ack(delivery, msgSpecificLogEntry)
 	} else {
-		logErr := logrushandler.New(worker.log())
+		logErr := logrushandler.New(msgSpecificLogEntry)
 		logErr.Handle(err)
-		_ = worker.reject(false, delivery)
+		_ = worker.reject(false, delivery, msgSpecificLogEntry)
 	}
 }
 
-func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr error) {
+func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error, msgSpecificLogEntry logrus.FieldLogger) (actionErr error) {
 
 	var tx *sql.Tx
 	defer func() {
 		if p := recover(); p != nil {
 			pncMsg := fmt.Sprintf("%v\n%s", p, debug.Stack())
-			worker.log().WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
+			msgSpecificLogEntry.WithField("stack", pncMsg).Error("recovered from panic while invoking handler")
 			actionErr = errors.New(pncMsg)
 			if tx != nil {
 				rbkErr := tx.Rollback()
 				if rbkErr != nil {
-					worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
+					msgSpecificLogEntry.WithError(rbkErr).Error("failed rolling back transaction when recovering from handler panic")
 				}
 			}
 			worker.span.LogFields(slog.Error(actionErr))
@@ -386,7 +380,7 @@ func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr e
 	}()
 	tx, txCreateErr := worker.txProvider.New()
 	if txCreateErr != nil {
-		worker.log().WithError(txCreateErr).Error("failed creating new tx")
+		msgSpecificLogEntry.WithError(txCreateErr).Error("failed creating new tx")
 		worker.span.LogFields(slog.Error(txCreateErr))
 		return txCreateErr
 	}
@@ -395,20 +389,20 @@ func (worker *worker) withTx(handlerWrapper func(tx *sql.Tx) error) (actionErr e
 	if handlerErr != nil {
 		rbkErr := tx.Rollback()
 		if rbkErr != nil {
-			worker.log().WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
+			msgSpecificLogEntry.WithError(rbkErr).Error("failed rolling back transaction when recovering from handler error")
 			return rbkErr
 		}
 		return handlerErr
 	}
 	cmtErr := tx.Commit()
 	if cmtErr != nil {
-		worker.log().WithError(cmtErr).Error("failed committing transaction after invoking handlers")
+		msgSpecificLogEntry.WithError(cmtErr).Error("failed committing transaction after invoking handlers")
 		return cmtErr
 	}
 	return nil
 }
 
-func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage, handlerName string) *defaultInvocationContext {
+func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Delivery, tx *sql.Tx, attempt uint, message *BusMessage, handlerName string, msgSpecificLogEntry logrus.FieldLogger) *defaultInvocationContext {
 	invocation := &defaultInvocationContext{
 		Glogged:     &Glogged{},
 		invokingSvc: delivery.ReplyTo,
@@ -423,16 +417,13 @@ func (worker *worker) createInvocation(ctx context.Context, delivery *amqp.Deliv
 			MaxRetryCount: MaxRetryCount,
 		},
 	}
-	invocationLogger := worker.log().
-		WithFields(logrus.Fields{"routing_key": delivery.RoutingKey,
-			"message_id":   message.ID,
-			"message_name": message.Payload.SchemaName(),
-			"handler_name": handlerName})
+	invocationLogger := msgSpecificLogEntry.
+		WithField("handler_name", handlerName)
 	invocation.SetLogger(invocationLogger)
 	return invocation
 }
 
-func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery) (err error) {
+func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHandler, message *BusMessage, delivery *amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) (err error) {
 
 	//this is the action that will get retried
 	// each retry should run a new and separate transaction which should end with a commit or rollback
@@ -449,7 +440,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				pinedHandler := handler //https://github.com/kyoh86/scopelint
 				handlerName := pinedHandler.Name()
 				hspan, hsctx := opentracing.StartSpanFromContext(sctx, handlerName)
-				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message, handlerName)
+				invocation := worker.createInvocation(hsctx, delivery, tx, attempt, message, handlerName, msgSpecificLogEntry)
 				//execute the handler with metrics
 				handlerErr := metrics.RunHandlerWithMetric(func() error {
 					return pinedHandler(invocation, message)
@@ -462,7 +453,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				return handlerErr
 			}
 
-			err := worker.withTx(handlerWrapper)
+			err := worker.withTx(handlerWrapper, msgSpecificLogEntry)
 			if err != nil {
 				return err
 			}
@@ -483,7 +474,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 }
 
 func (worker *worker) log() logrus.FieldLogger {
-	return worker.b.Log()
+	return worker.b.Log().WithField("worker", worker.consumerTag)
 }
 
 func (worker *worker) AddRegistration(registration *Registration) {
