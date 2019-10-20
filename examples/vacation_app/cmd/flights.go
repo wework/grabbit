@@ -4,14 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"vacation_app/trace"
+  
 	"vacation_app/messages"
-
+	"vacation_app/trace"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/wework/grabbit/gbus"
 )
-
 
 
 var runFlightsgServiceCmd = &cobra.Command{
@@ -30,7 +29,8 @@ var runFlightsgServiceCmd = &cobra.Command{
 		gb := createBus(svcName)
 
 		gb.HandleMessage(messages.BookFlightsCmd{}, HandleBookFlightCommand)
-	gb.HandleMessage(messages.CancelFlightsCmd{}, HandleCancelFlightCommand)
+
+		gb.HandleMessage(messages.CancelFlightsCmd{}, HandleCancelFlightCommand)
 
 		gb.Start()
 		defer gb.Shutdown()

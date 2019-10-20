@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func TestSendCommand(t *testing.T) {
 	}
 	defer assertBusShutdown(b, t)
 
-	err = b.Send(noopTraceContext(), testSvc1, gbus.NewBusMessage(cmd))
+	err = b.Send(context.Background(), testSvc1, gbus.NewBusMessage(cmd))
 	if err != nil {
 		t.Errorf("could not send message error: %s", err.Error())
 		return
@@ -73,7 +74,7 @@ func TestReply(t *testing.T) {
 
 	proceed := make(chan bool)
 	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		err := invocation.Reply(noopTraceContext(), gbus.NewBusMessage(reply))
+		err := invocation.Reply(context.Background(), gbus.NewBusMessage(reply))
 		if err != nil {
 			t.Errorf("could not send reply with error: %s", err.Error())
 			return err
@@ -105,7 +106,7 @@ func TestReply(t *testing.T) {
 	svc2.Start()
 	defer assertBusShutdown(svc2, t)
 
-	svc1.Send(noopTraceContext(), testSvc2, cmdBusMsg)
+	svc1.Send(context.Background(), testSvc2, cmdBusMsg)
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
@@ -122,7 +123,7 @@ func TestPubSub(t *testing.T) {
 
 	b.Start()
 	defer assertBusShutdown(b, t)
-	err := b.Publish(noopTraceContext(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
+	err := b.Publish(context.Background(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestSubscribingOnTopic(t *testing.T) {
 
 	b.Start()
 	defer assertBusShutdown(b, t)
-	err := b.Publish(noopTraceContext(), "test_exchange", "a.b.c", gbus.NewBusMessage(event))
+	err := b.Publish(context.Background(), "test_exchange", "a.b.c", gbus.NewBusMessage(event))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +165,7 @@ func TestHandlerRetry(t *testing.T) {
 	bus := createBusForTest()
 
 	cmdHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		return invocation.Reply(noopTraceContext(), reply)
+		return invocation.Reply(context.Background(), reply)
 	}
 
 	bus.HandleMessage(c1, cmdHandler)
@@ -173,7 +174,7 @@ func TestHandlerRetry(t *testing.T) {
 	bus.Start()
 	defer assertBusShutdown(bus, t)
 
-	bus.Send(noopTraceContext(), testSvc1, cmd)
+	bus.Send(context.Background(), testSvc1, cmd)
 	<-handlerRetryProceed
 
 	hm := metrics.GetHandlerMetrics("handleRetry")
@@ -220,7 +221,7 @@ func TestRPC(t *testing.T) {
 
 	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
 
-		return invocation.Reply(noopTraceContext(), reply)
+		return invocation.Reply(context.Background(), reply)
 	}
 
 	svc1 := createNamedBusForTest(testSvc1)
@@ -231,7 +232,7 @@ func TestRPC(t *testing.T) {
 	svc2.Start()
 	defer assertBusShutdown(svc2, t)
 	t.Log("Sending RPC")
-	reply, _ = svc2.RPC(noopTraceContext(), testSvc1, cmd, reply, 5*time.Second)
+	reply, _ = svc2.RPC(context.Background(), testSvc1, cmd, reply, 5*time.Second)
 	t.Log("Tested RPC")
 	if reply == nil {
 		t.Fail()
@@ -253,7 +254,7 @@ func TestDeadlettering(t *testing.T) {
 	}
 
 	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		return errors.New("fail")
+		return errors.New("TestDeadlettering simulating a failed handler")
 	}
 
 	deadletterSvc.HandleDeadletter(deadMessageHandler)
@@ -320,10 +321,56 @@ func TestRawMessageHandling(t *testing.T) {
 	proceedOrTimeout(2, proceed, nil, t)
 }
 
+func TestGlobalRawMessageHandlingErr(t *testing.T) {
+	metrics.ResetRejectedMessagesCounter()
+	/*
+		tests issues:
+		https://github.com/wework/grabbit/issues/187
+		https://github.com/wework/grabbit/issues/188
+	*/
+	var otherHandlerCalled bool
+
+	handler := func(tx *sql.Tx, delivery *amqp.Delivery) error {
+
+		return errors.New("other handlers should not be called")
+	}
+
+	//this handler should not be invoked by the bus, if it does the test should fail
+	otherHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		otherHandlerCalled = true
+		return nil
+	}
+	svc1 := createNamedBusForTest(testSvc1)
+	svc1.SetGlobalRawMessageHandler(handler)
+	svc1.HandleMessage(Command1{}, otherHandler)
+	_ = svc1.Start()
+	defer assertBusShutdown(svc1, t)
+
+	cmd1 := gbus.NewBusMessage(Command1{})
+	_ = svc1.Send(context.Background(), testSvc1, cmd1)
+
+	if otherHandlerCalled == true {
+		t.Fail()
+	}
+
+	//delay test execution so to make sure the second handler is not called
+	time.Sleep(1500 * time.Millisecond)
+	rejected, _ := metrics.GetRejectedMessagesValue()
+	if rejected != 1 {
+		t.Errorf("rejected messages metric was expected to be 1 but was %f", rejected)
+	}
+
+	if otherHandlerCalled {
+		t.Errorf("other handler that was not expected to be called was called ")
+	}
+}
+
 func TestReturnDeadToQueue(t *testing.T) {
 
-	var visited bool
-	proceed := make(chan bool)
+	var visitedMessageHandler, visitedEventHandler bool
+	messageProceed, eventProceed := make(chan bool), make(chan bool)
+
 	poison := gbus.NewBusMessage(Command1{})
 
 	service1 := createBusWithConfig(testSvc1, "grabbit-dead", true, true,
@@ -334,21 +381,34 @@ func TestReturnDeadToQueue(t *testing.T) {
 
 	deadMessageHandler := func(tx *sql.Tx, poison *amqp.Delivery) error {
 		pub := amqpDeliveryToPublishing(poison)
-		deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		err := deadletterSvc.ReturnDeadToQueue(context.Background(), &pub)
+		if err != nil {
+			t.Fatalf("failed returning dead to queue with error: %s", err.Error())
+		}
 		return nil
 	}
 
-	faultyHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
-		if visited {
-			proceed <- true
+	faultyMessageHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		if visitedMessageHandler {
+			messageProceed <- true
 			return nil
 		}
-		visited = true
+		visitedMessageHandler = true
+		return errors.New("fail")
+	}
+
+	faultyEventHandler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		if visitedEventHandler {
+			eventProceed <- true
+			return nil
+		}
+		visitedEventHandler = true
 		return errors.New("fail")
 	}
 
 	deadletterSvc.HandleDeadletter(deadMessageHandler)
-	service1.HandleMessage(Command1{}, faultyHandler)
+	service1.HandleMessage(Command1{}, faultyMessageHandler)
+	service1.HandleEvent("exchange", "topic", Command1{}, faultyEventHandler)
 
 	deadletterSvc.Start()
 	defer assertBusShutdown(deadletterSvc, t)
@@ -356,7 +416,10 @@ func TestReturnDeadToQueue(t *testing.T) {
 	defer assertBusShutdown(service1, t)
 
 	service1.Send(context.Background(), testSvc1, poison)
-	proceedOrTimeout(2, proceed, nil, t)
+	proceedOrTimeout(2, messageProceed, nil, t)
+
+	service1.Publish(context.Background(), "exchange", "topic", poison)
+	proceedOrTimeout(2, eventProceed, nil, t)
 }
 
 func TestDeadLetterHandlerPanic(t *testing.T) {
@@ -426,7 +489,7 @@ func TestRegistrationAfterBusStarts(t *testing.T) {
 	defer assertBusShutdown(b, t)
 
 	b.HandleEvent("test_exchange", "test_topic", event, eventHandler)
-	err := b.Publish(noopTraceContext(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
+	err := b.Publish(context.Background(), "test_exchange", "test_topic", gbus.NewBusMessage(event))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -681,7 +744,7 @@ func TestSendEmptyBody(t *testing.T) {
 	}
 	defer assertBusShutdown(b, t)
 
-	err = b.Send(noopTraceContext(), testSvc1, cmd)
+	err = b.Send(context.Background(), testSvc1, cmd)
 	if err != nil {
 		t.Errorf("could not send message error: %s", err.Error())
 		return
@@ -715,12 +778,38 @@ func TestSanitizingSvcName(t *testing.T) {
 	fmt.Println("succeeded sanitizing service name")
 }
 
-func noopTraceContext() context.Context {
-	return context.Background()
-	// tracer := opentracing.NoopTracer{}
-	// span := tracer.StartSpan("test")
-	// ctx := opentracing.ContextWithSpan(context.Background(), span)
-	// return ctx
+func TestIdempotencyKeyHeaders(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	keys := make([]string, 0)
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+		keys = append(keys, message.IdempotencyKey)
+		wg.Done()
+		return nil
+	}
+
+	bus := createNamedBusForTest(testSvc1)
+
+	bus.HandleMessage(Command1{}, handler)
+	bus.Start()
+	defer bus.Shutdown()
+
+	cmd1 := gbus.NewBusMessage(Command1{})
+	cmd1.SetIdempotencyKey("some-unique-key")
+
+	cmd2 := gbus.NewBusMessage(Command1{})
+	cmd2.SetIdempotencyKey("some-unique-key")
+
+	//send two commands with the same IdempotencyKey to test that the same IdempotencyKey is propogated
+	bus.Send(context.Background(), testSvc1, cmd1)
+	bus.Send(context.Background(), testSvc1, cmd2)
+
+	wg.Wait()
+
+	if keys[0] != keys[1] && keys[0] != "" {
+		t.Errorf("expected same IdempotencyKey. actual key1:%s, key2%s", keys[0], keys[1])
+	}
+
 }
 
 func amqpDeliveryToPublishing(del *amqp.Delivery) (pub amqp.Publishing) {
@@ -761,7 +850,7 @@ func proceedOrTimeout(timeout time.Duration, p chan bool, onProceed func(), t *t
 		if onProceed != nil {
 			onProceed()
 		}
-	case <-time.After(timeout * time.Second):
+	case <-time.After(timeout * time.Second * 5):
 		t.Fatal("timeout")
 	}
 }

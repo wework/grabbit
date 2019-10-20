@@ -9,12 +9,16 @@ annotated with the following contextual data (added as logrus fields to the log 
 allowing for a better debugging experience.
 
 - _service: the service name
+- correlation_id: the correlation id set for the message
+- exchange: the exchange the message was published to
 - handler_name: the name of the handler being invoked
+- idempotency_key: the idempotency key set for the message
 - message_id: the id of the processed message
 - message_name: the type of the message that is being processed
 - routing_key: the routing_key of the message
 - saga_id: the id of the saga instance being invoked
-- saga_def: the type of the saga that is being invoked 
+- saga_def: the type of the saga that is being invoked
+- worker: the worker identifier that is processing the message
 
 ```go
 

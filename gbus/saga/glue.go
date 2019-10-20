@@ -104,28 +104,29 @@ func (imsm *Glue) getDefsForMsgName(msgName string) []*Def {
 func (imsm *Glue) handleNewSaga(def *Def, invocation gbus.Invocation, message *gbus.BusMessage) error {
 	newInstance := def.newInstance()
 	newInstance.StartedBy = invocation.InvokingSvc()
-	newInstance.StartedBySaga = message.SagaCorrelationID
+	newInstance.StartedBySaga = message.SagaID
 	newInstance.StartedByRPCID = message.RPCID
 	newInstance.StartedByMessageID = message.ID
 
-	imsm.Log().
-		WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID}).
+	logInContext := invocation.Log().WithFields(logrus.Fields{"saga_def": def.String(), "saga_id": newInstance.ID})
+
+	logInContext.
 		Info("created new saga")
 	if invkErr := imsm.invokeSagaInstance(def, newInstance, invocation, message); invkErr != nil {
-		imsm.Log().WithError(invkErr).WithField("saga_id", newInstance.ID).Error("failed to invoke saga")
+		logInContext.Error("failed to invoke saga")
 		return invkErr
 	}
 
 	if !newInstance.isComplete() {
-		imsm.Log().WithField("saga_id", newInstance.ID).Info("saving new saga")
+		logInContext.Info("saving new saga")
 
 		if e := imsm.sagaStore.SaveNewSaga(invocation.Tx(), def.sagaType, newInstance); e != nil {
-			imsm.Log().WithError(e).WithField("saga_id", newInstance.ID).Error("saving new saga failed")
+			logInContext.Error("saving new saga failed")
 			return e
 		}
 
 		if requestsTimeout, duration := newInstance.requestsTimeout(); requestsTimeout {
-			imsm.Log().WithFields(logrus.Fields{"saga_id": newInstance.ID, "timeout_duration": duration}).Info("new saga requested timeout")
+			logInContext.WithField("timeout_duration", duration).Info("new saga requested timeout")
 			if tme := imsm.timeoutManager.RegisterTimeout(invocation.Tx(), newInstance.ID, duration); tme != nil {
 				return tme
 			}
@@ -152,6 +153,9 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 			4) Else if message is not an event drop it (cmd messages should have 1 specific target)
 			5) Else iterate over all instances and invoke the needed handler
 		*/
+		logInContext := invocation.Log().WithFields(
+			logrus.Fields{"saga_def": def.String(),
+				"saga_type": def.sagaType})
 		startNew := def.shouldStartNewSaga(message)
 		if startNew {
 			return imsm.handleNewSaga(def, invocation, message)
@@ -159,39 +163,50 @@ func (imsm *Glue) SagaHandler(invocation gbus.Invocation, message *gbus.BusMessa
 		} else if message.SagaCorrelationID != "" {
 			instance, getErr := imsm.sagaStore.GetSagaByID(invocation.Tx(), message.SagaCorrelationID)
 
+			logInContext = logInContext.WithField("saga_correlation_id", message.SagaCorrelationID)
 			if getErr != nil {
-				imsm.Log().WithError(getErr).WithField("saga_id", message.SagaCorrelationID).Error("failed to fetch saga by id")
+				logInContext.Error("failed to fetch saga by id")
 				return getErr
 			}
 			if instance == nil {
-				e := fmt.Errorf("Warning:Failed message routed with SagaCorrelationID:%v but no saga instance with the same id found ", message.SagaCorrelationID)
-				return e
+				/*
+					In this case we should not return an error but rather log a Warn/Info and return nil
+					There are edge cases in which the instance can be nil  due to completion of the saga
+					on a different node or worker.
+					In cases like these returning an error here would prevent additional handlers to be invoked
+					as the message will get rejected and transactions will be rolledback
+
+					https://github.com/wework/grabbit/issues/196
+				*/
+				logInContext.Warn("message routed with SagaCorrelationID but no saga instance with the same id found")
+				return nil
 			}
+			logInContext = logInContext.WithField("saga_id", instance.ID)
 			def.configureSaga(instance)
 			if invkErr := imsm.invokeSagaInstance(def, instance, invocation, message); invkErr != nil {
-				imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+				logInContext.WithError(invkErr).Error("failed to invoke saga")
 				return invkErr
 			}
 
 			return imsm.completeOrUpdateSaga(invocation.Tx(), instance)
 
 		} else if message.Semantics == gbus.CMD {
-			e := fmt.Errorf("Warning:Command or Reply message with no saga reference received. message will be dropped.\nmessage as of type:%v", reflect.TypeOf(message).Name())
-			return e
+			logInContext.Warn("command or reply message with no saga reference received")
+			return errors.New("can not resolve saga instance for message")
 		} else {
 
-			imsm.Log().WithFields(logrus.Fields{"saga_type": def.sagaType, "message": msgName}).Info("fetching saga instances by type")
+			logInContext.Info("fetching saga instances by type")
 			instances, e := imsm.sagaStore.GetSagasByType(invocation.Tx(), def.sagaType)
 
 			if e != nil {
 				return e
 			}
-			imsm.Log().WithFields(logrus.Fields{"message": msgName, "instances_fetched": len(instances)}).Info("fetched saga instances")
+			logInContext.WithFields(logrus.Fields{"instances_fetched": len(instances)}).Info("fetched saga instances")
 
 			for _, instance := range instances {
 				def.configureSaga(instance)
 				if invkErr := imsm.invokeSagaInstance(def, instance, invocation, message); invkErr != nil {
-					imsm.Log().WithError(invkErr).WithField("saga_id", instance.ID).Error("failed to invoke saga")
+					logInContext.WithError(invkErr).Error("failed to invoke saga")
 					return invkErr
 				}
 				e = imsm.completeOrUpdateSaga(invocation.Tx(), instance)

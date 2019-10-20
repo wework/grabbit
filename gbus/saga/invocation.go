@@ -34,7 +34,7 @@ type sagaInvocation struct {
 	startedByRPCID string
 }
 
-func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool) {
+func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bool, targetService string) {
 
 	message.CorrelationID = si.inboundMsg.ID
 	message.SagaID = si.sagaID
@@ -46,7 +46,7 @@ func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, isEvent bo
 		}
 		//if the saga is potentially invoking itself then set the SagaCorrelationID to reflect that
 		//https://github.com/wework/grabbit/issues/64
-		_, targetService := si.decoratedInvocation.Routing()
+
 		if targetService == si.hostingSvc {
 			message.SagaCorrelationID = message.SagaID
 		}
@@ -63,14 +63,14 @@ func (si *sagaInvocation) InvokingSvc() string {
 }
 
 func (si *sagaInvocation) Reply(ctx context.Context, message *gbus.BusMessage) error {
-
-	si.setCorrelationIDs(message, false)
+	_, targetService := si.decoratedInvocation.Routing()
+	si.setCorrelationIDs(message, false, targetService)
 	return si.decoratedInvocation.Reply(ctx, message)
 }
 
 func (si *sagaInvocation) ReplyToInitiator(ctx context.Context, message *gbus.BusMessage) error {
 
-	si.setCorrelationIDs(message, false)
+	si.setCorrelationIDs(message, false, si.startedBy)
 
 	//override the correlation ids to those of the message creating the saga
 	message.SagaCorrelationID = si.startedBySaga
@@ -93,13 +93,13 @@ func (si *sagaInvocation) Ctx() context.Context {
 
 func (si *sagaInvocation) Send(ctx context.Context, toService string,
 	command *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
-	si.setCorrelationIDs(command, false)
+	si.setCorrelationIDs(command, false, toService)
 	return si.decoratedBus.Send(ctx, toService, command, policies...)
 }
 
 func (si *sagaInvocation) Publish(ctx context.Context, exchange, topic string,
 	event *gbus.BusMessage, policies ...gbus.MessagePolicy) error {
-	si.setCorrelationIDs(event, true)
+	si.setCorrelationIDs(event, true, "")
 	return si.decoratedBus.Publish(ctx, exchange, topic, event, policies...)
 }
 

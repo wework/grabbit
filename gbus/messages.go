@@ -3,15 +3,18 @@ package gbus
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
 //BusMessage the structure that gets sent to the underlying transport
 type BusMessage struct {
 	ID                string
+	IdempotencyKey    string
 	CorrelationID     string
 	SagaID            string
 	SagaCorrelationID string
@@ -26,6 +29,7 @@ func NewBusMessage(payload Message) *BusMessage {
 	bm := &BusMessage{
 		ID: xid.New().String(),
 	}
+	bm.SetIdempotencyKey(bm.ID)
 	bm.SetPayload(payload)
 	return bm
 }
@@ -57,6 +61,7 @@ func GetMessageName(delivery amqp.Delivery) string {
 //GetAMQPHeaders convert to AMQP headers Table everything but a payload
 func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 	headers = amqp.Table{}
+	headers["x-idempotency-key"] = bm.IdempotencyKey
 	headers["x-msg-saga-id"] = bm.SagaID
 	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
 	headers["x-grabbit-msg-rpc-id"] = bm.RPCID
@@ -68,6 +73,7 @@ func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
 func (bm *BusMessage) SetFromAMQPHeaders(delivery amqp.Delivery) {
 	headers := delivery.Headers
+	bm.IdempotencyKey = castToString(headers["x-idempotency-key"])
 	bm.SagaID = castToString(headers["x-msg-saga-id"])
 	bm.SagaCorrelationID = castToString(headers["x-msg-saga-correlation-id"])
 	bm.RPCID = castToString(headers["x-grabbit-msg-rpc-id"])
@@ -81,6 +87,10 @@ func (bm *BusMessage) SetPayload(payload Message) {
 	bm.Payload = payload
 }
 
+func (bm *BusMessage) SetIdempotencyKey(idempotencyKey string) {
+	bm.IdempotencyKey = strings.TrimSpace(idempotencyKey)
+}
+
 //TargetSaga allows sending the message to a specific Saga instance
 func (bm *BusMessage) TargetSaga(sagaID string) {
 	bm.SagaCorrelationID = sagaID
@@ -91,12 +101,27 @@ func (bm *BusMessage) GetTraceLog() (fields []log.Field) {
 	return []log.Field{
 		log.String("message", bm.PayloadFQN),
 		log.String("ID", bm.ID),
+		log.String("IdempotencyKey", bm.IdempotencyKey),
 		log.String("SagaID", bm.SagaID),
 		log.String("CorrelationID", bm.CorrelationID),
 		log.String("SagaCorrelationID", bm.SagaCorrelationID),
 		log.String("Semantics", string(bm.Semantics)),
 		log.String("RPCID", bm.RPCID),
 	}
+}
+
+func GetDeliveryLogEntries(delivery amqp.Delivery) logrus.Fields {
+
+	return logrus.Fields{
+		"message_name":    castToString(delivery.Headers["x-msg-name"]),
+		"message_id":      delivery.MessageId,
+		"routing_key":     delivery.RoutingKey,
+		"exchange":        delivery.Exchange,
+		"idempotency_key": castToString(delivery.Headers["x-idempotency-key"]),
+		"correlation_id":  castToString(delivery.CorrelationId),
+		"rpc_id":          castToString(delivery.Headers["x-grabbit-msg-rpc-id"]),
+	}
+
 }
 
 func castToString(i interface{}) string {
@@ -117,4 +142,9 @@ type SagaTimeoutMessage struct {
 //SchemaName implements gbus.Message
 func (SagaTimeoutMessage) SchemaName() string {
 	return "grabbit.timeout"
+}
+
+func isResurrectedMessage(delivery amqp.Delivery) bool {
+	isResurrected, ok := delivery.Headers[ResurrectedHeaderName].(bool)
+	return ok && isResurrected
 }

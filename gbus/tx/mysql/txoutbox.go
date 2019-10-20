@@ -10,22 +10,24 @@ import (
 	"time"
 
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/metrics"
 	"github.com/wework/grabbit/gbus/tx"
 )
 
+const (
+	Pending int = iota + 1
+	Sent
+)
+
 var (
-	pending int
-	//waitingConfirm = 1
-
-	//TODO:get these values from configuration
-	maxPageSize         = 500
-	maxDeliveryAttempts = 50
-	sendInterval        = time.Second
-
+	maxPageSize      = 500
+	sendInterval     = time.Second
 	scavengeInterval = time.Second * 60
+	metricsInterval  = time.Second * 15
 	ackers           = 10
 )
 
@@ -50,6 +52,14 @@ func (outbox *TxOutbox) log() *log.Entry {
 
 //Start starts the transactional outbox that is used to send messages in sync with domain object change
 func (outbox *TxOutbox) Start(amqpOut *gbus.AMQPOutbox) error {
+	outbox.Log().WithFields(
+		logrus.Fields{
+			"send_interval":     sendInterval,
+			"scavange_interval": scavengeInterval,
+			"page_szie":         maxPageSize,
+			"ackers":            ackers,
+		},
+	).Info("mysql transactional outbox configured")
 	outbox.gl = &sync.Mutex{}
 	outbox.recordsPendingConfirms = make(map[uint64]int)
 	tx, e := outbox.txProv.New()
@@ -88,7 +98,6 @@ func (outbox *TxOutbox) Stop() error {
 
 //Save stores a message in a DB to ensure delivery
 func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessage amqp.Publishing) error {
-
 	insertSQL := `INSERT INTO ` + getOutboxName(outbox.svcName) + ` (
 							 message_id,
 							 message_type,
@@ -106,7 +115,7 @@ func (outbox *TxOutbox) Save(tx *sql.Tx, exchange, routingKey string, amqpMessag
 		return err
 	}
 	unknownDeliverTag := -1
-	_, insertErr := tx.Exec(insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), pending)
+	_, insertErr := tx.Exec(insertSQL, amqpMessage.MessageId, amqpMessage.Headers["x-msg-name"], unknownDeliverTag, exchange, routingKey, buf.Bytes(), Pending)
 
 	return insertErr
 }
@@ -119,9 +128,10 @@ func (outbox *TxOutbox) purge(tx *sql.Tx) error {
 }
 
 //NewOutbox creates a new mysql transactional outbox
-func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxOutbox {
+func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool, cfg gbus.OutboxConfiguration) *TxOutbox {
 
 	txo := &TxOutbox{
+		Glogged:        &gbus.Glogged{},
 		svcName:        svcName,
 		txProv:         txProv,
 		purgeOnStartup: purgeOnStartup,
@@ -130,6 +140,23 @@ func NewOutbox(svcName string, txProv gbus.TxProvider, purgeOnStartup bool) *TxO
 		nack:           make(chan uint64, 1000000),
 		exit:           make(chan bool)}
 	txo.Glogged = &gbus.Glogged{}
+
+	if cfg.PageSize > 0 {
+		maxPageSize = int(cfg.PageSize)
+	}
+	if cfg.SendInterval.String() != "0s" {
+		sendInterval = cfg.SendInterval
+	}
+	if cfg.ScavengeInterval.String() != "0s" {
+		scavengeInterval = cfg.ScavengeInterval
+	}
+	if cfg.MetricsInterval.String() != "0s" {
+		metricsInterval = cfg.MetricsInterval
+	}
+	if cfg.Ackers > 0 {
+		ackers = int(cfg.Ackers)
+	}
+
 	return txo
 }
 
@@ -153,29 +180,75 @@ func (outbox *TxOutbox) ackRec() {
 
 func (outbox *TxOutbox) processOutbox() {
 
-	send := time.NewTicker(sendInterval).C
-	// cleanUp := time.NewTicker(cleanupInterval).C
-	scavenge := time.NewTicker(scavengeInterval).C
+	send := time.NewTicker(sendInterval)
+	scavenge := time.NewTicker(scavengeInterval)
+	metrics := time.NewTicker(metricsInterval)
 
 	for {
 		select {
 		case <-outbox.exit:
+			send.Stop()
+			scavenge.Stop()
+			metrics.Stop()
 			return
 		//TODO:get time duration from configuration
-		case <-send:
+		case <-send.C:
 
 			err := outbox.sendMessages(outbox.getMessageRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to send messages from outbox")
 			}
 
-		case <-scavenge:
+		case <-scavenge.C:
 			err := outbox.sendMessages(outbox.scavengeOrphanedRecords)
 			if err != nil {
 				outbox.log().WithError(err).Error("failed to scavenge records")
 			}
+		case <-metrics.C:
+			if err := outbox.reportMetrics(); err != nil {
+				outbox.log().WithError(err).Error("failed to report outbox meetrics")
+			}
+		}
+
+	}
+}
+
+func (outbox *TxOutbox) reportMetrics() error {
+
+	tx, txErr := outbox.txProv.New()
+	if txErr != nil {
+		return txErr
+	}
+
+	rows, qErr := tx.Query(`SELECT status, count(*) FROM ` + getOutboxName(outbox.svcName) + ` GROUP BY status`)
+	if qErr != nil {
+		_ = tx.Rollback()
+		return qErr
+	}
+
+	var totalOutboxSize int
+	for rows.Next() {
+		var count, status int
+		rows.Scan(&status, &count)
+		totalOutboxSize += count
+		switch status {
+		case Pending:
+			metrics.PendingMessages.Set(float64(count))
+		case Sent:
+			metrics.SentMessages.Set(float64(count))
 		}
 	}
+	metrics.OutboxSize.Set(float64(totalOutboxSize))
+
+	if closeErr := rows.Close(); closeErr != nil {
+		outbox.log().WithError(closeErr).Warn("failed closing rows after iteration for metric data")
+	}
+
+	if commitErr := tx.Commit(); commitErr != nil {
+		outbox.log().WithError(commitErr).Warn("failed committing transaction after iteration for metric data")
+		return commitErr
+	}
+	return nil
 }
 
 func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
@@ -214,12 +287,12 @@ func (outbox *TxOutbox) updateAckedRecord(deliveryTag uint64) error {
 }
 
 func (outbox *TxOutbox) getMessageRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " USE INDEX (status_delivery) WHERE status = 0 AND delivery_attempts < " + strconv.Itoa(maxDeliveryAttempts) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " USE INDEX (status_delivery) WHERE status = " + strconv.Itoa(Pending) + " ORDER BY rec_id ASC LIMIT " + strconv.Itoa(maxPageSize) + " FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL)
 }
 
 func (outbox *TxOutbox) scavengeOrphanedRecords(tx *sql.Tx) (*sql.Rows, error) {
-	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = 1  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
+	selectSQL := "SELECT rec_id, exchange, routing_key, publishing FROM " + getOutboxName(outbox.svcName) + " WHERE status = " + strconv.Itoa(Sent) + "  ORDER BY rec_id ASC LIMIT ? FOR UPDATE SKIP LOCKED"
 	return tx.Query(selectSQL, strconv.Itoa(maxPageSize))
 }
 
@@ -287,7 +360,7 @@ func (outbox *TxOutbox) sendMessages(recordSelector func(tx *sql.Tx) (*sql.Rows,
 		outbox.log().WithField("messages_sent", len(successfulDeliveries)).Info("outbox relayed messages")
 	}
 	for deliveryTag, id := range successfulDeliveries {
-		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status=1, delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
+		_, updateErr := tx.Exec("UPDATE "+getOutboxName(outbox.svcName)+" SET status="+strconv.Itoa(Sent)+", delivery_tag=?, relay_id=? WHERE rec_id=?", deliveryTag, outbox.ID, id)
 		if updateErr != nil {
 			outbox.log().WithError(updateErr).
 				WithFields(log.Fields{"record_id": id, "delivery_tag": deliveryTag, "relay_id": outbox.ID}).

@@ -75,7 +75,9 @@ var (
 	//for a random retry time. Default is 10 but it is configurable.
 	BaseRetryDuration = 10 * time.Millisecond
 	//RPCHeaderName used to define the header in grabbit for RPC
-	RPCHeaderName = "x-grabbit-msg-rpc-id"
+	RPCHeaderName                  = "x-grabbit-msg-rpc-id"
+	ResurrectedHeaderName          = "x-resurrected-from-death"
+	FirstDeathRoutingKeyHeaderName = "x-first-death-routing-key"
 )
 
 func (b *DefaultBus) createRPCQueue() (amqp.Queue, error) {
@@ -488,21 +490,68 @@ func (b *DefaultBus) sendWithTx(ctx context.Context, ambientTx *sql.Tx, toServic
 
 func (b *DefaultBus) returnDeadToQueue(ctx context.Context, ambientTx *sql.Tx, publishing *amqp.Publishing) error {
 	if !b.started {
-		return errors.New("bus not strated or already shutdown, make sure you call bus.Start() before sending messages")
+		return errors.New("bus not started or already shutdown, make sure you call bus.Start() before sending messages")
 	}
-	//publishing.Headers.
-	exchange := fmt.Sprintf("%v", publishing.Headers["x-first-death-exchange"])
-	routingKey := fmt.Sprintf("%v", publishing.Headers["x-first-death-queue"])
+
+	targetQueue, ok := publishing.Headers["x-first-death-queue"].(string)
+	if !ok {
+		return fmt.Errorf("bad x-first-death-queue field - %v", publishing.Headers["x-first-death-queue"])
+	}
+	exchange, ok := publishing.Headers["x-first-death-exchange"].(string)
+	if !ok {
+		return fmt.Errorf("bad x-first-death-exchange field - %v", publishing.Headers["x-first-death-exchange"])
+	}
+	routingKey, err := extractFirstDeathRoutingKey(publishing.Headers)
+	if err != nil {
+		return err
+	}
+
+	publishing.Headers[FirstDeathRoutingKeyHeaderName] = routingKey // Set the original death routing key to be used later for replaying
+	publishing.Headers[ResurrectedHeaderName] = true                // mark message as resurrected
+	// publishing.Headers["x-first-death-exchange"] is not deleted and kept as is
 
 	delete(publishing.Headers, "x-death")
 	delete(publishing.Headers, "x-first-death-queue")
 	delete(publishing.Headers, "x-first-death-reason")
-	delete(publishing.Headers, "x-first-death-exchange")
+
+	b.Log().
+		WithField("message_id", publishing.MessageId).
+		WithField("target_queue", targetQueue).
+		WithField("first_death_routing_key", routingKey).
+		WithField("first_death_exchange", exchange).
+		Info("returning dead message to queue...")
 
 	send := func(tx *sql.Tx) error {
-		return b.publish(tx, exchange, routingKey, publishing)
+		// Publishing a "resurrected" message is done directly to the target queue using the default exchange
+		return b.publish(tx, "", targetQueue, publishing)
 	}
 	return b.withTx(send, ambientTx)
+}
+
+// Extracts the routing key of the first death of the message. "x-death" header contains a list of "deaths" that happened to this message, with
+// the most recent death always being first in the list, so fhe first death is the last one. More information: https://www.rabbitmq.com/dlx.html
+func extractFirstDeathRoutingKey(headers amqp.Table) (result string, err error) {
+	xDeathList, ok := headers["x-death"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
+	}
+
+	xDeath, ok := xDeathList[0].(amqp.Table)
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'x-death' field - %v", headers["x-death"])
+	}
+
+	routingKeys, ok := xDeath["routing-keys"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
+	}
+
+	routingKey, ok := routingKeys[len(routingKeys)-1].(string)
+	if !ok {
+		return "", fmt.Errorf("failed extracting routing-key from headers, bad 'routing-keys' field - %v", xDeath["routing-keys"])
+	}
+
+	return routingKey, nil
 }
 
 //Publish implements GBus.Publish(topic, message)
@@ -716,14 +765,4 @@ type rpcPolicy struct {
 
 func (p rpcPolicy) Apply(publishing *amqp.Publishing) {
 	publishing.Headers[RPCHeaderName] = p.rpcID
-}
-
-//Log returns the default logrus.FieldLogger for the bus via the Glogged helper
-func (b *DefaultBus) Log() logrus.FieldLogger {
-	if b.Glogged == nil {
-		b.Glogged = &Glogged{
-			log: logrus.WithField("_service", b.SvcName),
-		}
-	}
-	return b.Glogged.Log()
 }
