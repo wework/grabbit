@@ -36,10 +36,10 @@ type sagaInvocation struct {
 
 func (si *sagaInvocation) setCorrelationIDs(message *gbus.BusMessage, targetService string, semantics gbus.Semantics) {
 
-	message.CorrelationID = si.inboundMsg.ID
 	message.SagaID = si.sagaID
 
 	if semantics == gbus.REPLY {
+		message.CorrelationID = si.inboundMsg.ID
 		message.SagaCorrelationID = si.inboundMsg.SagaID
 
 	} else if semantics == gbus.CMD {

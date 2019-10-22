@@ -18,7 +18,7 @@ const (
 	CMD Semantics = "cmd"
 	//EVT represenst a messge with event semantics in grabbit
 	EVT Semantics = "evt"
-	//EVT represenst a messge with reply semantics in grabbit
+	//REPLY represenst a messge with reply semantics in grabbit
 	REPLY Semantics = "reply"
 )
 
