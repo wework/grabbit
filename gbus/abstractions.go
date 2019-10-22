@@ -18,6 +18,8 @@ const (
 	CMD Semantics = "cmd"
 	//EVT represenst a messge with event semantics in grabbit
 	EVT Semantics = "evt"
+	//REPLY represenst a messge with reply semantics in grabbit
+	REPLY Semantics = "reply"
 )
 
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
