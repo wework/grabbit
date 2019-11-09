@@ -58,16 +58,28 @@ func GetMessageName(delivery amqp.Delivery) string {
 	return castToString(delivery.Headers["x-msg-name"])
 }
 
-//GetAMQPHeaders convert to AMQP headers Table everything but a payload
 func (bm *BusMessage) GetAMQPHeaders() (headers amqp.Table) {
-	headers = amqp.Table{}
-	headers["x-idempotency-key"] = bm.IdempotencyKey
-	headers["x-msg-saga-id"] = bm.SagaID
-	headers["x-msg-saga-correlation-id"] = bm.SagaCorrelationID
-	headers["x-grabbit-msg-rpc-id"] = bm.RPCID
-	headers["x-msg-name"] = bm.Payload.SchemaName()
+	headers = amqp.Table{
+		"x-msg-name":        bm.Payload.SchemaName(),
+		"x-idempotency-key": bm.IdempotencyKey,
+	}
+
+	/*
+	 only set the following headers if they contain a value
+	 https://github.com/wework/grabbit/issues/221
+	*/
+	setNonEmpty(headers, "x-msg-saga-id", bm.SagaID)
+	setNonEmpty(headers, "x-msg-saga-correlation-id", bm.SagaCorrelationID)
+	setNonEmpty(headers, "x-grabbit-msg-rpc-id", bm.RPCID)
 
 	return
+}
+
+func setNonEmpty(headers amqp.Table, headerName, headerValue string) {
+
+	if headerValue != "" {
+		headers[headerName] = headerValue
+	}
 }
 
 //SetFromAMQPHeaders convert from AMQP headers Table everything but a payload
