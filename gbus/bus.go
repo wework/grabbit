@@ -671,7 +671,7 @@ func (b *DefaultBus) publish(tx *sql.Tx, exchange, routingKey string, msg *amqp.
 	err := b.SafeWithRetries(publish, MaxRetryCount)
 
 	if err != nil {
-		b.Log().Printf("failed publishing message.\n error:%v", err)
+		b.Log().WithError(err).Error("failed publishing message")
 		return err
 	}
 	return err
