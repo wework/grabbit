@@ -4,7 +4,7 @@
 
 Vladislav Shub
 
-Avigail Beger
+Avigail Berger
 
 Adi Yaskolka Weiss
 
