@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/opentracing/opentracing-go"
 	slog "github.com/opentracing/opentracing-go/log"
@@ -256,6 +257,7 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 
 	if instance.isComplete() {
 		imsm.Log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
+		metrics.SagaLatencySummary.WithLabelValues(instance.ID, instance.StartedBy).Observe(time.Since(instance.CreatedAt))
 
 		deleteErr := imsm.sagaStore.DeleteSaga(tx, instance)
 		if deleteErr != nil {
