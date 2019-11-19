@@ -66,7 +66,7 @@ func sagaStoreAddRPCIDDetails(svcName string) *migrator.Migration {
 func sagaStoreAddCreatedAtDetails(svcName string) *migrator.Migration {
 	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
 
-	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN created_at timestamp AFTER version`
+	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN created_at DATETIME(3) AFTER version`
 
 	return &migrator.Migration{
 		Name: "adding the created_at column to the saga table",
