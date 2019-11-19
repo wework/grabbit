@@ -35,7 +35,7 @@ type Instance struct {
 	//StartedByRPCID the rpc id of the message that created the saga
 	StartedByRPCID string
 
-	// the time.Now() timestamp when the saga was created
+	//CreatedAt the time.Now() timestamp when the saga was created
 	CreatedAt time.Time
 }
 
