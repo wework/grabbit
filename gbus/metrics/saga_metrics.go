@@ -39,6 +39,6 @@ func newSagaLatencySummary() prometheus.SummaryVec {
 		Subsystem: "saga",
 		Name:      "latency",
 		Help:      "The latency of the entire saga",
-	}, []string{"sagaId", "StartedBy"})
+	}, []string{"SagaId", "Service", "SagaType"})
 
 }
