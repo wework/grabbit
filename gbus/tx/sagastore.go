@@ -38,7 +38,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		var startedBySaga sql.NullString
 		var startedByMsgID sql.NullString
 		var startedByRPCID sql.NullString
-		var createdAt sql.NullTime
+		var createdAt time.Time
 
 		error := rows.Scan(&sagaID, &sagaType, &sagaData, &startedBy, &startedByMsgID, &startedByRPCID, &startedBySaga, &version, &createdAt)
 		if error == sql.ErrNoRows {
@@ -53,6 +53,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		dec := gob.NewDecoder(reader)
 		var instance saga.Instance
 		instance.ConcurrencyCtrl = version
+		instance.CreatedAt = createdAt
 
 		decErr := dec.Decode(&instance)
 
@@ -67,9 +68,6 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		}
 		if startedByRPCID.Valid {
 			instance.StartedByRPCID = startedByRPCID.String
-		}
-		if createdAt.Valid {
-			instance.CreatedAt = time.Time(createdAt)
 		}
 
 		if decErr != nil {
