@@ -176,7 +176,12 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 		panic(err)
 	}
 	m, _ := url.ParseQuery(u.RawQuery)
-	m["parseTime"][0] = "true"
+	if m.Get("parseTime") == "" {
+		m.Add("parseTime", "true")
+	} else {
+		m.Set("parseTime", "true")
+	}
+
 	builder.txConnStr = u.String()
 
 	builder.txnl = true
