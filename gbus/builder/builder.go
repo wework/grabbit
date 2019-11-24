@@ -181,6 +181,7 @@ func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
 	} else {
 		m.Set("parseTime", "true")
 	}
+	u.RawQuery = m.Encode()
 
 	builder.txConnStr = u.String()
 
