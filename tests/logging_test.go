@@ -34,5 +34,5 @@ func getBaseBusBuilder() gbus.Builder {
 	return builder.
 		New().
 		Bus(connStr).
-		Txnl("mysql", "rhinof:rhinof@/rhinof?parseTime=true")
+		Txnl("mysql", "rhinof:rhinof@/rhinof")
 }

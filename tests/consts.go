@@ -38,7 +38,7 @@ func createBusWithConfig(svcName string, deadletter string, txnl, pos bool, conf
 		WithConfiguration(conf)
 
 	if txnl {
-		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof?parseTime=true")
+		busBuilder = busBuilder.Txnl("mysql", "rhinof:rhinof@/rhinof")
 	}
 	if deadletter != "" {
 		busBuilder = busBuilder.WithDeadlettering(deadletter)

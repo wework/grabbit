@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -170,8 +171,15 @@ func (builder *defaultBuilder) WithPolicies(policies ...gbus.MessagePolicy) gbus
 }
 
 func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
+	u, err := url.Parse(connStr)
+	if err != nil {
+		panic(err)
+	}
+	m, _ := url.ParseQuery(u.RawQuery)
+	m["parseTime"][0] = "true"
+	builder.txConnStr = u.String()
+
 	builder.txnl = true
-	builder.txConnStr = connStr
 	builder.txnlProvider = provider
 	return builder
 }
