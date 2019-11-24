@@ -171,21 +171,8 @@ func (builder *defaultBuilder) WithPolicies(policies ...gbus.MessagePolicy) gbus
 }
 
 func (builder *defaultBuilder) Txnl(provider, connStr string) gbus.Builder {
-	u, err := url.Parse(connStr)
-	if err != nil {
-		panic(err)
-	}
-	m, _ := url.ParseQuery(u.RawQuery)
-	if m.Get("parseTime") == "" {
-		m.Add("parseTime", "true")
-	} else {
-		m.Set("parseTime", "true")
-	}
-	u.RawQuery = m.Encode()
-
-	builder.txConnStr = u.String()
-
 	builder.txnl = true
+	builder.txConnStr = AddParseTimeToConnStr(connStr)
 	builder.txnlProvider = provider
 	return builder
 }
@@ -234,4 +221,19 @@ func (Nu) Bus(brokerConnStr string) gbus.Builder {
 		connStr:         brokerConnStr,
 		serializer:      serialization.NewGobSerializer(),
 		defaultPolicies: make([]gbus.MessagePolicy, 0)}
+}
+
+func AddParseTimeToConnStr(connStr string) string {
+	u, err := url.Parse(connStr)
+	if err != nil {
+		panic(err)
+	}
+	m, _ := url.ParseQuery(u.RawQuery)
+	if m.Get("parseTime") == "" {
+		m.Add("parseTime", "true")
+	} else {
+		m.Set("parseTime", "true")
+	}
+	u.RawQuery = m.Encode()
+	return u.String()
 }
