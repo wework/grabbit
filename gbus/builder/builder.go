@@ -80,7 +80,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		providerLogger := gb.Log().WithField("provider", "mysql")
 		mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
 		if err != nil {
-			panic(err)
+			logerr := fmt.Errorf("grabbit faild on mysql.NewTxProvider. builder.txConnStr: %v, builder.connStr: %v, error: %v", builder.txConnStr, builder.connStr, err)
+			panic(logerr)
 		}
 		gb.TxProvider = mysqltx
 
@@ -92,7 +93,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		if builder.purgeOnStartup {
 			err := sagaStore.Purge()
 			if err != nil {
-				panic(err)
+				logerr := fmt.Errorf("grabbit faild on builder.purgeOnStartup. builder.txConnStr: %v,builder.connStr: %v, error: %v", builder.txConnStr, builder.connStr, err)
+				panic(logerr)
 			}
 		}
 		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup, builder.busCfg.OutboxCfg)
@@ -111,7 +113,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	if builder.purgeOnStartup {
 		err := sagaStore.Purge()
 		if err != nil {
-			panic(err)
+			logerr := fmt.Errorf("grabbit faild on sagaStore.Purge. builder.txConnStr: %v,builder.connStr: %v, error: %v", builder.txConnStr, builder.connStr, err)
+			panic(logerr)
 		}
 	}
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)
