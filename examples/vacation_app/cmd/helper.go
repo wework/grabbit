@@ -12,6 +12,6 @@ func createBus(serviceName string) gbus.Bus {
 		WorkerNum(3, 1).
 		WithConfirms().
 		PurgeOnStartUp().
-		Txnl("mysql", "rhinof:rhinof@/rhinof?parseTime=true").
+		Txnl("mysql", "rhinof:rhinof@/rhinof").
 		Build(serviceName)
 }

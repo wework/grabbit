@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/saga"
 )
@@ -38,7 +39,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		var startedBySaga sql.NullString
 		var startedByMsgID sql.NullString
 		var startedByRPCID sql.NullString
-		var createdAt time.Time
+		var createdAt mysql.NullTime
 
 		error := rows.Scan(&sagaID, &sagaType, &sagaData, &startedBy, &startedByMsgID, &startedByRPCID, &startedBySaga, &version, &createdAt)
 		if error == sql.ErrNoRows {
@@ -68,6 +69,10 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		}
 		if startedByRPCID.Valid {
 			instance.StartedByRPCID = startedByRPCID.String
+		}
+
+		if createdAt.Valid {
+			instance.CreatedAt = createdAt.(time.Time)
 		}
 
 		if decErr != nil {

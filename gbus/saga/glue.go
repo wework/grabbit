@@ -257,7 +257,7 @@ func (imsm *Glue) completeOrUpdateSaga(tx *sql.Tx, instance *Instance) error {
 
 	if instance.isComplete() {
 		imsm.Log().WithField("saga_id", instance.ID).Info("saga has completed and will be deleted")
-		metrics.SagaLatencySummary.WithLabelValues(instance.ID, instance.StartedBy, reflect.TypeOf(instance.UnderlyingInstance).String()).Observe(float64(time.Since(instance.CreatedAt)))
+		metrics.SagaLatencySummary.WithLabelValues(instance.ID, instance.StartedBy, reflect.TypeOf(instance.UnderlyingInstance).String()).Observe(float64(time.Since(instance.CreatedAt).Milliseconds()))
 
 		deleteErr := imsm.sagaStore.DeleteSaga(tx, instance)
 		if deleteErr != nil {
