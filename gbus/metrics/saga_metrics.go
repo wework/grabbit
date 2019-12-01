@@ -20,7 +20,7 @@ var (
 		Subsystem: "saga",
 		Name:      "latency",
 		Help:      "The latency of the entire saga",
-	}, []string{"SagaId", "Service", "SagaType"})
+	}, []string{"Service", "SagaType"})
 )
 
 //GetSagaTimeoutCounterValue gets the counter value of timed out sagas reported to prometheus
