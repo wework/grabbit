@@ -2,7 +2,6 @@ package builder
 
 import (
 	"fmt"
-	"net/url"
 	"sync"
 	"time"
 
