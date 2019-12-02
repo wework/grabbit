@@ -79,7 +79,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		providerLogger := gb.Log().WithField("provider", "mysql")
 		mysqltx, err := mysql.NewTxProvider(builder.txConnStr)
 		if err != nil {
-			panic(err)
+			errMsg := fmt.Errorf("grabbit: transaction provider failed creating a transaction. %v", err)
+			panic(errMsg)
 		}
 		gb.TxProvider = mysqltx
 
@@ -91,7 +92,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		if builder.purgeOnStartup {
 			err := sagaStore.Purge()
 			if err != nil {
-				panic(err)
+				errMsg := fmt.Errorf("grabbit: saga store faild to purge. error: %v", err)
+				panic(errMsg)
 			}
 		}
 		gb.Outbox = mysql.NewOutbox(gb.SvcName, mysqltx, builder.purgeOnStartup, builder.busCfg.OutboxCfg)
@@ -110,7 +112,8 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	if builder.purgeOnStartup {
 		err := sagaStore.Purge()
 		if err != nil {
-			panic(err)
+			errMsg := fmt.Errorf("grabbit: saga store faild to purge. error: %v", err)
+			panic(errMsg)
 		}
 	}
 	glue := saga.NewGlue(gb, sagaStore, svcName, gb.TxProvider, gb.Log, timeoutManager)

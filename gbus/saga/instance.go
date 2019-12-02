@@ -34,6 +34,9 @@ type Instance struct {
 	StartedByMessageID string
 	//StartedByRPCID the rpc id of the message that created the saga
 	StartedByRPCID string
+
+	//CreatedAt the time.Now() timestamp when the saga was created
+	CreatedAt time.Time
 }
 
 func (si *Instance) log() logrus.FieldLogger {
@@ -151,6 +154,7 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instan
 		ID:                 xid.New().String(),
 		UnderlyingInstance: newSaga,
 		MsgToMethodMap:     msgToMethodMap,
+		CreatedAt:          time.Now(),
 	}
 	return newInstance
 }

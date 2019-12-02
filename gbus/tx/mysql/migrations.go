@@ -63,6 +63,22 @@ func sagaStoreAddRPCIDDetails(svcName string) *migrator.Migration {
 	}
 }
 
+func sagaStoreAddCreatedAtDetails(svcName string) *migrator.Migration {
+	tblName := tx.GrabbitTableNameTemplate(svcName, "sagas")
+
+	addCreatorDetailsSQL := `ALTER TABLE ` + tblName + ` ADD COLUMN created_at DATETIME NOT NULL DEFAULT NOW() AFTER version`
+
+	return &migrator.Migration{
+		Name: "adding the created_at column to the saga table",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(addCreatorDetailsSQL); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+}
+
 func outboxMigrations(svcName string) *migrator.Migration {
 
 	tblName := tx.GrabbitTableNameTemplate(svcName, "outbox")
@@ -158,6 +174,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 		outboxChangeColumnLength(svcName),
 		sagaStoreAddSagaCreatorDetails(svcName),
 		sagaStoreAddRPCIDDetails(svcName),
+		sagaStoreAddCreatedAtDetails(svcName),
 	))
 	if err != nil {
 		panic(err)
