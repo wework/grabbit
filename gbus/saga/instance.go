@@ -34,6 +34,9 @@ type Instance struct {
 	StartedByMessageID string
 	//StartedByRPCID the rpc id of the message that created the saga
 	StartedByRPCID string
+
+	//CreatedAt the time.Now() timestamp when the saga was created
+	CreatedAt time.Time
 }
 
 func (si *Instance) log() logrus.FieldLogger {
@@ -71,6 +74,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 		invocation.Log().Info("invoking saga instance")
 
 		span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), methodName)
+
 		// replace the original context with the conext built around the span so we ca
 		// trace the saga handler that is invoked
 		invocation.ctx = sctx
@@ -151,6 +155,7 @@ func NewInstance(sagaType reflect.Type, msgToMethodMap []*MsgToFuncPair) *Instan
 		ID:                 xid.New().String(),
 		UnderlyingInstance: newSaga,
 		MsgToMethodMap:     msgToMethodMap,
+		CreatedAt:          time.Now(),
 	}
 	return newInstance
 }
