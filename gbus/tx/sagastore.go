@@ -9,9 +9,11 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/wework/grabbit/gbus"
 	"github.com/wework/grabbit/gbus/saga"
 )
@@ -37,8 +39,9 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 		var startedBySaga sql.NullString
 		var startedByMsgID sql.NullString
 		var startedByRPCID sql.NullString
+		var createdAt mysql.NullTime
 
-		error := rows.Scan(&sagaID, &sagaType, &sagaData, &startedBy, &startedByMsgID, &startedByRPCID, &startedBySaga, &version)
+		error := rows.Scan(&sagaID, &sagaType, &sagaData, &startedBy, &startedByMsgID, &startedByRPCID, &startedBySaga, &version, &createdAt)
 		if error == sql.ErrNoRows {
 			return nil, error
 		} else if error != nil {
@@ -67,6 +70,11 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 			instance.StartedByRPCID = startedByRPCID.String
 		}
 
+		if createdAt.Valid {
+			value, _ := createdAt.Value()
+			instance.CreatedAt = value.(time.Time)
+		}
+
 		if decErr != nil {
 			store.Log().WithError(decErr).Error("failed to decode saga instance")
 			return nil, decErr
@@ -83,7 +91,7 @@ func (store *SagaStore) scanInstances(rows *sql.Rows) ([]*saga.Instance, error) 
 func (store *SagaStore) GetSagasByType(tx *sql.Tx, sagaType reflect.Type) (instances []*saga.Instance, err error) {
 
 	tblName := GetSagatableName(store.SvcName)
-	selectSQL := "SELECT saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version FROM " + tblName + " WHERE saga_type=" + store.ParamsMarkers[0]
+	selectSQL := "SELECT saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version, created_at FROM " + tblName + " WHERE saga_type=" + store.ParamsMarkers[0]
 
 	rows, err := tx.Query(selectSQL, sagaType.String())
 	defer func() {
@@ -153,7 +161,7 @@ func (store *SagaStore) DeleteSaga(tx *sql.Tx, instance *saga.Instance) error {
 func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, error) {
 
 	tblName := GetSagatableName(store.SvcName)
-	selectSQL := `SELECT saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
+	selectSQL := `SELECT saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version, created_at FROM ` + tblName + ` WHERE saga_id=` + store.ParamsMarkers[0] + ``
 
 	rows, err := tx.Query(selectSQL, sagaID)
 	defer func() {
@@ -187,14 +195,14 @@ func (store *SagaStore) GetSagaByID(tx *sql.Tx, sagaID string) (*saga.Instance, 
 func (store *SagaStore) SaveNewSaga(tx *sql.Tx, sagaType reflect.Type, newInstance *saga.Instance) (err error) {
 	store.RegisterSagaType(newInstance.UnderlyingInstance)
 	tblName := GetSagatableName(store.SvcName)
-	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	insertSQL := `INSERT INTO ` + tblName + ` (saga_id, saga_type, saga_data, started_by_request_of_svc, started_by_msg_id, started_by_rpcid, started_by_request_of_saga, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var buf []byte
 	if buf, err = store.serilizeSaga(newInstance); err != nil {
 		store.Log().WithError(err).WithField("saga_id", newInstance.ID).Error("failed to encode saga with sagaID")
 		return err
 	}
-	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.StartedBy, newInstance.StartedByMessageID, newInstance.StartedByRPCID, newInstance.StartedBySaga, newInstance.ConcurrencyCtrl)
+	_, err = tx.Exec(insertSQL, newInstance.ID, sagaType.String(), buf, newInstance.StartedBy, newInstance.StartedByMessageID, newInstance.StartedByRPCID, newInstance.StartedBySaga, newInstance.ConcurrencyCtrl, newInstance.CreatedAt)
 	if err != nil {
 		store.Log().WithError(err).Error("failed saving new saga")
 		return err
