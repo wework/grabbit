@@ -74,6 +74,7 @@ func (si *Instance) invoke(exchange, routingKey string, invocation *sagaInvocati
 		invocation.Log().Info("invoking saga instance")
 
 		span, sctx := opentracing.StartSpanFromContext(invocation.Ctx(), methodName)
+
 		// replace the original context with the conext built around the span so we ca
 		// trace the saga handler that is invoked
 		invocation.ctx = sctx
