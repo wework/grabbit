@@ -61,7 +61,7 @@ func (bs *BookingSaga) HandleBookFlightsRsp(invocation gbus.Invocation, message 
 	if bs.CancelingFlights == false {
 		bs.FinishedWithFlights = true
 	}
-	return bs.notifyInitiatorIfSagaComplets(true, invocation.Ctx(), invocation)
+	return bs.notifyInitiatorIfSagaCompletes(true, invocation.Ctx(), invocation)
 }
 
 func (bs *BookingSaga) HandleBookHotelRsp(invocation gbus.Invocation, message *gbus.BusMessage) error {
@@ -82,7 +82,7 @@ func (bs *BookingSaga) HandleBookHotelRsp(invocation gbus.Invocation, message *g
 		return invocation.Bus().Send(invocation.Ctx(), "flights-service", cancelFlightsCmd)
 	}
 
-	return bs.notifyInitiatorIfSagaComplets(true, invocation.Ctx(), invocation)
+	return bs.notifyInitiatorIfSagaCompletes(true, invocation.Ctx(), invocation)
 
 }
 
@@ -91,10 +91,10 @@ func (bs *BookingSaga) HandleCancelFlightsRsp(invocation gbus.Invocation, messag
 	invocation.Log().Infof("flights were canceled ? %t", response.Success)
 	bs.FinishedWithFlights = true
 
-	return bs.notifyInitiatorIfSagaComplets(false, invocation.Ctx(), invocation)
+	return bs.notifyInitiatorIfSagaCompletes(false, invocation.Ctx(), invocation)
 }
 
-func (bs *BookingSaga) notifyInitiatorIfSagaComplets(success bool, ctx context.Context, invocation gbus.Invocation) error {
+func (bs *BookingSaga) notifyInitiatorIfSagaCompletes(success bool, ctx context.Context, invocation gbus.Invocation) error {
 
 	if bs.IsComplete() {
 

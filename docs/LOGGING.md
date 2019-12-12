@@ -90,8 +90,6 @@ func placeOrder(customerID string, lineItems LineItems[]) error{
 
 ```
 
-
-
 ### Setting a custom logger instance
 
 grabbit will create a default instance of logrus FieldLogger if no such logger is set when the bus is created.
