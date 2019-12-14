@@ -54,15 +54,8 @@ func SomeHandler(invocation gbus.Invocation, message *gbus.BusMessage) error{
   }
 ```
 grabbit makes it easier handling these cases and reduce the repetitive task of logging
-<<<<<<< HEAD
-<<<<<<< HEAD
 these custom contextual attributes in cases of errors by integrating the [emperror errors package](https://github.com/emperror/errors).
-=======
-these custom contextual attributes in cases of errors by integrating the [emperror errors package] (https://github.com/emperror/errors).
->>>>>>> Fix logging and added logging documentation (#176)
-=======
-these custom contextual attributes in cases of errors by integrating the [emperror errors package](https://github.com/emperror/errors).
->>>>>>> added documentation on serialization support (#177)
+
 emperror drop-in replacement for the default errors package allows developers to add the needed contextual data on the error instance and have graabit log the error with all contextual attribute.
 
 ```go
