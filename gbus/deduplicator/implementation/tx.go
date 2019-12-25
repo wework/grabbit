@@ -12,7 +12,7 @@ import (
 	"github.com/wework/grabbit/gbus/tx"
 )
 
-var _ deduplicator.DeduplicatorStore = &deduper{}
+var _ deduplicator.Store = &deduper{}
 
 type deduper struct {
 	*gbus.Glogged
@@ -84,7 +84,7 @@ func (d *deduper) Stop() {
 }
 
 //
-func (d *deduper) StoreMessageId(tx *sql.Tx, id string) error {
+func (d *deduper) StoreMessageID(tx *sql.Tx, id string) error {
 	insertSQL := "INSERT INTO " + d.tableName + " (id) values (?)"
 	_, err := tx.Exec(insertSQL, id)
 	if err != nil {
@@ -124,7 +124,7 @@ func (d *deduper) MessageExists(id string) (bool, error) {
 	return true, nil
 }
 
-func NewDeduplicator(svcName string, policy gbus.DeduplicationPolicy, txProvider gbus.TxProvider, age time.Duration, logger logrus.FieldLogger) deduplicator.DeduplicatorStore {
+func NewDeduplicator(svcName string, policy gbus.DeduplicationPolicy, txProvider gbus.TxProvider, age time.Duration, logger logrus.FieldLogger) deduplicator.Store {
 	d := &deduper{
 		svcName:    svcName,
 		policy:     policy,

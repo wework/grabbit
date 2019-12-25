@@ -61,7 +61,7 @@ type DefaultBus struct {
 	Serializer          Serializer
 	DLX                 string
 	DeduplicationPolicy DeduplicationPolicy
-	Deduplicator        deduplicator.DeduplicatorStore
+	Deduplicator        deduplicator.Store
 	DefaultPolicies     []MessagePolicy
 	Confirm             bool
 	healthChan          chan error

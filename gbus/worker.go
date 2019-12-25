@@ -46,7 +46,7 @@ type worker struct {
 	amqpErrors        chan *amqp.Error
 	stop              chan bool
 	span              opentracing.Span
-	duplicateStore    deduplicator.DeduplicatorStore
+	duplicateStore    deduplicator.Store
 	delicatePolicy    DeduplicationPolicy
 }
 
@@ -530,7 +530,7 @@ func (worker *worker) withDeduplicator(txWrapper func(tx *sql.Tx) error, deliver
 		if worker.delicatePolicy == DeduplicationPolicyNone {
 			return txWrapper(tx)
 		}
-		err := worker.duplicateStore.StoreMessageId(tx, delivery.MessageId)
+		err := worker.duplicateStore.StoreMessageID(tx, delivery.MessageId)
 		if err != nil {
 			return err
 		}
