@@ -130,7 +130,7 @@ func TestRunHandlerWithMetric_Latency(t *testing.T) {
 	}
 }
 
-func checkLatency(t *testing.T, sc  *uint64, expected uint64, err error) {
+func checkLatency(t *testing.T, sc *uint64, expected uint64, err error) {
 	if err != nil {
 		t.Errorf("Failed to get latency value: %e", err)
 	}

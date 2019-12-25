@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wework/grabbit/gbus/deduplicator"
 	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
@@ -56,15 +57,17 @@ type DefaultBus struct {
 	Glue                 SagaGlue
 	TxProvider           TxProvider
 
-	WorkerNum       uint
-	Serializer      Serializer
-	DLX             string
-	DefaultPolicies []MessagePolicy
-	Confirm         bool
-	healthChan      chan error
-	backpressure    bool
-	DbPingTimeout   time.Duration
-	amqpConnected   bool
+	WorkerNum           uint
+	Serializer          Serializer
+	DLX                 string
+	DeduplicationPolicy DeduplicationPolicy
+	Deduplicator        deduplicator.DeduplicatorStore
+	DefaultPolicies     []MessagePolicy
+	Confirm             bool
+	healthChan          chan error
+	backpressure        bool
+	DbPingTimeout       time.Duration
+	amqpConnected       bool
 }
 
 var (
@@ -222,6 +225,8 @@ func (b *DefaultBus) Start() error {
 		return startErr
 	}
 
+	b.Deduplicator.Start()
+
 	//declare queue
 	var q amqp.Queue
 	if q, e = b.createServiceQueue(); e != nil {
@@ -294,7 +299,10 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 			registrations:     b.Registrations,
 			serializer:        b.Serializer,
 			b:                 b,
-			amqpErrors:        b.amqpErrors}
+			amqpErrors:        b.amqpErrors,
+			delicatePolicy:    b.DeduplicationPolicy,
+			duplicateStore:    b.Deduplicator,
+		}
 
 		err := w.Start()
 		if err != nil {

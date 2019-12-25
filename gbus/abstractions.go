@@ -22,6 +22,14 @@ const (
 	REPLY Semantics = "reply"
 )
 
+type DeduplicationPolicy int
+
+const (
+	DeduplicationPolicyNone DeduplicationPolicy = iota
+	DeduplicationPolicyReject
+	DeduplicationPolicyAck
+)
+
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
@@ -213,6 +221,8 @@ type Builder interface {
 
 	//WithLogger set custom logger instance
 	WithLogger(logger logrus.FieldLogger) Builder
+
+	WithDeduplicationPolicy(method DeduplicationPolicy, age time.Duration) Builder
 }
 
 //Invocation context for a specific processed message
