@@ -241,7 +241,7 @@ func (worker *worker) invokeDeadletterHandler(delivery amqp.Delivery, msgSpecifi
 		return metrics.RunHandlerWithMetric(handlerWrapper, worker.deadletterHandler.Name(), fmt.Sprintf("deadletter_%s", delivery.Type), worker.log())
 	}
 
-	err := worker.withTx(worker.withDeduplicator(txWrapper, &delivery, msgSpecificLogEntry))
+	err := worker.withTx(txWrapper, msgSpecificLogEntry)
 	if err != nil {
 		//we reject the deelivery but requeue it so the message will not be lost and recovered to the dlq
 		_ = worker.reject(true, delivery, msgSpecificLogEntry)
@@ -274,7 +274,7 @@ func (worker *worker) runGlobalHandler(delivery *amqp.Delivery, msgSpecificLogEn
 					return worker.globalRawHandler(tx, delivery)
 				}
 				//run the global handler inside a  transactions
-				return worker.withTx(worker.withDeduplicator(txWrapper, delivery, msgSpecificLogEntry))
+				return worker.withTx(txWrapper, msgSpecificLogEntry)
 			}
 			//run the global handler with metrics
 			return metrics.RunHandlerWithMetric(metricsWrapper, handlerName, delivery.Type, worker.log())
@@ -307,18 +307,6 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	}()
 
 	msgSpecificLogEntry.Info("GOT MSG")
-	isDuplicate, err := worker.handleDuplicates(delivery, msgSpecificLogEntry)
-	if err != nil {
-		worker.span.LogFields(slog.Error(err))
-		msgSpecificLogEntry.WithError(err).Info("failed getting information about message duplication")
-		_ = worker.reject(true, delivery, msgSpecificLogEntry)
-		return
-	}
-	if isDuplicate {
-		msgSpecificLogEntry.Warn("message is a duplicate")
-		worker.span.LogFields(slog.String("grabbit", "message is a duplicate"))
-		return
-	}
 
 	// handle a message that originated from a deadletter exchange
 	if worker.isDead(delivery) && worker.deadletterHandler != nil {
@@ -363,7 +351,18 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 		_ = worker.reject(false, delivery, msgSpecificLogEntry)
 		return
 	}
-
+	isDuplicate, err := worker.handleDuplicates(bm, delivery, msgSpecificLogEntry)
+	if err != nil {
+		worker.span.LogFields(slog.Error(err))
+		msgSpecificLogEntry.WithError(err).Info("failed getting information about message duplication")
+		_ = worker.reject(true, delivery, msgSpecificLogEntry)
+		return
+	}
+	if isDuplicate {
+		msgSpecificLogEntry.Warn("message is a duplicate")
+		worker.span.LogFields(slog.String("grabbit", "message is a duplicate"))
+		return
+	}
 	err = worker.invokeHandlers(ctx, handlers, bm, &delivery, msgSpecificLogEntry)
 	if err == nil {
 		_ = worker.ack(delivery, msgSpecificLogEntry)
@@ -466,7 +465,7 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 				return handlerErr
 			}
 
-			err := worker.withTx(worker.withDeduplicator(handlerWrapper, delivery, msgSpecificLogEntry))
+			err := worker.withTx(worker.withDeduplicator(handlerWrapper, message, msgSpecificLogEntry))
 			if err != nil {
 				return err
 			}
@@ -486,11 +485,11 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 		))
 }
 
-func (worker *worker) handleDuplicates(delivery amqp.Delivery, msgSpecificLogEntry *logrus.Entry) (bool, error) {
+func (worker *worker) handleDuplicates(message *BusMessage, delivery amqp.Delivery, msgSpecificLogEntry *logrus.Entry) (bool, error) {
 	if worker.delicatePolicy == DeduplicationPolicyNone {
 		return false, nil
 	}
-	duplicate, err := worker.duplicateStore.MessageExists(delivery.MessageId)
+	duplicate, err := worker.duplicateStore.MessageExists(message.IdempotencyKey)
 	if err != nil {
 		worker.span.LogFields(slog.String("grabbit", "failed processing duplicate"))
 		worker.log().WithError(err).Error("failed checking for existing message")
@@ -525,12 +524,12 @@ func (worker *worker) duplicatePolicyApply(requeue bool, delivery amqp.Delivery,
 	}
 }
 
-func (worker *worker) withDeduplicator(txWrapper func(tx *sql.Tx) error, delivery *amqp.Delivery, logger logrus.FieldLogger) (func(tx *sql.Tx) error, logrus.FieldLogger) {
+func (worker *worker) withDeduplicator(txWrapper func(tx *sql.Tx) error, message *BusMessage, logger logrus.FieldLogger) (func(tx *sql.Tx) error, logrus.FieldLogger) {
 	return func(tx *sql.Tx) error {
 		if worker.delicatePolicy == DeduplicationPolicyNone {
 			return txWrapper(tx)
 		}
-		err := worker.duplicateStore.StoreMessageID(tx, delivery.MessageId)
+		err := worker.duplicateStore.StoreMessageID(tx, message.IdempotencyKey)
 		if err != nil {
 			return err
 		}

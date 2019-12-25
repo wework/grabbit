@@ -121,7 +121,7 @@ func (d *deduper) MessageExists(id string) (bool, error) {
 		return true, err
 	}
 
-	return true, nil
+	return exists, nil
 }
 
 func NewDeduplicator(svcName string, policy gbus.DeduplicationPolicy, txProvider gbus.TxProvider, age time.Duration, logger logrus.FieldLogger) deduplicator.Store {
