@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-
 	"github.com/streadway/amqp"
 )
 
@@ -284,3 +283,22 @@ type Logged interface {
 	SetLogger(entry logrus.FieldLogger)
 	Log() logrus.FieldLogger
 }
+
+type Transport interface {
+	Messaging
+	Logged
+	Health
+
+	Start() error
+	Stop() error
+
+	RPCChannel() <-chan BusMessage
+	MessageChannel() <-chan BusMessage
+
+	ErrorChan() <-chan error
+	BackPressureChannel() <-chan bool
+
+	ListenOnEvent(exchange, topic string) error
+}
+
+type NewTransport func(svcName, connString, DLX string, prefetchCount, maxRetryCount uint, purgeOnStartup, withConfirms bool, logger logrus.FieldLogger) Transport
