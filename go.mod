@@ -1,6 +1,7 @@
 module github.com/wework/grabbit
 
 require (
+	emperror.dev/emperror v0.21.3
 	emperror.dev/errors v0.4.3
 	emperror.dev/handler/logrus v0.1.0
 	github.com/Rican7/retry v0.1.0
