@@ -292,13 +292,16 @@ type Transport interface {
 	Start() error
 	Stop() error
 
-	RPCChannel() <-chan BusMessage
-	MessageChannel() <-chan BusMessage
+	RPCChannel() <-chan *BusMessage
+	MessageChannel() <-chan *BusMessage
 
 	ErrorChan() <-chan error
 	BackPressureChannel() <-chan bool
 
 	ListenOnEvent(exchange, topic string) error
+
+	Ack(message *BusMessage) error
+	Reject(message *BusMessage, requeue bool) error
 }
 
 type NewTransport func(svcName, connString, DLX string, prefetchCount, maxRetryCount uint, purgeOnStartup, withConfirms bool, logger logrus.FieldLogger) Transport
