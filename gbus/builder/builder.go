@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
-	"github.com/wework/grabbit/gbus/deduplicator/implementation"
+	"github.com/wework/grabbit/gbus/deduplicator"
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/serialization"
 	"github.com/wework/grabbit/gbus/tx/mysql"
@@ -112,7 +112,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	if builder.usingPingTimeout {
 		gb.DbPingTimeout = builder.dbPingTimeout
 	}
-	gb.Deduplicator = implementation.NewDeduplicator(svcName, builder.deduplicationPolicy, gb.TxProvider, builder.deduplicationRetentionAge, gb.Log())
+	gb.Deduplicator = deduplicator.New(svcName, builder.deduplicationPolicy, gb.TxProvider, builder.deduplicationRetentionAge)
 
 	//TODO move this into the NewSagaStore factory methods
 	if builder.purgeOnStartup {
@@ -121,7 +121,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 			errMsg := fmt.Errorf("grabbit: saga store faild to purge. error: %v", err)
 			panic(errMsg)
 		}
-		err = gb.Deduplicator.Purge()
+		err = gb.Deduplicator.Purge(gb.Log())
 		if err != nil {
 			errMsg := errors.NewWithDetails("duplicator failed to purge", "component", "grabbit", "feature", "deduplicator")
 			panic(errMsg)

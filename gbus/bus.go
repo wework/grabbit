@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wework/grabbit/gbus/deduplicator"
 	"github.com/wework/grabbit/gbus/metrics"
 
 	"github.com/opentracing-contrib/go-amqp/amqptracer"
@@ -61,7 +60,7 @@ type DefaultBus struct {
 	Serializer          Serializer
 	DLX                 string
 	DeduplicationPolicy DeduplicationPolicy
-	Deduplicator        deduplicator.Store
+	Deduplicator        Deduplicator
 	DefaultPolicies     []MessagePolicy
 	Confirm             bool
 	healthChan          chan error
@@ -225,7 +224,7 @@ func (b *DefaultBus) Start() error {
 		return startErr
 	}
 
-	b.Deduplicator.Start()
+	b.Deduplicator.Start(b.Log())
 
 	//declare queue
 	var q amqp.Queue
@@ -285,23 +284,23 @@ func (b *DefaultBus) createBusWorkers(workerNum uint) ([]*worker, error) {
 		tag := fmt.Sprintf("%s_worker_%d", b.SvcName, i)
 
 		w := &worker{
-			consumerTag:       tag,
-			channel:           amqpChan,
-			q:                 b.serviceQueue,
-			rpcq:              b.rpcQueue,
-			svcName:           b.SvcName,
-			txProvider:        b.TxProvider,
-			rpcLock:           b.RPCLock,
-			rpcHandlers:       b.RPCHandlers,
-			deadletterHandler: b.deadletterHandler,
-			globalRawHandler:  b.globalRawHandler,
-			handlersLock:      &sync.Mutex{},
-			registrations:     b.Registrations,
-			serializer:        b.Serializer,
-			b:                 b,
-			amqpErrors:        b.amqpErrors,
-			delicatePolicy:    b.DeduplicationPolicy,
-			duplicateStore:    b.Deduplicator,
+			consumerTag:         tag,
+			channel:             amqpChan,
+			q:                   b.serviceQueue,
+			rpcq:                b.rpcQueue,
+			svcName:             b.SvcName,
+			txProvider:          b.TxProvider,
+			rpcLock:             b.RPCLock,
+			rpcHandlers:         b.RPCHandlers,
+			deadletterHandler:   b.deadletterHandler,
+			globalRawHandler:    b.globalRawHandler,
+			handlersLock:        &sync.Mutex{},
+			registrations:       b.Registrations,
+			serializer:          b.Serializer,
+			b:                   b,
+			amqpErrors:          b.amqpErrors,
+			deduplicationPolicy: b.DeduplicationPolicy,
+			deduplicator:        b.Deduplicator,
 		}
 
 		err := w.Start()

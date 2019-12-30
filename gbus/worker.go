@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wework/grabbit/gbus/deduplicator"
+	"emperror.dev/emperror"
+
 	"github.com/wework/grabbit/gbus/metrics"
 
 	"emperror.dev/errors"
@@ -27,27 +28,27 @@ import (
 
 type worker struct {
 	*Safety
-	channel           *amqp.Channel
-	messages          <-chan amqp.Delivery
-	rpcMessages       <-chan amqp.Delivery
-	q                 amqp.Queue
-	rpcq              amqp.Queue
-	consumerTag       string
-	svcName           string
-	rpcLock           *sync.Mutex
-	handlersLock      *sync.Mutex
-	registrations     []*Registration
-	rpcHandlers       map[string]MessageHandler
-	deadletterHandler RawMessageHandler
-	globalRawHandler  RawMessageHandler
-	b                 *DefaultBus
-	serializer        Serializer
-	txProvider        TxProvider
-	amqpErrors        chan *amqp.Error
-	stop              chan bool
-	span              opentracing.Span
-	duplicateStore    deduplicator.Store
-	delicatePolicy    DeduplicationPolicy
+	channel             *amqp.Channel
+	messages            <-chan amqp.Delivery
+	rpcMessages         <-chan amqp.Delivery
+	q                   amqp.Queue
+	rpcq                amqp.Queue
+	consumerTag         string
+	svcName             string
+	rpcLock             *sync.Mutex
+	handlersLock        *sync.Mutex
+	registrations       []*Registration
+	rpcHandlers         map[string]MessageHandler
+	deadletterHandler   RawMessageHandler
+	globalRawHandler    RawMessageHandler
+	b                   *DefaultBus
+	serializer          Serializer
+	txProvider          TxProvider
+	amqpErrors          chan *amqp.Error
+	stop                chan bool
+	span                opentracing.Span
+	deduplicator        Deduplicator
+	deduplicationPolicy DeduplicationPolicy
 }
 
 func (worker *worker) Start() error {
@@ -77,15 +78,11 @@ func (worker *worker) Start() error {
 
 func (worker *worker) Stop() error {
 	worker.log().Info("stopping worker")
-	e1 := worker.channel.Cancel(worker.consumerTag, false)
-	e2 := worker.channel.Cancel(worker.consumerTag+"_rpc", false)
-	if e1 != nil {
-		return e1
-	}
-	if e2 != nil {
-		return e2
-	}
-	return nil
+	err := emperror.NewMultiErrorBuilder()
+	err.Add(worker.channel.Cancel(worker.consumerTag, false))
+	err.Add(worker.channel.Cancel(worker.consumerTag+"_rpc", false))
+	worker.deduplicator.Stop(worker.log())
+	return err.ErrOrNil()
 }
 
 func (worker *worker) createMessagesChannel(q amqp.Queue, consumerTag string) (<-chan amqp.Delivery, error) {
@@ -355,7 +352,9 @@ func (worker *worker) processMessage(delivery amqp.Delivery, isRPCreply bool) {
 	if err != nil {
 		worker.span.LogFields(slog.Error(err))
 		msgSpecificLogEntry.WithError(err).Info("failed getting information about message duplication")
-		_ = worker.reject(true, delivery, msgSpecificLogEntry)
+		_ = worker.SafeWithRetries(func() error {
+			return worker.reject(true, delivery, msgSpecificLogEntry)
+		}, MaxRetryCount)
 		return
 	}
 	if isDuplicate {
@@ -486,18 +485,25 @@ func (worker *worker) invokeHandlers(sctx context.Context, handlers []MessageHan
 }
 
 func (worker *worker) handleDuplicates(message *BusMessage, delivery amqp.Delivery, msgSpecificLogEntry *logrus.Entry) (bool, error) {
-	if worker.delicatePolicy == DeduplicationPolicyNone {
+	if worker.deduplicationPolicy == DeduplicationPolicyNone {
 		return false, nil
 	}
-	duplicate, err := worker.duplicateStore.MessageExists(message.IdempotencyKey)
+	duplicate := true
+	err := worker.SafeWithRetries(func() error {
+		var ierr error
+		duplicate, ierr = worker.deduplicator.MessageIDExists(msgSpecificLogEntry, message.IdempotencyKey)
+		return ierr
+	}, MaxRetryCount)
 	if err != nil {
 		worker.span.LogFields(slog.String("grabbit", "failed processing duplicate"))
 		worker.log().WithError(err).Error("failed checking for existing message")
 		return true, err
 	}
 	if duplicate {
-		msgSpecificLogEntry.Error("message is a duplicate")
-		err = worker.duplicatePolicyApply(false, delivery, msgSpecificLogEntry)
+		msgSpecificLogEntry.Info("message is a duplicate")
+		err = worker.SafeWithRetries(func() error {
+			return worker.duplicatePolicyApply(false, delivery, msgSpecificLogEntry)
+		}, MaxRetryCount)
 		if err != nil {
 			msgSpecificLogEntry.WithError(err).Error("failed handling duplicate delivery")
 			worker.span.LogFields(slog.Error(errors.New("failed handling duplicate delivery")))
@@ -508,7 +514,7 @@ func (worker *worker) handleDuplicates(message *BusMessage, delivery amqp.Delive
 }
 
 func (worker *worker) duplicatePolicyApply(requeue bool, delivery amqp.Delivery, msgSpecificLogEntry logrus.FieldLogger) error {
-	switch worker.delicatePolicy {
+	switch worker.deduplicationPolicy {
 	case DeduplicationPolicyReject:
 		msgSpecificLogEntry.Info("rejecting message on duplicate")
 		worker.span.LogFields(slog.String("grabbit", "rejecting duplicate"))
@@ -526,10 +532,10 @@ func (worker *worker) duplicatePolicyApply(requeue bool, delivery amqp.Delivery,
 
 func (worker *worker) withDeduplicator(txWrapper func(tx *sql.Tx) error, message *BusMessage, logger logrus.FieldLogger) (func(tx *sql.Tx) error, logrus.FieldLogger) {
 	return func(tx *sql.Tx) error {
-		if worker.delicatePolicy == DeduplicationPolicyNone {
+		if worker.deduplicationPolicy == DeduplicationPolicyNone {
 			return txWrapper(tx)
 		}
-		err := worker.duplicateStore.StoreMessageID(tx, message.IdempotencyKey)
+		err := worker.deduplicator.StoreMessageID(logger, tx, message.IdempotencyKey)
 		if err != nil {
 			return err
 		}
