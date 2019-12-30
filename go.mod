@@ -1,6 +1,7 @@
 module github.com/wework/grabbit
 
 require (
+	emperror.dev/emperror v0.21.3
 	emperror.dev/errors v0.4.3
 	emperror.dev/handler/logrus v0.1.0
 	github.com/Rican7/retry v0.1.0
@@ -13,11 +14,10 @@ require (
 	github.com/jcmturner/gofork v1.0.0 // indirect
 	github.com/klauspost/compress v1.8.6 // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/lopezator/migrator v0.2.0
-	github.com/onsi/ginkgo v1.8.0 // indirect
-	github.com/onsi/gomega v1.5.0 // indirect
+	github.com/onsi/ginkgo v1.11.0 // indirect
+	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/opentracing-contrib/go-amqp v0.0.0-20171102191528-e26701f95620
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
@@ -34,7 +34,6 @@ require (
 	golang.org/x/net v0.0.0-20191009170851-d66e71096ffb // indirect
 	golang.org/x/sys v0.0.0-20191009170203-06d7bd2c5f4f // indirect
 	google.golang.org/appengine v1.6.5 // indirect
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 )

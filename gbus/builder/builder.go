@@ -5,31 +5,35 @@ import (
 	"sync"
 	"time"
 
+	"emperror.dev/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/wework/grabbit/gbus"
+	"github.com/wework/grabbit/gbus/deduplicator"
 	"github.com/wework/grabbit/gbus/saga"
 	"github.com/wework/grabbit/gbus/serialization"
 	"github.com/wework/grabbit/gbus/tx/mysql"
 )
 
 type defaultBuilder struct {
-	PrefetchCount    uint
-	connStr          string
-	purgeOnStartup   bool
-	sagaStoreConnStr string
-	txnl             bool
-	txConnStr        string
-	txnlProvider     string
-	workerNum        uint
-	serializer       gbus.Serializer
-	dlx              string
-	defaultPolicies  []gbus.MessagePolicy
-	confirm          bool
-	dbPingTimeout    time.Duration
-	usingPingTimeout bool
-	logger           logrus.FieldLogger
-	busCfg           gbus.BusConfiguration
+	PrefetchCount             uint
+	connStr                   string
+	purgeOnStartup            bool
+	sagaStoreConnStr          string
+	txnl                      bool
+	txConnStr                 string
+	txnlProvider              string
+	workerNum                 uint
+	serializer                gbus.Serializer
+	dlx                       string
+	defaultPolicies           []gbus.MessagePolicy
+	confirm                   bool
+	dbPingTimeout             time.Duration
+	usingPingTimeout          bool
+	logger                    logrus.FieldLogger
+	busCfg                    gbus.BusConfiguration
+	deduplicationPolicy       gbus.DeduplicationPolicy
+	deduplicationRetentionAge time.Duration
 }
 
 func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
@@ -53,6 +57,7 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 		DefaultPolicies:      builder.defaultPolicies,
 		DbPingTimeout:        3,
 		Confirm:              builder.confirm,
+		DeduplicationPolicy:  builder.deduplicationPolicy,
 	}
 
 	var finalLogger logrus.FieldLogger
@@ -107,12 +112,18 @@ func (builder *defaultBuilder) Build(svcName string) gbus.Bus {
 	if builder.usingPingTimeout {
 		gb.DbPingTimeout = builder.dbPingTimeout
 	}
+	gb.Deduplicator = deduplicator.New(svcName, builder.deduplicationPolicy, gb.TxProvider, builder.deduplicationRetentionAge)
 
 	//TODO move this into the NewSagaStore factory methods
 	if builder.purgeOnStartup {
 		err := sagaStore.Purge()
 		if err != nil {
 			errMsg := fmt.Errorf("grabbit: saga store faild to purge. error: %v", err)
+			panic(errMsg)
+		}
+		err = gb.Deduplicator.Purge(gb.Log())
+		if err != nil {
+			errMsg := errors.NewWithDetails("duplicator failed to purge", "component", "grabbit", "feature", "deduplicator")
 			panic(errMsg)
 		}
 	}
@@ -206,6 +217,12 @@ func (builder *defaultBuilder) WithLogger(logger logrus.FieldLogger) gbus.Builde
 	return builder
 }
 
+func (builder *defaultBuilder) WithDeduplicationPolicy(policy gbus.DeduplicationPolicy, age time.Duration) gbus.Builder {
+	builder.deduplicationPolicy = policy
+	builder.deduplicationRetentionAge = age
+	return builder
+}
+
 //New :)
 func New() Nu {
 	return Nu{}
@@ -218,9 +235,11 @@ type Nu struct {
 //Bus inits a new BusBuilder
 func (Nu) Bus(brokerConnStr string) gbus.Builder {
 	return &defaultBuilder{
-		busCfg:          gbus.BusConfiguration{},
-		PrefetchCount:   1,
-		connStr:         brokerConnStr,
-		serializer:      serialization.NewGobSerializer(),
-		defaultPolicies: make([]gbus.MessagePolicy, 0)}
+		busCfg:              gbus.BusConfiguration{},
+		PrefetchCount:       1,
+		connStr:             brokerConnStr,
+		serializer:          serialization.NewGobSerializer(),
+		defaultPolicies:     make([]gbus.MessagePolicy, 0),
+		deduplicationPolicy: gbus.DeduplicationPolicyNone,
+	}
 }

@@ -175,6 +175,7 @@ func EnsureSchema(db *sql.DB, svcName string) {
 		sagaStoreAddSagaCreatorDetails(svcName),
 		sagaStoreAddRPCIDDetails(svcName),
 		sagaStoreAddCreatedAtDetails(svcName),
+		createDeduplicationTable(svcName),
 	))
 	if err != nil {
 		panic(err)
@@ -182,6 +183,25 @@ func EnsureSchema(db *sql.DB, svcName string) {
 	err = migrate.Migrate(db)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func createDeduplicationTable(svcName string) *migrator.Migration {
+	tblName := tx.GrabbitTableNameTemplate(svcName, "duplicates")
+
+	createTableQuery := `CREATE TABLE IF NOT EXISTS ` + tblName + ` (
+		id VARCHAR(256) NOT NULL PRIMARY KEY,
+		created_at	timestamp DEFAULT CURRENT_TIMESTAMP,
+		INDEX ` + tblName + `_created_at_idx (created_at))`
+
+	return &migrator.Migration{
+		Name: "create a table to manage duplicate messages",
+		Func: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(createTableQuery); err != nil {
+				return err
+			}
+			return nil
+		},
 	}
 }
 

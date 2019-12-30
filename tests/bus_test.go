@@ -854,3 +854,139 @@ func proceedOrTimeout(timeout time.Duration, p chan bool, onProceed func(), t *t
 		t.Fatal("timeout")
 	}
 }
+
+func TestDeduplicationReject(t *testing.T) {
+	metrics.ResetDuplicateMessagesCounters()
+	cmd := Command1{
+		Data: "Command1",
+	}
+	proceed := make(chan bool)
+	b := createBusWithConfig(testSvc1, "dead-grabbit", true, true, gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15}, func(builder gbus.Builder) {
+		builder.WithDeduplicationPolicy(gbus.DeduplicationPolicyReject, 1*time.Hour)
+	})
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		_, ok := message.Payload.(*Command1)
+		if !ok {
+			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
+		}
+		proceed <- true
+
+		return nil
+	}
+
+	err := b.HandleMessage(cmd, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer assertBusShutdown(b, t)
+
+	bm := gbus.NewBusMessage(cmd)
+	err = b.Send(context.Background(), testSvc1, bm)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	proceedOrTimeout(2, proceed, nil, t)
+	err = b.Send(context.Background(), testSvc1, bm)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	done := make(chan bool)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	rejected := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				rejectedValue, err := metrics.GetDuplicateMessageRejectValue()
+				if err != nil {
+					return
+				}
+				if rejectedValue == 1 {
+					rejected <- true
+				}
+			}
+		}
+
+	}()
+	proceedOrTimeout(2, rejected, nil, t)
+	done <- true
+}
+
+func TestDeduplicationAcked(t *testing.T) {
+	metrics.ResetDuplicateMessagesCounters()
+	cmd := Command1{
+		Data: "Command1",
+	}
+	proceed := make(chan bool)
+	b := createBusWithConfig(testSvc1, "dead-grabbit", true, true, gbus.BusConfiguration{MaxRetryCount: 4, BaseRetryDuration: 15}, func(builder gbus.Builder) {
+		builder.WithDeduplicationPolicy(gbus.DeduplicationPolicyAck, 1*time.Hour)
+	})
+
+	handler := func(invocation gbus.Invocation, message *gbus.BusMessage) error {
+
+		_, ok := message.Payload.(*Command1)
+		if !ok {
+			t.Errorf("handler invoced with wrong message type\r\nexpeted:%v\r\nactual:%v", reflect.TypeOf(Command1{}), reflect.TypeOf(message.Payload))
+		}
+		proceed <- true
+
+		return nil
+	}
+
+	err := b.HandleMessage(cmd, handler)
+	if err != nil {
+		t.Errorf("Registering handler returned false, expected true with error: %s", err.Error())
+	}
+
+	err = b.Start()
+	if err != nil {
+		t.Errorf("could not start bus for test error: %s", err.Error())
+	}
+	defer assertBusShutdown(b, t)
+
+	bm := gbus.NewBusMessage(cmd)
+	err = b.Send(context.Background(), testSvc1, bm)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	proceedOrTimeout(2, proceed, nil, t)
+	err = b.Send(context.Background(), testSvc1, bm)
+	if err != nil {
+		t.Errorf("could not send message error: %s", err.Error())
+		return
+	}
+	done := make(chan bool)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	acked := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				ackedValue, err := metrics.GetDuplicateMessageAckValue()
+				if err != nil {
+					return
+				}
+				if ackedValue == 1 {
+					acked <- true
+				}
+			}
+		}
+
+	}()
+	proceedOrTimeout(2, acked, nil, t)
+	done <- true
+}

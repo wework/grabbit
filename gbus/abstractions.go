@@ -22,6 +22,14 @@ const (
 	REPLY Semantics = "reply"
 )
 
+type DeduplicationPolicy int
+
+const (
+	DeduplicationPolicyNone DeduplicationPolicy = iota
+	DeduplicationPolicyReject
+	DeduplicationPolicyAck
+)
+
 //Bus interface provides the majority of functionality to Send, Reply and Publish messages to the Bus
 type Bus interface {
 	HandlerRegister
@@ -213,6 +221,8 @@ type Builder interface {
 
 	//WithLogger set custom logger instance
 	WithLogger(logger logrus.FieldLogger) Builder
+
+	WithDeduplicationPolicy(method DeduplicationPolicy, age time.Duration) Builder
 }
 
 //Invocation context for a specific processed message
@@ -283,4 +293,18 @@ type TimeoutManager interface {
 type Logged interface {
 	SetLogger(entry logrus.FieldLogger)
 	Log() logrus.FieldLogger
+}
+
+// Deduplicator abstracts the way to manages the duplications
+type Deduplicator interface {
+	// StoreMessageID stores the message id in the storage
+	StoreMessageID(logger logrus.FieldLogger, tx *sql.Tx, id string) error
+	// MessageIDExists checks if message exists in storage
+	MessageIDExists(logger logrus.FieldLogger, id string) (bool, error)
+	// Deletes all data from the storage of the duplicator
+	Purge(logger logrus.FieldLogger) error
+	// Starts the background process which cleans the storage of the duplicator
+	Start(logger logrus.FieldLogger)
+	// Stops the background process of cleaning
+	Stop(logger logrus.FieldLogger)
 }
