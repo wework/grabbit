@@ -13,7 +13,7 @@ A lightweight transactional message bus on top of RabbitMQ supporting:
 1) Supported [Messaging Styles](https://github.com/wework/grabbit/blob/master/docs/MESSAGING.md) 
     - One Way (Fire and forget)
     - Publish/Subscribe
-    - Aync Command/Reply
+    - Async Command/Reply
     - Blocking Command/Reply (RPC)
 2) [Transactional](https://github.com/wework/grabbit/blob/master/docs/TX.md) message processing
 3) Message Orchestration via the [Saga](https://github.com/wework/grabbit/blob/master/docs/SAGA.md) pattern
